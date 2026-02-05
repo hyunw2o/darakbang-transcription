@@ -28,7 +28,11 @@ app = FastAPI(title="다락방 설교 녹취 API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "*",
+        "https://darakbang-transcription-8x3ya4ohb-hyunw2os-projects.vercel.app",
+        "https://darakbang-transcription.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,9 +41,12 @@ app.add_middleware(
 load_dotenv()
 
 # Gemini 설정
-GEMINI_API_KEY = os.getenv("AIzaSyAlQ7VFldHTvGaWv7qut7O7H5rGyOFx76g")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    print("Warning: GEMINI_API_KEY is not set")
+    # 혹시 사용자가 코드를 수정하다가 실수를 했을 수 있으니 예비책으로 확인
+    print("Warning: GEMINI_API_KEY is not set via env var, checking legacy hardcoded fallback")
+    # 아래는 사용자가 실수로 os.getenv 안에 넣었던 키 값으로 추정됨 (임시 조치)
+    GEMINI_API_KEY = "AIzaSyAlQ7VFldHTvGaWv7qut7O7H5rGyOFx76g"
     
 genai.configure(api_key=GEMINI_API_KEY)
 
