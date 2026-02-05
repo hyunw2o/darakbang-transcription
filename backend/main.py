@@ -94,7 +94,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         audio_file = genai.upload_file(temp_file_path)
         
         # 2. Gemini 모델 설정 (Flash가 빠르고 STT에 최적)
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
         
         # 3. 프롬프트 구성 (단일 단계 처리)
         prompt = get_gemini_prompt()
@@ -131,7 +131,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             "corrected_text": corrected_text,
             "characters": len(corrected_text),
             "darakbang_optimized": True,
-            "engine": "gemini-1.5-flash"
+            "engine": "gemini-1.5-flash-latest"
         }
         
         with open(os.path.join(TRANSCRIPTS_DIR, f"{task_id}.json"), "w", encoding="utf-8") as f:
@@ -245,7 +245,7 @@ async def summarize_sermon(
     다락방 설교 요약 (Gemini)
     """
     try:
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
 
         prompt = get_summary_prompt(summary_type)
         full_prompt = f"""{prompt}
