@@ -46,7 +46,7 @@ if not GEMINI_API_KEY:
     
 genai.configure(api_key=GEMINI_API_KEY)
 
-app = FastAPI(title="다락방 설교 녹취 API (Gemini)")
+# app = FastAPI(title="다락방 설교 녹취 API (Gemini)")  <-- Removed duplicate instantiation
 
 # 시작 시 용어 로딩 확인
 @app.on_event("startup")
