@@ -28,12 +28,8 @@ app = FastAPI(title="다락방 설교 녹취 API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*",
-        "https://darakbang-transcription-8x3ya4ohb-hyunw2os-projects.vercel.app",
-        "https://darakbang-transcription.vercel.app"
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
