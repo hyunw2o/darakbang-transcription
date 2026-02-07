@@ -5,6 +5,7 @@ import os
 import uuid
 import json
 import asyncio
+import random
 from datetime import datetime
 from glob import glob
 from dotenv import load_dotenv
@@ -99,10 +100,26 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         prompt = get_gemini_prompt()
         
         print(f"[{task_id}] Generating content...")
-        response = model.generate_content(
-            [prompt, audio_file],
-            request_options={"timeout": 600} # 10분 타임아웃
-        )
+        
+        response = None
+        max_retries = 5 # 최대 5회 재시도 (약 5-6분 대기)
+        
+        for attempt in range(max_retries):
+            try:
+                response = model.generate_content(
+                    [prompt, audio_file],
+                    request_options={"timeout": 600} # 10분 타임아웃
+                )
+                break
+            except Exception as e:
+                # 429 Quota Exceeded 또는 ResourceExhausted 에러 처리
+                if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
+                    # 지수 백오프: 10s, 20s, 40s, 80s... + 랜덤 지터
+                    wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                    print(f"[{task_id}] Quota exceeded (429). Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise e
         
         raw_text = response.text
         
