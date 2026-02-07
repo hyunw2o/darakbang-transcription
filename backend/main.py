@@ -56,16 +56,14 @@ async def startup_event():
 @app.get("/")
 async def root():
     return {
-        "message": "다락방 설교 녹취 API",
-        "version": "2.0 - 다락방 특화",
-        "church": "류광수/이주현 목사 계열",
+        "message": "설교 및 회의 녹취 API",
+        "version": "2.0",
+        "church": "설교 및 회의 특화",
         "darakbang_terms": len(DARAKBANG_CORE),
         "total_terms": len(ALL_CHURCH_TERMS),
         "features": [
-            "렘넌트, 237, 5000 용어 특화",
-            "7망대/7여정/7이정표 인식",
-            "Heavenly/Thronely/Eternally 영문 유지",
-            "CVDIP, TCK/CCK/NCK 약어 인식"
+            "교회 설교 용어 특화",
+            "일상 회의 및 의료 언어 특화"
         ]
     }
 
@@ -85,7 +83,7 @@ async def get_terms():
     }
 
 async def process_transcription(task_id: str, temp_file_path: str, language: str, correct: bool):
-    """백그라운드에서 실행되는 변환 로직 (Gemini 1.5 Flash 사용)"""
+    """백그라운드에서 실행되는 변환 로직 (Gemini 2.0 Flash 사용)"""
     try:
         task_status[task_id] = "processing"
         
@@ -94,7 +92,8 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         audio_file = genai.upload_file(temp_file_path)
         
         # 2. Gemini 모델 설정 (Flash가 빠르고 STT에 최적)
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+        target_model = "gemini-2.0-flash"
+        model = genai.GenerativeModel(target_model)
         
         # 3. 프롬프트 구성 (단일 단계 처리)
         prompt = get_gemini_prompt()
@@ -131,7 +130,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             "corrected_text": corrected_text,
             "characters": len(corrected_text),
             "darakbang_optimized": True,
-            "engine": "gemini-1.5-flash-latest"
+            "engine": "gemini-2.0-flash"
         }
         
         with open(os.path.join(TRANSCRIPTS_DIR, f"{task_id}.json"), "w", encoding="utf-8") as f:
@@ -245,7 +244,7 @@ async def summarize_sermon(
     다락방 설교 요약 (Gemini)
     """
     try:
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest")
+        model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 
         prompt = get_summary_prompt(summary_type)
         full_prompt = f"""{prompt}
