@@ -51,6 +51,15 @@ genai.configure(api_key=GEMINI_API_KEY)
 @app.on_event("startup")
 async def startup_event():
     print_terms_summary()
+    # 디버깅: 사용 가능한 모델 목록 출력
+    try:
+        if GEMINI_API_KEY:
+            print("Checking available Gemini models...")
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    print(f" - {m.name}")
+    except Exception as e:
+        print(f"Failed to list models: {e}")
 
 @app.get("/")
 async def root():
@@ -91,7 +100,8 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         audio_file = genai.upload_file(temp_file_path)
         
         # 2. Gemini 모델 설정 (Flash가 빠르고 STT에 최적)
-        target_model = "gemini-1.5-flash"
+        # 404 에러 방지를 위해 latest 별칭 또는 구체적인 버전 사용 시도
+        target_model = "gemini-1.5-flash-latest"
         model = genai.GenerativeModel(target_model)
         
         # 3. 프롬프트 구성 (단일 단계 처리)
