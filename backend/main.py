@@ -82,6 +82,44 @@ os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
 # 인메모리 상태 추적 (간단한 캐싱용, 실제 데이터는 파일에 저장)
 task_status = {}
 
+def get_optimal_model():
+    """
+    사용 가능한 Gemini 모델 중 최적의 모델을 동적으로 선택
+    우선순위: 1.5-flash > 2.0-flash > 1.5-pro > gemini-pro > 기타
+    """
+    try:
+        if not GEMINI_API_KEY:
+            return "gemini-1.5-flash"
+
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+        
+        # 우선순위 검색
+        for model_id in available_models:
+            if "gemini-1.5-flash" in model_id:
+                return model_id
+        for model_id in available_models:
+            if "gemini-2.0-flash" in model_id:
+                return model_id
+        for model_id in available_models:
+            if "gemini-1.5-pro" in model_id:
+                return model_id
+        for model_id in available_models:
+            if "gemini-pro" in model_id:
+                return model_id
+                
+        # 아무것도 못 찾으면 첫 번째 사용 가능 모델 반환
+        if available_models:
+            return available_models[0]
+            
+    except Exception as e:
+        print(f"Model selection error: {e}")
+    
+    # 기본값 (최후의 수단)
+    return "gemini-1.5-flash"
+
 @app.get("/api/terms")
 async def get_terms():
     """다락방 용어 확인 (디버깅용)"""
@@ -100,8 +138,9 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         audio_file = genai.upload_file(temp_file_path)
         
         # 2. Gemini 모델 설정 (Flash가 빠르고 STT에 최적)
-        # 404 에러 방지를 위해 latest 별칭 또는 구체적인 버전 사용 시도
-        target_model = "gemini-1.5-flash-latest"
+        # 동적으로 사용 가능한 최적 모델 선택
+        target_model = get_optimal_model()
+        print(f"[{task_id}] Selected Model: {target_model}")
         model = genai.GenerativeModel(target_model)
         
         # 3. 프롬프트 구성 (단일 단계 처리)
@@ -269,7 +308,8 @@ async def summarize_sermon(
     다락방 설교 요약 (Gemini)
     """
     try:
-        model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+        target_model = get_optimal_model()
+        model = genai.GenerativeModel(model_name=target_model)
 
         prompt = get_summary_prompt(summary_type)
         full_prompt = f"""{prompt}
