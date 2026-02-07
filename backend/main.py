@@ -91,7 +91,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         audio_file = genai.upload_file(temp_file_path)
         
         # 2. Gemini 모델 설정 (Flash가 빠르고 STT에 최적)
-        target_model = "gemini-2.0-flash"
+        target_model = "gemini-1.5-flash"
         model = genai.GenerativeModel(target_model)
         
         # 3. 프롬프트 구성 (단일 단계 처리)
