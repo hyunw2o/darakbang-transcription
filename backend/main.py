@@ -40,10 +40,8 @@ load_dotenv()
 # Gemini 설정
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    # 혹시 사용자가 코드를 수정하다가 실수를 했을 수 있으니 예비책으로 확인
-    print("Warning: GEMINI_API_KEY is not set via env var, checking legacy hardcoded fallback")
-    # 아래는 사용자가 실수로 os.getenv 안에 넣었던 키 값으로 추정됨 (임시 조치)
-    GEMINI_API_KEY = "AIzaSyDLiWgSdjiYJgLZl4YBpdago1asIkUey_U"
+    print("Error: GEMINI_API_KEY is not set in environment variables.")
+    # Fallback removed for security. Please set GEMINI_API_KEY in your environment (e.g., Railway).
     
 genai.configure(api_key=GEMINI_API_KEY)
 
