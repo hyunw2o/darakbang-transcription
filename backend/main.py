@@ -11,6 +11,7 @@ from glob import glob
 from dotenv import load_dotenv
 import tempfile
 import pathlib
+import time
 
 # 다락방 용어 임포트
 from church_terms import (
@@ -82,43 +83,63 @@ os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
 # 인메모리 상태 추적 (간단한 캐싱용, 실제 데이터는 파일에 저장)
 task_status = {}
 
+# 모델 캐시 (API 호출 절약)
+_model_cache = {"model": None, "cached_at": 0}
+MODEL_CACHE_TTL = 3600  # 1시간
+
 def get_optimal_model():
     """
     사용 가능한 Gemini 모델 중 최적의 모델을 동적으로 선택
-    우선순위: 1.5-flash > 2.0-flash > 1.5-pro > gemini-pro > 기타
+    우선순위: 2.0-flash > 2.5-flash > 2.0-flash-lite > gemini-pro > 기타
+    결과를 1시간 동안 캐싱하여 불필요한 API 호출을 방지
     """
+    # 캐시된 결과가 유효하면 바로 반환
+    if _model_cache["model"] and (time.time() - _model_cache["cached_at"]) < MODEL_CACHE_TTL:
+        return _model_cache["model"]
+
     try:
         if not GEMINI_API_KEY:
-            return "gemini-1.5-flash"
+            return "gemini-2.0-flash"
 
         available_models = []
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 available_models.append(m.name)
-        
-        # 우선순위 검색
-        for model_id in available_models:
-            if "gemini-1.5-flash" in model_id:
-                return model_id
-        for model_id in available_models:
-            if "gemini-2.0-flash" in model_id:
-                return model_id
-        for model_id in available_models:
-            if "gemini-1.5-pro" in model_id:
-                return model_id
-        for model_id in available_models:
-            if "gemini-pro" in model_id:
-                return model_id
-                
+
+        selected = None
+
+        # 우선순위: 빠르고 안정적인 모델 우선
+        priority = [
+            "gemini-2.0-flash",       # 빠르고 안정적
+            "gemini-2.5-flash",       # 최신 flash
+            "gemini-2.0-flash-lite",  # 경량 버전
+            "gemini-2.5-pro",         # 고품질
+        ]
+
+        for target in priority:
+            for model_id in available_models:
+                # 정확한 매칭 (gemini-2.0-flash-exp 같은 실험 모델 제외)
+                if model_id == f"models/{target}" or model_id == f"models/{target}-001":
+                    selected = model_id
+                    break
+            if selected:
+                break
+
         # 아무것도 못 찾으면 첫 번째 사용 가능 모델 반환
-        if available_models:
-            return available_models[0]
-            
+        if not selected and available_models:
+            selected = available_models[0]
+
+        if selected:
+            _model_cache["model"] = selected
+            _model_cache["cached_at"] = time.time()
+            print(f"Model cached: {selected}")
+            return selected
+
     except Exception as e:
         print(f"Model selection error: {e}")
-    
+
     # 기본값 (최후의 수단)
-    return "gemini-1.5-flash"
+    return "gemini-2.0-flash"
 
 @app.get("/api/terms")
 async def get_terms():
@@ -141,7 +162,12 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         # 동적으로 사용 가능한 최적 모델 선택
         target_model = get_optimal_model()
         print(f"[{task_id}] Selected Model: {target_model}")
-        model = genai.GenerativeModel(target_model)
+        model = genai.GenerativeModel(
+            target_model,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=65536,  # 긴 설교도 끊기지 않도록 최대 출력 토큰 설정
+            )
+        )
         
         # 3. 프롬프트 구성 (단일 단계 처리)
         prompt = get_gemini_prompt()
@@ -305,7 +331,7 @@ async def summarize_sermon(
     summary_type: str = Form("short")
 ):
     """
-    다락방 설교 요약 (Gemini)
+    다락방 설교 요약 (Gemini) — 429 에러 시 지수 백오프 재시도
     """
     try:
         target_model = get_optimal_model()
@@ -317,15 +343,32 @@ async def summarize_sermon(
 설교 내용:
 {text}"""
 
-        response = model.generate_content(full_prompt)
+        response = None
+        max_retries = 5
+
+        for attempt in range(max_retries):
+            try:
+                response = model.generate_content(
+                    full_prompt,
+                    request_options={"timeout": 120}
+                )
+                break
+            except Exception as e:
+                if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                    print(f"[summarize] Quota exceeded (429). Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise e
+
         summary = response.text
-        
+
         return {
             "success": True,
             "summary": summary,
             "summary_type": summary_type
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
