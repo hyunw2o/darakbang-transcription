@@ -18,3 +18,6 @@ frontend/.next/
 frontend/.env.local
 frontend/out/
 frontend/build/
+
+# Debug
+debug_venv/
