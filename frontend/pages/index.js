@@ -74,8 +74,8 @@ export default function Home({ darkMode, setDarkMode }) {
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
   const pollStartTime = useRef(null)
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-  const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'http://localhost:3001'
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
+  const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
 
   useEffect(() => {
     fetchHistory()

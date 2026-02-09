@@ -176,7 +176,7 @@ def whisper_transcribe(file_path: str, language: str = "ko") -> str:
     25MB 초과 시 자동 분할 처리.
     """
     # 커스텀 용어를 Whisper prompt에 전달 (인식률 향상)
-    whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally"
+    whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
 
     chunks = split_audio_file(file_path)
     all_text = []

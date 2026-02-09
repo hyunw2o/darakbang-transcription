@@ -21,3 +21,4 @@ frontend/build/
 
 # Debug
 debug_venv/
+.vercel
