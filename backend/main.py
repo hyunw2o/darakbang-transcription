@@ -8,8 +8,8 @@ import json
 import asyncio
 import random
 from datetime import datetime
-from glob import glob
 from dotenv import load_dotenv
+from supabase import create_client, Client
 import tempfile
 import pathlib
 import time
@@ -83,9 +83,12 @@ async def root():
         "total_terms": len(ALL_CHURCH_TERMS),
     }
 
-# 저장소 설정
-TRANSCRIPTS_DIR = "transcripts"
-os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
+# Supabase 설정
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("Warning: SUPABASE_URL or SUPABASE_KEY not set.")
+supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
 
 # 인메모리 상태 추적
 task_status = {}
@@ -327,8 +330,17 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             "engine": engine,
         }
 
-        with open(os.path.join(TRANSCRIPTS_DIR, f"{task_id}.json"), "w", encoding="utf-8") as f:
-            json.dump(result_data, f, ensure_ascii=False, indent=2)
+        supabase.table("transcriptions").insert({
+            "task_id": task_id,
+            "status": "completed",
+            "created_at": result_data["created_at"],
+            "language": language,
+            "raw_text": raw_text,
+            "corrected_text": corrected_text,
+            "characters": len(corrected_text),
+            "darakbang_optimized": True,
+            "engine": engine,
+        }).execute()
 
         task_status[task_id] = "completed"
 
@@ -337,14 +349,15 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         import traceback
         traceback.print_exc()
         task_status[task_id] = "error"
-        error_data = {
-            "task_id": task_id,
-            "status": "error",
-            "error": str(e),
-            "created_at": datetime.now().isoformat()
-        }
-        with open(os.path.join(TRANSCRIPTS_DIR, f"{task_id}.json"), "w", encoding="utf-8") as f:
-            json.dump(error_data, f, ensure_ascii=False, indent=2)
+        try:
+            supabase.table("transcriptions").insert({
+                "task_id": task_id,
+                "status": "error",
+                "error": str(e),
+                "created_at": datetime.now().isoformat(),
+            }).execute()
+        except Exception as db_err:
+            print(f"Failed to write error to Supabase: {db_err}")
 
 
 @app.post("/api/transcribe")
@@ -400,11 +413,28 @@ async def get_task_status(task_id: str):
         if status == "processing" or status == "queued":
             return {"task_id": task_id, "status": status}
 
-    file_path = os.path.join(TRANSCRIPTS_DIR, f"{task_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data
+    response = supabase.table("transcriptions").select("*").eq("task_id", task_id).execute()
+    if response.data:
+        row = response.data[0]
+        if row["status"] == "completed":
+            return {
+                "task_id": row["task_id"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+                "language": row["language"],
+                "raw_text": row["raw_text"],
+                "corrected_text": row["corrected_text"],
+                "characters": row["characters"],
+                "darakbang_optimized": row["darakbang_optimized"],
+                "engine": row["engine"],
+            }
+        else:
+            return {
+                "task_id": row["task_id"],
+                "status": row["status"],
+                "error": row["error"],
+                "created_at": row["created_at"],
+            }
 
     return {"task_id": task_id, "status": "not_found"}
 
@@ -422,25 +452,24 @@ async def get_terms():
 @app.get("/api/history")
 async def get_history():
     """변환 기록 목록 조회"""
-    files = glob(os.path.join(TRANSCRIPTS_DIR, "*.json"))
+    response = (
+        supabase.table("transcriptions")
+        .select("task_id, status, created_at, characters, engine, corrected_text")
+        .order("created_at", desc=True)
+        .execute()
+    )
+
     history = []
+    for row in response.data:
+        history.append({
+            "task_id": row["task_id"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "characters": row.get("characters") or 0,
+            "engine": row.get("engine") or "unknown",
+            "summary_preview": ((row.get("corrected_text") or "")[:50] + "..."),
+        })
 
-    for file_path in files:
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                history.append({
-                    "task_id": data.get("task_id"),
-                    "status": data.get("status"),
-                    "created_at": data.get("created_at"),
-                    "characters": data.get("characters", 0),
-                    "engine": data.get("engine", "unknown"),
-                    "summary_preview": (data.get("corrected_text") or "")[:50] + "..."
-                })
-        except:
-            continue
-
-    history.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return history
 
 
