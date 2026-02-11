@@ -20,6 +20,7 @@ from church_terms import (
     get_gemini_prompt,
     get_gemini_content_prompt,
     get_gemini_correction_prompt,
+    get_correction_prompt_by_type,
     correct_text,
     get_claude_context,
     get_summary_prompt,
@@ -173,13 +174,18 @@ def split_audio_file(file_path: str) -> list[str]:
     return chunks
 
 
-def whisper_transcribe(file_path: str, language: str = "ko") -> str:
+def whisper_transcribe(file_path: str, language: str = "ko", transcription_type: str = "sermon") -> str:
     """
     OpenAI Whisper API로 오디오 → 텍스트 변환.
     25MB 초과 시 자동 분할 처리.
     """
-    # 커스텀 용어를 Whisper prompt에 전달 (인식률 향상)
-    whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
+    # 설교: 교회 용어 힌트 / 통화·대화: 일반 힌트
+    if transcription_type == "sermon":
+        whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
+    elif transcription_type == "phonecall":
+        whisper_prompt = "통화 녹음입니다. 화자가 두 명이며 전화 대화를 녹음한 것입니다."
+    else:
+        whisper_prompt = "회의 또는 대화 녹음입니다. 여러 참석자가 있는 회의를 녹음한 것입니다."
 
     chunks = split_audio_file(file_path)
     all_text = []
@@ -205,15 +211,15 @@ def whisper_transcribe(file_path: str, language: str = "ko") -> str:
     return "\n\n".join(all_text)
 
 
-async def gemini_correct_and_structure(raw_text: str, task_id: str) -> str:
+async def gemini_correct_and_structure(raw_text: str, task_id: str, transcription_type: str = "sermon") -> str:
     """
     Gemini로 텍스트 교정 + 구조화 (2단계).
-    Whisper가 받아쓴 raw 텍스트를 용어 교정, 추임새 제거, 본론/결론/기도 구조화.
+    유형별 프롬프트 선택: 설교/통화/대화·회의.
     """
     target_model = get_optimal_model()
-    print(f"[{task_id}] Gemini correction model: {target_model}")
+    print(f"[{task_id}] Gemini correction model: {target_model}, type: {transcription_type}")
 
-    correction_prompt = get_gemini_correction_prompt()
+    correction_prompt = get_correction_prompt_by_type(transcription_type)
 
     model = genai.GenerativeModel(
         target_model,
@@ -248,7 +254,7 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str) -> str:
     return response.text
 
 
-async def process_transcription(task_id: str, temp_file_path: str, language: str, correct: bool):
+async def process_transcription(task_id: str, temp_file_path: str, language: str, correct: bool, transcription_type: str = "sermon"):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     try:
         task_status[task_id] = "processing"
@@ -258,7 +264,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
 
             # 1단계: Whisper로 완전 녹취
             print(f"[{task_id}] Step 1: Whisper STT...")
-            raw_text = whisper_transcribe(temp_file_path, language)
+            raw_text = whisper_transcribe(temp_file_path, language, transcription_type)
             print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
 
             # 임시 파일 삭제
@@ -267,11 +273,11 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
 
             # 2단계: Gemini로 교정 + 구조화
             print(f"[{task_id}] Step 2: Gemini correction...")
-            corrected_text = await gemini_correct_and_structure(raw_text, task_id)
+            corrected_text = await gemini_correct_and_structure(raw_text, task_id, transcription_type)
             print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
 
             # 3단계: 규칙 기반 후처리
-            corrected_text = correct_text(corrected_text)
+            corrected_text = correct_text(corrected_text, transcription_type)
 
             engine = "whisper+gemini"
 
@@ -314,7 +320,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             except:
                 pass
 
-            corrected_text = correct_text(raw_text)
+            corrected_text = correct_text(raw_text, transcription_type)
             engine = "gemini-only"
 
         # 결과 저장
@@ -326,8 +332,9 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             "raw_text": raw_text,
             "corrected_text": corrected_text,
             "characters": len(corrected_text),
-            "darakbang_optimized": True,
+            "darakbang_optimized": transcription_type == "sermon",
             "engine": engine,
+            "transcription_type": transcription_type,
         }
 
         supabase.table("transcriptions").insert({
@@ -338,8 +345,9 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             "raw_text": raw_text,
             "corrected_text": corrected_text,
             "characters": len(corrected_text),
-            "darakbang_optimized": True,
+            "darakbang_optimized": transcription_type == "sermon",
             "engine": engine,
+            "transcription_type": transcription_type,
         }).execute()
 
         task_status[task_id] = "completed"
@@ -355,6 +363,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
                 "status": "error",
                 "error": str(e),
                 "created_at": datetime.now().isoformat(),
+                "transcription_type": transcription_type,
             }).execute()
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
@@ -366,8 +375,9 @@ async def transcribe_audio(
     file: UploadFile = File(...),
     language: str = Form("ko"),
     correct: bool = Form(True),
+    transcription_type: str = Form("sermon"),
 ):
-    """음성 → 텍스트 변환 (Whisper + Gemini 2단계)"""
+    """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
     try:
         contents = await file.read()
         if len(contents) > 100 * 1024 * 1024:
@@ -390,15 +400,19 @@ async def transcribe_audio(
             task_id,
             temp_file_path,
             language,
-            correct
+            correct,
+            transcription_type
         )
+
+        type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
 
         return {
             "success": True,
             "task_id": task_id,
             "status": "queued",
-            "message": "변환 작업이 시작되었습니다.",
-            "engine": "whisper+gemini" if openai_client else "gemini-only"
+            "message": f"{type_labels.get(transcription_type, '녹취')} 변환 작업이 시작되었습니다.",
+            "engine": "whisper+gemini" if openai_client else "gemini-only",
+            "transcription_type": transcription_type,
         }
 
     except Exception as e:
@@ -427,6 +441,7 @@ async def get_task_status(task_id: str):
                 "characters": row["characters"],
                 "darakbang_optimized": row["darakbang_optimized"],
                 "engine": row["engine"],
+                "transcription_type": row.get("transcription_type", "sermon"),
             }
         else:
             return {
@@ -434,6 +449,7 @@ async def get_task_status(task_id: str):
                 "status": row["status"],
                 "error": row["error"],
                 "created_at": row["created_at"],
+                "transcription_type": row.get("transcription_type", "sermon"),
             }
 
     return {"task_id": task_id, "status": "not_found"}
@@ -454,7 +470,7 @@ async def get_history():
     """변환 기록 목록 조회"""
     response = (
         supabase.table("transcriptions")
-        .select("task_id, status, created_at, characters, engine, corrected_text")
+        .select("task_id, status, created_at, characters, engine, corrected_text, transcription_type")
         .order("created_at", desc=True)
         .execute()
     )
@@ -468,6 +484,7 @@ async def get_history():
             "characters": row.get("characters") or 0,
             "engine": row.get("engine") or "unknown",
             "summary_preview": ((row.get("corrected_text") or "")[:50] + "..."),
+            "transcription_type": row.get("transcription_type", "sermon"),
         })
 
     return history

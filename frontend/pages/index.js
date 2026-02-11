@@ -62,6 +62,7 @@ function StepIndicator({ currentStep }) {
 export default function Home({ darkMode, setDarkMode }) {
   const [file, setFile] = useState(null)
   const [language, setLanguage] = useState('ko')
+  const [transcriptionType, setTranscriptionType] = useState('sermon')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -184,6 +185,7 @@ export default function Home({ darkMode, setDarkMode }) {
       formData.append('file', file)
       formData.append('language', language)
       formData.append('correct', 'true')
+      formData.append('transcription_type', transcriptionType)
 
       const response = await fetch(`${API_URL}/api/transcribe`, {
         method: 'POST',
@@ -255,15 +257,21 @@ export default function Home({ darkMode, setDarkMode }) {
     if (!result) return
     const text = result.corrected_text || result.raw_text
     const lines = text.split('\n')
+    const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치']
     let html = ''
     for (const line of lines) {
       const trimmed = line.trim()
-      if (trimmed === '본론' || trimmed === '결론' || trimmed === '기도') {
+      if (sectionHeaders.includes(trimmed)) {
         html += `<h2>${trimmed}</h2>`
       } else if (trimmed === '') {
         html += '<br/>'
       } else {
-        html += `<p>${trimmed}</p>`
+        const speakerMatch = trimmed.match(/^(화자\s*[A-Z]|참석자\s*\d+)\s*[:：]/)
+        if (speakerMatch) {
+          html += `<p><b>${speakerMatch[1]}:</b> ${trimmed.slice(speakerMatch[0].length).trim()}</p>`
+        } else {
+          html += `<p>${trimmed}</p>`
+        }
       }
     }
     const docContent = `
@@ -383,19 +391,35 @@ export default function Home({ darkMode, setDarkMode }) {
               )}
             </div>
 
-            {/* 언어 선택 */}
-            <div className="mt-4 flex items-center gap-3">
-              <label className="text-sm text-slate-500 dark:text-slate-400 shrink-0">언어</label>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
-                  focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all
-                  text-slate-700 dark:text-slate-200"
-              >
-                <option value="ko">한국어</option>
-                <option value="en">영어</option>
-              </select>
+            {/* 설정 */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-slate-500 dark:text-slate-400 shrink-0">언어</label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
+                    focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all
+                    text-slate-700 dark:text-slate-200"
+                >
+                  <option value="ko">한국어</option>
+                  <option value="en">영어</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-slate-500 dark:text-slate-400 shrink-0">유형</label>
+                <select
+                  value={transcriptionType}
+                  onChange={(e) => setTranscriptionType(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
+                    focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all
+                    text-slate-700 dark:text-slate-200"
+                >
+                  <option value="sermon">설교 녹취</option>
+                  <option value="phonecall">통화 기록</option>
+                  <option value="conversation">대화/회의 기록</option>
+                </select>
+              </div>
             </div>
 
             {/* 변환 버튼 */}
@@ -446,7 +470,14 @@ export default function Home({ darkMode, setDarkMode }) {
             {/* 결과 헤더 + 텍스트 */}
             <div className="bg-white dark:bg-slate-800/50 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-6">
               <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">변환 결과</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">변환 결과</h2>
+                  {result.transcription_type && result.transcription_type !== 'sermon' && (
+                    <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-medium">
+                      {result.transcription_type === 'phonecall' ? '통화 기록' : '대화/회의 기록'}
+                    </span>
+                  )}
+                </div>
                 <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-medium">
                   {result.characters?.toLocaleString()} 자
                 </span>
@@ -458,11 +489,25 @@ export default function Home({ darkMode, setDarkMode }) {
                     .split('\n')
                     .map((line, i) => {
                       const trimmed = line.trim()
-                      if (trimmed === '본론' || trimmed === '결론' || trimmed === '기도') {
+                      // 섹션 헤더: 설교(본론/결론/기도) + 통화/대화(요약/주요 내용/논의 안건/결정 사항/후속 조치)
+                      const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치']
+                      if (sectionHeaders.includes(trimmed)) {
                         return (
                           <div key={i} className="text-base font-bold text-blue-700 dark:text-blue-400 border-b border-blue-200 dark:border-blue-800 pb-1 mt-8 mb-3">
                             {trimmed}
                           </div>
+                        )
+                      }
+                      // 화자 라벨 강조: "화자 A:", "화자 B:", "참석자 1:" 등
+                      const speakerMatch = trimmed.match(/^(화자\s*[A-Z]|참석자\s*\d+)\s*[:：]/)
+                      if (speakerMatch) {
+                        return (
+                          <p key={i} className="mb-1.5">
+                            <span className="inline-block px-2 py-0.5 mr-1.5 text-xs font-semibold rounded-md bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
+                              {speakerMatch[1]}
+                            </span>
+                            {trimmed.slice(speakerMatch[0].length).trim()}
+                          </p>
                         )
                       }
                       if (trimmed === '') return <br key={i} />
@@ -510,35 +555,37 @@ export default function Home({ darkMode, setDarkMode }) {
               </div>
             </div>
 
-            {/* 요약 섹션 */}
-            {!result.summary ? (
-              <button
-                onClick={handleSummarize}
-                disabled={loading}
-                className="w-full bg-white dark:bg-slate-800/50 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50
-                  p-4 text-sm font-medium text-blue-600 dark:text-blue-400
-                  hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors
-                  disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? '요약 생성 중...' : '요약 생성'}
-              </button>
-            ) : (
-              <div className="bg-white dark:bg-slate-800/50 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">주보용 요약</h3>
-                  <button
-                    onClick={() => copyToClipboard(result.summary, 'summary')}
-                    className="text-xs text-blue-500 hover:text-blue-600 font-medium"
-                  >
-                    {copied === 'summary' ? '복사됨' : '복사'}
-                  </button>
+            {/* 요약 섹션 (설교 녹취만) */}
+            {(result.transcription_type || 'sermon') === 'sermon' && (
+              !result.summary ? (
+                <button
+                  onClick={handleSummarize}
+                  disabled={loading}
+                  className="w-full bg-white dark:bg-slate-800/50 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50
+                    p-4 text-sm font-medium text-blue-600 dark:text-blue-400
+                    hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? '요약 생성 중...' : '주보용 요약 생성'}
+                </button>
+              ) : (
+                <div className="bg-white dark:bg-slate-800/50 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">주보용 요약</h3>
+                    <button
+                      onClick={() => copyToClipboard(result.summary, 'summary')}
+                      className="text-xs text-blue-500 hover:text-blue-600 font-medium"
+                    >
+                      {copied === 'summary' ? '복사됨' : '복사'}
+                    </button>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl">
+                    <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                      {result.summary}
+                    </p>
+                  </div>
                 </div>
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl">
-                  <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                    {result.summary}
-                  </p>
-                </div>
-              </div>
+              )
             )}
 
             {/* 원본 텍스트 */}
@@ -590,6 +637,11 @@ export default function Home({ darkMode, setDarkMode }) {
                               <span className="text-xs text-slate-400 dark:text-slate-500">
                                 {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </span>
+                              {item.transcription_type && item.transcription_type !== 'sermon' && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                                  {item.transcription_type === 'phonecall' ? '통화' : '회의'}
+                                </span>
+                              )}
                               {item.characters > 0 && (
                                 <span className="text-xs text-slate-400 dark:text-slate-500">
                                   {item.characters?.toLocaleString()}자
