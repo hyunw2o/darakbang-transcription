@@ -315,7 +315,7 @@ export default function Home({ darkMode, setDarkMode }) {
   return (
     <div className="min-h-screen pb-12">
       <Head>
-        <title>STTudio - AI Speech to Text</title>
+        <title>말록24 - AI Speech to Text</title>
       </Head>
 
       {/* 헤더 */}
@@ -330,7 +330,7 @@ export default function Home({ darkMode, setDarkMode }) {
             </a>
             <span className="text-slate-300 dark:text-slate-700">/</span>
             <h1 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-              STTudio
+              말록24
             </h1>
           </div>
           <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
@@ -668,7 +668,7 @@ export default function Home({ darkMode, setDarkMode }) {
         {/* 푸터 */}
         <footer className="mt-12 text-center">
           <p className="text-xs text-slate-400 dark:text-slate-600">
-            STTudio &middot; Copyright 2026. OURS All rights reserved.
+            말록24 &middot; Copyright 2026. OURS All rights reserved.
           </p>
         </footer>
       </main>
