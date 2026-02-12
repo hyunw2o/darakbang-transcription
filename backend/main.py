@@ -179,13 +179,59 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     OpenAI Whisper API로 오디오 → 텍스트 변환.
     25MB 초과 시 자동 분할 처리.
     """
-    # 설교: 교회 용어 힌트 / 통화·대화: 일반 힌트
-    if transcription_type == "sermon":
-        whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
-    elif transcription_type == "phonecall":
-        whisper_prompt = "통화 녹음입니다. 화자가 두 명이며 전화 대화를 녹음한 것입니다."
+    # Whisper prompt: 언어별 + 유형별 컨텍스트 힌트
+    # 음질이 낮을 때 올바른 단어를 추정하는 데 도움이 되는 역할
+    if language == "en":
+        # ===== 영어 프롬프트 =====
+        if transcription_type == "sermon":
+            whisper_prompt = (
+                "This is a sermon or lecture recording. "
+                "Infer unclear words from context. "
+                "Bible, Scripture, Gospel, salvation, grace, faith, prayer, blessing, congregation, "
+                "sermon, worship, fellowship, testimony, discipleship, ministry, mission"
+            )
+        elif transcription_type == "phonecall":
+            whisper_prompt = (
+                "This is a phone call recording with two speakers. "
+                "Audio quality may be low. Infer unclear words from context. "
+                "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
+                "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
+                "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
+                "blood pressure, blood sugar, CT, MRI, EEG, ECG, prescription, dosage, side effects"
+            )
+        else:
+            whisper_prompt = (
+                "This is a meeting or conversation recording with multiple speakers. "
+                "Audio may have echo or overlapping voices. Infer unclear words from context. "
+                "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
+                "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
+                "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
+                "blood pressure, CT, MRI, EEG, prescription, dosage, side effects, "
+                "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, profit margin"
+            )
     else:
-        whisper_prompt = "회의 또는 대화 녹음입니다. 여러 참석자가 있는 회의를 녹음한 것입니다."
+        # ===== 한국어 프롬프트 =====
+        if transcription_type == "sermon":
+            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
+        elif transcription_type == "phonecall":
+            whisper_prompt = (
+                "전화 통화 녹음입니다. 두 명의 화자가 대화합니다. "
+                "음질이 낮거나 불명확한 부분은 문맥에 맞게 추정하세요. "
+                "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
+                "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
+                "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
+                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증"
+            )
+        else:
+            whisper_prompt = (
+                "회의 또는 대화 녹음입니다. 여러 참석자가 있습니다. "
+                "음질이 낮거나 겹치는 목소리가 있을 수 있으며, 문맥에 맞게 추정하세요. "
+                "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
+                "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
+                "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
+                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, "
+                "KPI, ROI, OKR, 프로젝트, 마일스톤, 스프린트, 데드라인, 예산, 매출, 영업이익"
+            )
 
     chunks = split_audio_file(file_path)
     all_text = []
@@ -211,15 +257,15 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     return "\n\n".join(all_text)
 
 
-async def gemini_correct_and_structure(raw_text: str, task_id: str, transcription_type: str = "sermon") -> str:
+async def gemini_correct_and_structure(raw_text: str, task_id: str, transcription_type: str = "sermon", language: str = "ko") -> str:
     """
     Gemini로 텍스트 교정 + 구조화 (2단계).
-    유형별 프롬프트 선택: 설교/통화/대화·회의.
+    유형별 + 언어별 프롬프트 선택.
     """
     target_model = get_optimal_model()
-    print(f"[{task_id}] Gemini correction model: {target_model}, type: {transcription_type}")
+    print(f"[{task_id}] Gemini correction model: {target_model}, type: {transcription_type}, lang: {language}")
 
-    correction_prompt = get_correction_prompt_by_type(transcription_type)
+    correction_prompt = get_correction_prompt_by_type(transcription_type, language)
 
     model = genai.GenerativeModel(
         target_model,
@@ -228,9 +274,10 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
         )
     )
 
+    label = "Original Text" if language == "en" else "원본 텍스트"
     full_prompt = f"""{correction_prompt}
 
-[원본 텍스트]
+[{label}]
 {raw_text}"""
 
     response = None
@@ -273,11 +320,11 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
 
             # 2단계: Gemini로 교정 + 구조화
             print(f"[{task_id}] Step 2: Gemini correction...")
-            corrected_text = await gemini_correct_and_structure(raw_text, task_id, transcription_type)
+            corrected_text = await gemini_correct_and_structure(raw_text, task_id, transcription_type, language)
             print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
 
             # 3단계: 규칙 기반 후처리
-            corrected_text = correct_text(corrected_text, transcription_type)
+            corrected_text = correct_text(corrected_text, transcription_type, language)
 
             engine = "whisper+gemini"
 
@@ -320,7 +367,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             except:
                 pass
 
-            corrected_text = correct_text(raw_text, transcription_type)
+            corrected_text = correct_text(raw_text, transcription_type, language)
             engine = "gemini-only"
 
         # 결과 저장

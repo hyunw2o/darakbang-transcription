@@ -1,6 +1,7 @@
 """
 기독교 용어 사전 - 다락방 전도운동 특화
 류광수 목사 / 이주현 목사 교회 용어 포함
++ 의료 용어 사전
 """
 
 # ===== 1. 삼위일체 / 하나님 =====
@@ -241,6 +242,258 @@ POSITIONS = [
     "구역장", "순장", "셀리더", "팀장",
 ]
 
+# ===== 11. 의료 기초 용어 =====
+MEDICAL_BASICS = [
+    # 진료/검사
+    "진단", "처방", "투약", "복용", "경과 관찰", "예후", "병력", "문진",
+    "촉진", "청진", "혈압", "맥박", "체온", "산소포화도", "혈당",
+    "소견", "증상", "징후", "합병증", "부작용", "금기", "적응증",
+    "외래", "입원", "퇴원", "전원", "회진", "협진", "의뢰",
+    "수술", "시술", "마취", "전신마취", "국소마취", "봉합", "절개",
+    "CT", "MRI", "X-ray", "초음파", "내시경", "조직검사", "생검",
+    "혈액검사", "소변검사", "심전도", "폐기능검사",
+    # 의료진
+    "주치의", "전공의", "전문의", "레지던트", "인턴", "간호사", "약사",
+]
+
+# ===== 12. 주요 질병/질환 =====
+MEDICAL_DISEASES = [
+    # 심혈관
+    "고혈압", "저혈압", "심근경색", "협심증", "심부전", "부정맥",
+    "뇌졸중", "뇌경색", "뇌출혈", "동맥경화", "혈전", "색전",
+    # 내분비/대사
+    "당뇨병", "제1형 당뇨", "제2형 당뇨", "갑상선", "갑상선기능항진증",
+    "갑상선기능저하증", "고지혈증", "이상지질혈증", "통풍", "골다공증",
+    # 호흡기
+    "폐렴", "천식", "기관지염", "만성폐쇄성폐질환", "COPD", "폐결핵",
+    "기흉", "폐색전증", "수면무호흡증",
+    # 소화기
+    "위염", "위궤양", "십이지장궤양", "역류성 식도염", "과민성 대장 증후군",
+    "크론병", "궤양성 대장염", "간염", "간경변", "지방간", "담석증",
+    "췌장염", "맹장염", "충수염", "장폐색", "헬리코박터",
+    # 비뇨기/신장
+    "신부전", "만성 신장 질환", "요로감염", "신우신염", "요로결석",
+    "방광염", "전립선비대증", "전립선염",
+    # 근골격
+    "관절염", "류마티스", "디스크", "추간판 탈출증", "척추관 협착증",
+    "오십견", "건초염", "골절", "염좌", "인대 손상", "반월상 연골 손상",
+    # 신경/정신
+    "우울증", "불안장애", "공황장애", "불면증", "치매", "알츠하이머",
+    "파킨슨병", "편두통", "신경통", "대상포진",
+    # 뇌전증(간질) 관련
+    "뇌전증", "간질", "간질 발작", "뇌전증 발작",
+    "전신 발작", "부분 발작", "초점 발작", "국소 발작",
+    "강직간대 발작", "강직 발작", "간대 발작", "결신 발작", "소발작", "대발작",
+    "근간대 발작", "무긴장 발작", "긴장성 발작",
+    "복합부분 발작", "단순부분 발작",
+    "측두엽 뇌전증", "전두엽 뇌전증", "후두엽 뇌전증", "두정엽 뇌전증",
+    "특발성 뇌전증", "증후성 뇌전증", "잠복성 뇌전증",
+    "영아 연축", "웨스트 증후군", "레녹스가스토 증후군", "드라베 증후군",
+    "소아 결신 뇌전증", "청소년 근간대 뇌전증", "청소년 결신 뇌전증",
+    "양성 롤란딕 뇌전증", "열성 경련",
+    "뇌전증 지속 상태", "간질 중첩증",
+    "발작 역치", "발작 빈도", "발작 유형", "발작 조절",
+    "뇌파", "뇌파검사", "EEG", "비디오 뇌파 모니터링",
+    "항경련제", "항뇌전증약", "AED",
+    "케톤식이", "케톤 식이요법", "미주신경자극술", "VNS",
+    "뇌전증 수술", "측두엽 절제술", "뇌량 절개술",
+    # 암/종양
+    "위암", "폐암", "간암", "대장암", "유방암", "갑상선암", "전립선암",
+    "췌장암", "식도암", "방광암", "난소암", "자궁경부암", "백혈병", "림프종",
+    # 피부
+    "아토피", "두드러기", "건선", "습진", "대상포진",
+    # 안과/이비인후
+    "백내장", "녹내장", "황반변성", "결막염", "중이염", "비염", "축농증", "편도염",
+    # 감염
+    "코로나", "독감", "인플루엔자", "패혈증", "대상포진", "결핵",
+    # 기타
+    "빈혈", "혈우병", "탈장", "치질", "하지정맥류", "갱년기", "자궁근종",
+]
+
+# ===== 13. 주요 약물/약 종류 =====
+MEDICAL_DRUGS = [
+    # 해열/진통/소염
+    "타이레놀", "아세트아미노펜", "이부프로펜", "아스피린", "나프록센",
+    "디클로페낙", "세레콕시브", "트라마돌", "코데인",
+    # 항생제
+    "아목시실린", "세팔로스포린", "아지스로마이신", "레보플록사신",
+    "메트로니다졸", "반코마이신", "겐타마이신",
+    # 심혈관
+    "아스피린", "클로피도그렐", "와파린", "헤파린", "리바록사반",
+    "아토르바스타틴", "로수바스타틴", "암로디핀", "니페디핀",
+    "메토프롤올", "비소프롤올", "카르베딜롤",
+    "로사르탄", "발사르탄", "텔미사르탄",
+    "라미프릴", "에날라프릴", "캡토프릴",
+    "푸로세미드", "히드로클로로티아지드", "스피로노락톤",
+    "니트로글리세린",
+    # 당뇨
+    "메트포르민", "글리메피리드", "시타글립틴", "엠파글리플로진",
+    "다파글리플로진", "인슐린", "란투스", "노보래피드",
+    # 소화기
+    "오메프라졸", "란소프라졸", "판토프라졸", "라베프라졸",
+    "돔페리돈", "메토클로프라미드", "가스모틴",
+    # 호흡기
+    "살부타몰", "벤토린", "심비코트", "세레타이드", "스피리바",
+    "몬테루카스트", "싱귤레어",
+    # 정신/신경
+    "졸피뎀", "로라제팜", "알프라졸람", "디아제팜",
+    "에스시탈로프람", "설트랄린", "플루옥세틴", "벤라팍신",
+    "퀘티아핀", "아리피프라졸", "리스페리돈",
+    "가바펜틴", "프레가발린", "카바마제핀", "발프로산",
+    # 뇌전증/항경련제
+    "발프로에이트", "발프로산나트륨", "데파킨", "데파코트",
+    "카바마제핀", "테그레톨", "옥스카바제핀", "트리렙탈",
+    "라모트리진", "라믹탈",
+    "레비티라세탐", "케프라",
+    "토피라메이트", "토파맥스",
+    "페니토인", "디란틴",
+    "페노바르비탈", "루미날",
+    "클로나제팜", "리보트릴",
+    "조니사마이드", "엑세그란",
+    "라코사마이드", "빔팻",
+    "클로바잠", "프리지움",
+    "비가바트린", "사브릴",
+    "에토석시마이드", "자론틴",
+    "퍼람파넬", "피콤파",
+    "브리바라세탐", "브리비액트",
+    "스티리펜톨", "디아코밋",
+    "루피나마이드", "이노벨론",
+    "센노사이드", "에피디올렉스", "칸나비디올", "CBD",
+    # 갑상선
+    "레보티록신", "씬지로이드", "메티마졸",
+    # 스테로이드
+    "프레드니솔론", "덱사메타손", "히드로코르티손",
+    # 기타 상용약
+    "세티리진", "로라타딘", "펙소페나딘",
+    "실데나필", "타다라필",
+    "알로푸리놀", "콜히친",
+    "메토트렉세이트",
+]
+
+# ===== 14. 의료 용어 음성인식 오류 교정 =====
+MEDICAL_CORRECTIONS = {
+    # 약물명 오류
+    "타이레돌": "타이레놀",
+    "타이래놀": "타이레놀",
+    "아세타미노펜": "아세트아미노펜",
+    "이부프로팬": "이부프로펜",
+    "아목시실런": "아목시실린",
+    "메트폴민": "메트포르민",
+    "매트포민": "메트포르민",
+    "메트폴인": "메트포르민",
+    "오매프라졸": "오메프라졸",
+    "졸피담": "졸피뎀",
+    "에스시탈로프": "에스시탈로프람",
+    "프레드니소론": "프레드니솔론",
+    "덱사메타선": "덱사메타손",
+    "아토바스타틴": "아토르바스타틴",
+    "로수바스타틴": "로수바스타틴",
+    "암로디핀": "암로디핀",
+    "발살탄": "발사르탄",
+    "로살탄": "로사르탄",
+    "시타그립틴": "시타글립틴",
+    "엠파글리플로진": "엠파글리플로진",
+    "인수린": "인슐린",
+    "인슈린": "인슐린",
+
+    # 질병명 오류
+    "심군경색": "심근경색",
+    "심급경색": "심근경색",
+    "협신증": "협심증",
+    "부정액": "부정맥",
+    "뇌졸증": "뇌졸중",
+    "뇌경색증": "뇌경색",
+    "당료": "당뇨",
+    "당료병": "당뇨병",
+    "갑상생": "갑상선",
+    "갑상생기능": "갑상선기능",
+    "고지혈중": "고지혈증",
+    "이상지질혈중": "이상지질혈증",
+    "골다공중": "골다공증",
+    "관절연": "관절염",
+    "류마치스": "류마티스",
+    "류머티스": "류마티스",
+    "루마티스": "류마티스",
+    "추간반": "추간판",
+    "추간판탈출": "추간판 탈출",
+    "척추관협착": "척추관 협착",
+    "알츠하이마": "알츠하이머",
+    "알쯔하이머": "알츠하이머",
+    "파킨손": "파킨슨",
+    "패현증": "패혈증",
+    "패열증": "패혈증",
+    "백내장증": "백내장",
+    "녹내장증": "녹내장",
+    "황반변정": "황반변성",
+    "전립선비대": "전립선비대증",
+    "전립선연": "전립선염",
+    "과민성대장": "과민성 대장",
+    "역류성식도": "역류성 식도",
+    "만성폐쇄성": "만성폐쇄성",
+    "수면무호흡": "수면무호흡증",
+    "하지정맥류": "하지정맥류",
+    "우울증": "우울증",
+    "불안장에": "불안장애",
+    "공황장에": "공황장애",
+
+    # 뇌전증 관련 오류
+    "간질발작": "간질 발작",
+    "뇌전증발작": "뇌전증 발작",
+    "뇌전중": "뇌전증",
+    "뇌전정": "뇌전증",
+    "뇌전층": "뇌전증",
+    "간짐": "간질",
+    "간진": "간질",
+    "강직간대": "강직간대",
+    "결신발작": "결신 발작",
+    "소발착": "소발작",
+    "대발착": "대발작",
+    "항경련재": "항경련제",
+    "항뇌전증약": "항뇌전증약",
+    "발프로에이터": "발프로에이트",
+    "발프로산나트류": "발프로산나트륨",
+    "데파킹": "데파킨",
+    "라모트리진": "라모트리진",
+    "라모트리딘": "라모트리진",
+    "라믹탈": "라믹탈",
+    "래비티라세탐": "레비티라세탐",
+    "레비티라세탐": "레비티라세탐",
+    "캐프라": "케프라",
+    "토파막스": "토파맥스",
+    "토피라매이트": "토피라메이트",
+    "페니토닌": "페니토인",
+    "디란틴": "디란틴",
+    "패노바비탈": "페노바르비탈",
+    "페노발비탈": "페노바르비탈",
+    "클로나재팜": "클로나제팜",
+    "라코사마이트": "라코사마이드",
+    "조니사마이트": "조니사마이드",
+    "비가바트린": "비가바트린",
+    "퍼람파넬": "퍼람파넬",
+    "열성경련": "열성 경련",
+    "뇌파겁사": "뇌파검사",
+    "간질중첩": "간질 중첩",
+    "케톤식이": "케톤 식이",
+    "미주신경자극": "미주신경자극술",
+    "측두엽뇌전증": "측두엽 뇌전증",
+    "웨스트증후군": "웨스트 증후군",
+    "레녹스가스토": "레녹스가스토 증후군",
+    "드라베증후군": "드라베 증후군",
+
+    # 의료 용어 오류
+    "처방전": "처방전",
+    "혈앞": "혈압",
+    "형압": "혈압",
+    "혈당치": "혈당치",
+    "산소포하도": "산소포화도",
+    "심전도검사": "심전도 검사",
+    "내시경검사": "내시경 검사",
+    "조직겁사": "조직검사",
+    "합변증": "합병증",
+    "부작융": "부작용",
+    "경과관찰": "경과 관찰",
+}
+
 # ===== 통합 용어 리스트 =====
 ALL_CHURCH_TERMS = (
     DARAKBANG_CORE +
@@ -254,6 +507,145 @@ ALL_CHURCH_TERMS = (
     THEOLOGY +
     POSITIONS
 )
+
+ALL_MEDICAL_TERMS = (
+    MEDICAL_BASICS +
+    MEDICAL_DISEASES +
+    MEDICAL_DRUGS
+)
+
+# ===== 영어 일반 STT 오류 교정 =====
+EN_COMMON_CORRECTIONS = {
+    # Common STT homophones / mishearings
+    "their are": "there are",
+    "there going": "they're going",
+    "your welcome": "you're welcome",
+    "could of": "could have",
+    "should of": "should have",
+    "would of": "would have",
+    "alot": "a lot",
+    "atleast": "at least",
+    "incase": "in case",
+    "infact": "in fact",
+    "aswell": "as well",
+    "thankyou": "thank you",
+    "nevermind": "never mind",
+    "per say": "per se",
+    "for all intensive purposes": "for all intents and purposes",
+    "supposably": "supposedly",
+    "irregardless": "regardless",
+    "expecially": "especially",
+    "probly": "probably",
+    "prolly": "probably",
+    "gonna": "going to",
+    "wanna": "want to",
+    "gotta": "got to",
+    "kinda": "kind of",
+    "sorta": "sort of",
+    "dunno": "don't know",
+    "lemme": "let me",
+    "gimme": "give me",
+}
+
+# ===== 영어 의료 용어 STT 오류 교정 =====
+EN_MEDICAL_CORRECTIONS = {
+    # Drug names
+    "acetominifen": "acetaminophen",
+    "acetominaphen": "acetaminophen",
+    "acetaminafin": "acetaminophen",
+    "ibuprofen": "ibuprofen",
+    "ibuprofin": "ibuprofen",
+    "amoxicilin": "amoxicillin",
+    "amoxacillin": "amoxicillin",
+    "metforman": "metformin",
+    "metformine": "metformin",
+    "omeperazole": "omeprazole",
+    "omeprazol": "omeprazole",
+    "insuline": "insulin",
+    "levetiracitam": "levetiracetam",
+    "leviteracetam": "levetiracetam",
+    "carbamazapine": "carbamazepine",
+    "carbamazapene": "carbamazepine",
+    "valporate": "valproate",
+    "valproic": "valproic",
+    "lamotragine": "lamotrigine",
+    "lamotrigene": "lamotrigine",
+    "phenatoin": "phenytoin",
+    "phenitoin": "phenytoin",
+    "topiramate": "topiramate",
+    "toparamate": "topiramate",
+    "gabapenten": "gabapentin",
+    "gabapentine": "gabapentin",
+    "pregabaline": "pregabalin",
+    "pregaballin": "pregabalin",
+    "atorvastaten": "atorvastatin",
+    "losartin": "losartan",
+    "valsarten": "valsartan",
+    "amlodapine": "amlodipine",
+    "amlodopine": "amlodipine",
+
+    # Disease / condition names
+    "epilepsey": "epilepsy",
+    "epileptic": "epileptic",
+    "seisure": "seizure",
+    "seizor": "seizure",
+    "siezure": "seizure",
+    "hypertention": "hypertension",
+    "hypotention": "hypotension",
+    "diabeties": "diabetes",
+    "diabetis": "diabetes",
+    "alzhiemers": "Alzheimer's",
+    "alzheimers": "Alzheimer's",
+    "parkinsons": "Parkinson's",
+    "parkinsen": "Parkinson's",
+    "newmonia": "pneumonia",
+    "pneumona": "pneumonia",
+    "artheritus": "arthritis",
+    "arthritus": "arthritis",
+    "astma": "asthma",
+    "athsma": "asthma",
+    "stroke": "stroke",
+    "myocardial infraction": "myocardial infarction",
+    "angena": "angina",
+    "athero sclerosis": "atherosclerosis",
+    "arrythmia": "arrhythmia",
+    "arythmia": "arrhythmia",
+
+    # Medical terms
+    "perscription": "prescription",
+    "perscribe": "prescribe",
+    "diagnoses": "diagnosis",
+    "prognoses": "prognosis",
+    "symtoms": "symptoms",
+    "symtems": "symptoms",
+    "complecations": "complications",
+    "side affects": "side effects",
+    "anesthesia": "anesthesia",
+    "anasthesia": "anesthesia",
+    "surjery": "surgery",
+
+    # Epilepsy-specific
+    "tonic clonic": "tonic-clonic",
+    "abscence seizure": "absence seizure",
+    "absence seisure": "absence seizure",
+    "myaclonic": "myoclonic",
+    "mioclonic": "myoclonic",
+    "electroencephalagram": "electroencephalogram",
+    "electro encephalogram": "electroencephalogram",
+    "vagus nerve stimulation": "vagus nerve stimulation",
+    "ketogenic diet": "ketogenic diet",
+    "status epileptecus": "status epilepticus",
+    "status epilepticas": "status epilepticus",
+    "febrile seizor": "febrile seizure",
+    "febrile seisure": "febrile seizure",
+    "lennox gastaut": "Lennox-Gastaut",
+    "lennox gastot": "Lennox-Gastaut",
+    "dravet sindrome": "Dravet syndrome",
+    "drave syndrome": "Dravet syndrome",
+    "west sindrome": "West syndrome",
+    "temporal lob epilepsy": "temporal lobe epilepsy",
+    "frontal lob epilepsy": "frontal lobe epilepsy",
+}
 
 def get_gemini_prompt():
     """
@@ -356,6 +748,16 @@ def get_gemini_correction_prompt():
 - 비슷한 내용이 반복되더라도 원본에 있으면 그대로 유지하라.
 - 출력이 길어도 괜찮다. 짧게 줄이려 하지 마라.
 
+[저음질/불명확한 음성 대응 - 반드시 적용]
+- 원본 텍스트에 의미 없는 글자 나열, 깨진 단어, 알 수 없는 음절이 있으면 반드시 문맥을 분석하여 올바른 단어로 추정·복원하라.
+- 앞뒤 문장의 맥락, 주제, 화자의 의도를 종합하여 가장 적합한 단어를 선택하라.
+- 비슷한 발음의 단어가 여러 개 있으면, 해당 문장의 주제와 문맥에 가장 잘 맞는 것을 선택하라.
+- 음성인식이 완전히 실패하여 의미를 파악할 수 없는 부분만 삭제하되, 추정 가능한 부분은 반드시 복원하라.
+- 예시:
+  "그래서 우리가 이 수레를 해야 합니다" → "그래서 우리가 이 사역을 해야 합니다" (문맥상 '사역')
+  "하나님의 은해가" → "하나님의 은혜가" (발음 유사)
+  "237 남아와 오천족에" → "237나라와 5000종족에" (다락방 용어)
+
 [용어 교정]
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
   237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중
@@ -430,21 +832,44 @@ def get_phonecall_correction_prompt():
 - 내용을 요약하거나 줄이지 마라. 원본 길이와 비슷하게 출력하라.
 - 비슷한 내용이 반복되더라도 원본에 있으면 그대로 유지하라.
 
+[저음질/불명확한 음성 대응 - 반드시 적용]
+- 전화 녹음 특성상 음질이 떨어지거나 뭉개진 부분이 많을 수 있다.
+- 의미 없는 글자 나열, 깨진 단어, 불명확한 음절은 앞뒤 문맥을 분석하여 올바른 단어로 추정·복원하라.
+- 전화 통화에서 자주 사용하는 표현 패턴을 활용하여 추정하라:
+  인사/안부, 용건 전달, 약속/일정 조율, 요청/확인, 마무리 인사
+- 상대방 목소리가 작거나 뭉개져 인식이 안 된 부분도 문맥상 추정 가능하면 복원하라.
+- 예시:
+  "그래서 그게 좀 얼른해 주시면" → "그래서 그것을 좀 빨리 해주시면" (구어체 교정)
+  "안녕하 세 요" → "안녕하세요" (끊어진 음절 복원)
+  "다음 시요일에" → "다음 수요일에" (문맥 추정)
+
 [화자 분리 - 반드시 적용]
 - 통화 참여자를 구분하여 각 발언 앞에 화자 레이블을 붙여라.
 - 화자가 2명인 경우: "화자 A:" 와 "화자 B:" 를 사용하라.
-- 음성의 톤, 말투, 호칭, 문맥을 분석하여 화자를 구분하라.
+- 화자 구분 기준 (복합적으로 판단하라):
+  1) 말투/어투 차이: 존댓말 vs 반말, 격식체 vs 비격식체
+  2) 호칭 사용: "사장님", "과장님", "선생님" 등을 부르는 쪽 vs 불리는 쪽
+  3) 역할 차이: 요청하는 쪽 vs 응답하는 쪽, 보고하는 쪽 vs 지시하는 쪽
+  4) 대화 흐름: 질문→답변 패턴, 한쪽이 설명하고 다른 쪽이 맞장구
+  5) 음성 톤: 높은 목소리 vs 낮은 목소리 (텍스트에서 추정 가능한 단서)
 - 화자가 바뀔 때마다 빈 줄을 넣고 새 화자 레이블을 시작하라.
 - 같은 화자의 연속 발언은 하나의 블록으로 묶어라.
+- 이름이나 직함이 파악되면 레이블에 반영하라. (예: "화자 A(김과장):")
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 인명, 지명, 회사명 등 고유명사는 문맥을 고려하여 정확하게 기록하라.
+- 전화번호, 주소, 날짜, 시간, 금액은 정확하게 기록하라.
+- 의료 관련 통화인 경우 의료 용어를 정확히 표기하라:
+  약물명 (타이레놀, 메트포르민, 아목시실린 등)
+  질병명 (고혈압, 당뇨병, 위염 등)
+  검사명 (CT, MRI, 혈액검사 등)
 
 [추임새 제거]
 - 문장 시작의 습관적 추임새만 삭제: '예,', '자,', '아,', '어,', '응,', '네,'
-- 대화의 흐름에서 의미 있는 응답('네', '예' 등)은 유지하라.
+- 대화의 흐름에서 의미 있는 응답('네', '예', '아, 그렇군요' 등)은 유지하라.
+- "네네", "아 네", "맞아요" 등 동의/확인 표현은 유지하라.
 
 [출력 형식]
 - 특수 기호(▶, ■, ● 등) 사용 금지. 순수 텍스트만.
@@ -462,13 +887,17 @@ def get_phonecall_correction_prompt():
 3. 세 번째 핵심 사항
 
 [출력 예시]
-화자 A: 안녕하세요, 김과장님. 다음 주 회의 일정 관련해서 연락드렸습니다.
+화자 A(김과장): 안녕하세요, 이대리님. 다음 주 회의 일정 관련해서 연락드렸습니다.
 
-화자 B: 네, 말씀하세요.
+화자 B(이대리): 네, 말씀하세요.
 
-화자 A: 다음 주 수요일 오후 2시에 진행하려고 하는데 괜찮으시겠습니까?
+화자 A(김과장): 다음 주 수요일 오후 2시에 진행하려고 하는데 괜찮으시겠습니까?
 
-화자 B: 수요일은 좀 어려울 것 같은데요. 목요일로 변경 가능할까요?
+화자 B(이대리): 수요일은 좀 어려울 것 같은데요. 목요일로 변경 가능할까요?
+
+화자 A(김과장): 네, 목요일 같은 시간으로 하겠습니다. 자료는 전날까지 공유해 주세요.
+
+화자 B(이대리): 알겠습니다. 그렇게 하겠습니다.
 
 
 요약
@@ -493,20 +922,45 @@ def get_conversation_correction_prompt():
 - 원본의 모든 문장을 빠짐없이 유지하라. 한 문장도 삭제하지 마라.
 - 내용을 요약하거나 줄이지 마라. 원본 길이와 비슷하게 출력하라.
 
+[저음질/불명확한 음성 대응 - 반드시 적용]
+- 회의실 녹음 특성상 반향, 겹치는 목소리, 먼 거리의 발언 등으로 음질이 떨어질 수 있다.
+- 의미 없는 글자 나열, 깨진 단어, 불명확한 음절은 앞뒤 문맥을 분석하여 올바른 단어로 추정·복원하라.
+- 회의/대화에서 자주 등장하는 맥락을 활용하여 추정하라:
+  업무 보고, 프로젝트 진행상황, 일정 조율, 예산 논의, 인력 배치, 의사결정
+- 여러 사람이 동시에 말하거나 겹치는 부분은 가능한 한 각각의 발언을 분리하여 기록하라.
+- 멀리서 들리는 발언도 추정 가능하면 기록하라.
+- 예시:
+  "그 프로재트가" → "그 프로젝트가" (발음 뭉개짐)
+  "KPI를 맞 춰야" → "KPI를 맞춰야" (끊어진 음절)
+  "삼분기 매출이" → "3분기 매출이" (숫자 통일)
+
 [화자 분리 - 반드시 적용]
 - 회의 참석자를 구분하여 각 발언 앞에 화자 레이블을 붙여라.
 - 화자를 "참석자 1:", "참석자 2:", "참석자 3:" 등으로 표시하라.
+- 화자 구분 기준 (복합적으로 판단하라):
+  1) 역할/직급 차이: 회의 주재자, 보고자, 의사결정자, 실무자
+  2) 호칭 사용: "팀장님", "과장님", "대리님" 등 호칭으로 역할 파악
+  3) 발언 패턴: 진행하는 사람, 보고하는 사람, 질문하는 사람, 의견 제시하는 사람
+  4) 전문 분야: 기술적 발언, 마케팅 발언, 재무 발언 등 전문 영역으로 구분
+  5) 대화 맥락: "제가 말씀드린 것처럼", "아까 김과장님이" 등 자기/타인 언급
 - 이름이나 직함이 언급되면 레이블에 반영하라. (예: "참석자 1(김팀장):")
 - 화자가 바뀔 때마다 빈 줄을 넣고 새 화자 레이블을 시작하라.
+- 같은 화자의 연속 발언은 하나의 블록으로 묶어라.
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 전문 용어, 프로젝트명, 고유명사는 문맥을 고려하여 정확하게 기록하라.
+- 숫자, 금액, 날짜, 퍼센트 등은 아라비아 숫자로 통일하라 (예: 삼십 퍼센트 → 30%)
+- 의료 관련 회의인 경우 의료 용어를 정확히 표기하라:
+  약물명, 질병명, 검사명, 의료 절차 등
+- 기술 회의인 경우 IT/기술 용어를 정확히 표기하라:
+  API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes 등
 
 [추임새 제거]
 - 문장 시작의 습관적 추임새만 삭제.
 - 대화의 흐름에서 의미 있는 응답은 유지하라.
+- "좋습니다", "동의합니다", "그렇게 하시죠" 등 의사결정 관련 응답은 반드시 유지.
 
 [출력 형식]
 - 특수 기호(▶, ■, ● 등) 사용 금지. 순수 텍스트만.
@@ -531,11 +985,13 @@ def get_conversation_correction_prompt():
 2. 담당: OOO - 내용 (기한)
 
 [출력 예시]
-참석자 1(김팀장): 오늘 회의는 다음 분기 마케팅 전략에 대해 논의하겠습니다.
+참석자 1(김팀장): 오늘 회의는 다음 분기 마케팅 전략에 대해 논의하겠습니다. 먼저 지난 분기 실적부터 보겠습니다.
 
-참석자 2(이대리): 지난 분기 매출은 전년 대비 15% 증가했습니다.
+참석자 2(이대리): 지난 분기 매출은 전년 대비 15% 증가했습니다. 특히 온라인 채널에서 성과가 좋았습니다.
 
-참석자 3(박과장): 온라인 쪽은 좋았는데 오프라인 매장 실적은 5% 감소했습니다.
+참석자 3(박과장): 온라인 쪽은 좋았는데 오프라인 매장 실적은 5% 감소했습니다. 원인 분석이 필요합니다.
+
+참석자 1(김팀장): 좋습니다. 오프라인 매장 분석은 박과장이 다음 주까지 보고서로 정리해 주세요.
 
 
 요약
@@ -556,53 +1012,275 @@ def get_conversation_correction_prompt():
 위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라."""
 
 
-def get_correction_prompt_by_type(transcription_type: str = "sermon") -> str:
-    """녹취 유형별 Gemini 교정 프롬프트 반환"""
-    if transcription_type == "phonecall":
-        return get_phonecall_correction_prompt()
-    elif transcription_type == "conversation":
-        return get_conversation_correction_prompt()
+# ===== 영어 교정 프롬프트 =====
+
+def get_en_sermon_correction_prompt():
+    """English sermon/lecture correction prompt"""
+    return """You are an expert sermon and lecture transcript editor.
+
+The [Original Text] below was transcribed from audio using speech-to-text (STT).
+Correct and structure this text following the rules below.
+
+[Most Important Rule - Content Preservation]
+- Keep ALL sentences from the original. Do NOT delete a single sentence.
+- Do NOT summarize or shorten. Output should be similar in length to the original.
+- If content is repeated, keep it as-is if it was actually repeated.
+- Long output is fine. Do NOT try to shorten it.
+
+[Handling Low-Quality / Unclear Audio - Must Apply]
+- If the original text contains meaningless character sequences, broken words, or unclear syllables, analyze the context and restore them to the correct words.
+- Use surrounding sentences, topic, and speaker intent to choose the most appropriate word.
+- When multiple similar-sounding words are possible, pick the one that best fits the context.
+- Only remove parts where meaning is completely unrecoverable. Restore anything that can be inferred.
+- Examples:
+  "the importants of faith" → "the importance of faith"
+  "we need to pray for the nay shuns" → "we need to pray for the nations"
+  "God's gray is sufficient" → "God's grace is sufficient"
+
+[Text Correction]
+- Fix STT errors based on context.
+- Correct grammar, spelling, and punctuation while preserving the speaker's meaning.
+- Proper nouns (names, places, book titles) should be accurately spelled.
+- Bible verse references should use standard format: "John 3:16", "Romans 8:28"
+- Medical terminology must be accurately spelled if mentioned:
+  Drug names (acetaminophen, metformin, amoxicillin, etc.)
+  Disease names (hypertension, diabetes, epilepsy, seizure, etc.)
+  Test names (CT, MRI, EEG, etc.)
+
+[Filler Removal]
+- Remove habitual fillers at sentence starts: "um", "uh", "so", "like", "you know"
+- Keep meaningful responses: "yes", "amen", "right"
+- Do NOT delete actual content sentences when removing fillers.
+
+[Structuring - Must Apply]
+- Insert section markers on separate lines based on the sermon flow:
+  "Main Body" — where the main message begins after the introduction
+  "Conclusion" — the closing/summary section
+  "Prayer" — where the closing prayer begins
+- Each marker should be on its own line, with blank lines before and after.
+
+[Output Format]
+- No special symbols. Plain text only.
+- No markdown (##, **, - etc.).
+- Separate paragraphs with blank lines when the topic changes.
+- Colloquial expressions should be smoothed into natural sentences while preserving meaning.
+
+Correct the [Original Text] following this format. Do NOT shorten the content."""
+
+
+def get_en_phonecall_correction_prompt():
+    """English phone call correction prompt"""
+    return """You are an expert phone call transcript editor.
+
+The [Original Text] below was transcribed from a phone call recording using speech-to-text (STT).
+Correct and structure this text following the rules below.
+
+[Most Important Rule - Content Preservation]
+- Keep ALL sentences from the original. Do NOT delete a single sentence.
+- Do NOT summarize or shorten. Output should be similar in length to the original.
+
+[Handling Low-Quality / Unclear Audio - Must Apply]
+- Phone recordings often have low quality, muffled audio, or background noise.
+- Restore broken words, unclear syllables using surrounding context.
+- Use common phone conversation patterns to infer meaning:
+  Greetings, stating purpose, scheduling, requests, confirmations, closing
+- If one side's voice is quiet or garbled, restore it if context allows.
+- Examples:
+  "I'll sen you the dah cuments" → "I'll send you the documents"
+  "can we sheh dule for" → "can we schedule for"
+  "the pah tient needs" → "the patient needs"
+
+[Speaker Separation - Must Apply]
+- Identify and label speakers: "Speaker A:" and "Speaker B:"
+- Criteria for speaker identification:
+  1) Tone/formality differences
+  2) Who uses titles vs who is addressed by title
+  3) Role: requester vs responder, reporter vs manager
+  4) Conversation flow: question→answer patterns
+  5) If names/titles are identified, reflect in labels (e.g., "Speaker A (Dr. Kim):")
+- Add blank lines between speaker changes.
+- Group consecutive statements by the same speaker.
+
+[Text Correction]
+- Fix STT errors based on context.
+- Correct grammar and spelling while preserving conversational tone.
+- Proper nouns (names, companies, locations) should be accurately spelled.
+- Phone numbers, addresses, dates, times, amounts should be recorded accurately.
+- Medical terminology must be accurately spelled:
+  Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
+  levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate
+  Diseases: hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma
+  Tests: CT, MRI, EEG, CBC, ECG, X-ray
+
+[Filler Removal]
+- Remove habitual fillers: "um", "uh", "like", "you know"
+- Keep meaningful responses: "yes", "right", "I see", "okay", "got it"
+
+[Output Format]
+- No special symbols. Plain text only.
+- No markdown.
+
+[Structuring - Must Apply]
+After the call content, add two blank lines and the following summary:
+
+Summary
+(2-3 sentences describing the main purpose and context of the call)
+
+Key Points
+1. First key point
+2. Second key point
+3. Third key point
+
+Correct the [Original Text] following this format. Do NOT shorten the content."""
+
+
+def get_en_conversation_correction_prompt():
+    """English conversation/meeting correction prompt"""
+    return """You are an expert meeting minutes editor.
+
+The [Original Text] below was transcribed from a meeting/conversation recording using speech-to-text (STT).
+Correct and structure this text following the rules below.
+
+[Most Important Rule - Content Preservation]
+- Keep ALL sentences from the original. Do NOT delete a single sentence.
+- Do NOT summarize or shorten. Output should be similar in length to the original.
+
+[Handling Low-Quality / Unclear Audio - Must Apply]
+- Meeting recordings may have echo, overlapping voices, or distant speakers.
+- Restore broken words, unclear syllables using surrounding context.
+- Use common meeting contexts to infer meaning:
+  Status updates, project progress, scheduling, budget discussion, staffing, decisions
+- Separate overlapping speech into individual statements where possible.
+- Record distant speakers if identifiable.
+- Examples:
+  "the pro ject is on trah ck" → "the project is on track"
+  "we need to meet the KP eyes" → "we need to meet the KPIs"
+  "the buh get for Q3" → "the budget for Q3"
+
+[Speaker Separation - Must Apply]
+- Label meeting participants: "Participant 1:", "Participant 2:", "Participant 3:", etc.
+- Criteria for speaker identification:
+  1) Role/seniority: meeting chair, presenter, decision-maker, contributor
+  2) Title usage: "Manager", "Director", identifying roles
+  3) Speaking patterns: facilitator, reporter, questioner, opinion-giver
+  4) Expertise: technical, marketing, financial domains
+  5) Self/other references: "As I mentioned", "Like John said"
+- If names/titles are identified, reflect in labels (e.g., "Participant 1 (Sarah, PM):")
+- Add blank lines between speaker changes.
+
+[Text Correction]
+- Fix STT errors based on context.
+- Correct grammar and spelling while preserving conversational tone.
+- Technical terms, project names, proper nouns should be accurately spelled.
+- Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
+- Medical terminology if applicable: drug names, disease names, procedure names
+- Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
+
+[Filler Removal]
+- Remove habitual fillers at sentence starts.
+- Keep decision-related responses: "Agreed", "Let's do that", "Sounds good", "Approved"
+
+[Output Format]
+- No special symbols. Plain text only.
+- No markdown.
+
+[Structuring - Must Apply]
+After the conversation content, add two blank lines and the following summary:
+
+Summary
+(2-3 sentences describing the meeting purpose and context)
+
+Agenda Items
+1. Topic - Discussion result
+2. Topic - Discussion result
+
+Decisions
+1. Decision made
+2. Decision made
+
+Action Items
+1. Owner: Name - Task (Deadline)
+2. Owner: Name - Task (Deadline)
+
+Correct the [Original Text] following this format. Do NOT shorten the content."""
+
+
+def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko") -> str:
+    """녹취 유형별 + 언어별 Gemini 교정 프롬프트 반환"""
+    if language == "en":
+        if transcription_type == "phonecall":
+            return get_en_phonecall_correction_prompt()
+        elif transcription_type == "conversation":
+            return get_en_conversation_correction_prompt()
+        else:
+            return get_en_sermon_correction_prompt()
     else:
-        return get_gemini_correction_prompt()
+        if transcription_type == "phonecall":
+            return get_phonecall_correction_prompt()
+        elif transcription_type == "conversation":
+            return get_conversation_correction_prompt()
+        else:
+            return get_gemini_correction_prompt()
 
 
-def correct_text(text: str, transcription_type: str = "sermon") -> str:
+def correct_text(text: str, transcription_type: str = "sermon", language: str = "ko") -> str:
     """
     1차 텍스트 교정 (규칙 기반)
     transcription_type: "sermon" | "phonecall" | "conversation"
+    language: "ko" | "en"
     """
     corrected = text
     import re
 
-    if transcription_type == "sermon":
-        # 설교: 전체 교정 (교회 용어 + 일반)
-        for wrong, right in COMMON_MISTAKES.items():
-            corrected = corrected.replace(wrong, right)
+    if language == "en":
+        # ===== 영어 교정 =====
+        # 영어 일반 STT 오류 교정
+        for wrong, right in EN_COMMON_CORRECTIONS.items():
+            corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
 
-        # 숫자 패턴 교정 (교회 전용)
-        corrected = re.sub(r'이\s*삼\s*칠', '237', corrected)
-        corrected = re.sub(r'이백\s*삼십\s*칠', '237', corrected)
-        corrected = re.sub(r'오\s*천', '5000', corrected)
-        corrected = re.sub(r'칠\s*망대', '7망대', corrected)
-        corrected = re.sub(r'칠\s*여정', '7여정', corrected)
-        corrected = re.sub(r'칠\s*이정표', '7이정표', corrected)
-        corrected = re.sub(r'칠\s*칠\s*칠', '777', corrected)
+        # 영어 의료 용어 교정
+        for wrong, right in EN_MEDICAL_CORRECTIONS.items():
+            corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
 
-        # 성경 구절 형식 통일
-        corrected = re.sub(
-            r'([가-힣]+)\s*(\d+)\s*장\s*(\d+)\s*절',
-            r'\1 \2장 \3절',
-            corrected
-        )
+        # 영어 추임새 제거
+        corrected = re.sub(r'(?m)^(Um|Uh|So|Like|You know|I mean)[,.\s]+', '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(r'\n{3,}', '\n\n', corrected)
+
     else:
-        # 통화/대화: 일반 한국어 교정만
-        for wrong, right in GENERAL_CORRECTIONS.items():
+        # ===== 한국어 교정 =====
+        if transcription_type == "sermon":
+            # 설교: 전체 교정 (교회 용어 + 일반)
+            for wrong, right in COMMON_MISTAKES.items():
+                corrected = corrected.replace(wrong, right)
+
+            # 숫자 패턴 교정 (교회 전용)
+            corrected = re.sub(r'이\s*삼\s*칠', '237', corrected)
+            corrected = re.sub(r'이백\s*삼십\s*칠', '237', corrected)
+            corrected = re.sub(r'오\s*천', '5000', corrected)
+            corrected = re.sub(r'칠\s*망대', '7망대', corrected)
+            corrected = re.sub(r'칠\s*여정', '7여정', corrected)
+            corrected = re.sub(r'칠\s*이정표', '7이정표', corrected)
+            corrected = re.sub(r'칠\s*칠\s*칠', '777', corrected)
+
+            # 성경 구절 형식 통일
+            corrected = re.sub(
+                r'([가-힣]+)\s*(\d+)\s*장\s*(\d+)\s*절',
+                r'\1 \2장 \3절',
+                corrected
+            )
+        else:
+            # 통화/대화: 일반 한국어 교정만
+            for wrong, right in GENERAL_CORRECTIONS.items():
+                corrected = corrected.replace(wrong, right)
+
+        # 의료 용어 교정 (한국어 공통)
+        for wrong, right in MEDICAL_CORRECTIONS.items():
             corrected = corrected.replace(wrong, right)
 
-    # 추임새 제거 (모든 유형 공통)
-    corrected = re.sub(r'(?m)^(예|아|자|어|응|네|에|그)[,.\s~]+', '', corrected)
-    corrected = re.sub(r'(?<=[.?!])\s*(예|아|자|어|응|네)[,~]\s*', ' ', corrected)
-    corrected = re.sub(r'\n{3,}', '\n\n', corrected)
+        # 추임새 제거 (한국어 공통)
+        corrected = re.sub(r'(?m)^(예|아|자|어|응|네|에|그)[,.\s~]+', '', corrected)
+        corrected = re.sub(r'(?<=[.?!])\s*(예|아|자|어|응|네)[,~]\s*', ' ', corrected)
+        corrected = re.sub(r'\n{3,}', '\n\n', corrected)
 
     return corrected
 
@@ -706,8 +1384,10 @@ def print_terms_summary():
     """용어 통계 출력"""
     print("=== 다락방 교회 용어 로딩 완료 ===")
     print(f"다락방 핵심 용어: {len(DARAKBANG_CORE)}개")
-    print(f"전체 용어: {len(ALL_CHURCH_TERMS)}개")
-    print(f"교정 사전: {len(COMMON_MISTAKES)}개")
+    print(f"전체 교회 용어: {len(ALL_CHURCH_TERMS)}개")
+    print(f"교회 교정 사전: {len(COMMON_MISTAKES)}개")
+    print(f"의료 용어: {len(ALL_MEDICAL_TERMS)}개")
+    print(f"의료 교정 사전: {len(MEDICAL_CORRECTIONS)}개")
     print("\n【최우선 용어 샘플】")
     print(", ".join(DARAKBANG_CORE[:20]))
     print("\n【Gemini 프롬프트】")
