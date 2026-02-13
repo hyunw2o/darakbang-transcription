@@ -17,7 +17,6 @@
 - Python 3.8+
 - Node.js 16+
 - Gemini API 키
-- OpenAI API 키 (Whisper STT)
 - Supabase 프로젝트 (URL + API Key)
 
 ### 1. 백엔드 실행
@@ -71,7 +70,7 @@ npm run dev
 ### OpenAI
 1. https://platform.openai.com 접속
 2. API Keys → Create new secret key
-3. backend/.env 파일에 입력 (`OPENAI_API_KEY`)
+3. backend/.env 파일에 입력 (`OPENAI_API_KEY`, 선택 사항)
 
 ### Supabase
 1. https://supabase.com 접속
@@ -87,7 +86,6 @@ npm run dev
 4. 저장소 import (`render.yaml` 자동 인식)
 5. 환경변수 설정
    - GEMINI_API_KEY
-   - OPENAI_API_KEY
    - SUPABASE_URL
    - SUPABASE_KEY
 6. 배포 URL 복사

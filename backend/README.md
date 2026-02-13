@@ -41,7 +41,7 @@ uvicorn main:app --reload
 ### OpenAI API 키 (Whisper)
 1. https://platform.openai.com
 2. API Keys → Create new secret key
-3. `OPENAI_API_KEY`를 `.env`에 입력
+3. `OPENAI_API_KEY`를 `.env`에 입력 (선택 사항)
 
 ### Supabase
 1. https://supabase.com 에서 프로젝트 생성
@@ -59,7 +59,6 @@ uvicorn main:app --reload
 3. `render.yaml` 인식 후 `Apply` 실행
 4. 환경변수 설정
    - `GEMINI_API_KEY`
-   - `OPENAI_API_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
