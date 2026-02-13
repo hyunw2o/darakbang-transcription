@@ -97,6 +97,10 @@ npm run dev
 4. 환경변수 설정 (`NEXT_PUBLIC_API_URL` = Render 백엔드 URL)
 5. 배포 완료
 
+## 📘 출시 준비 문서
+
+- 다글로 대비 차별화/지재권/법적 리스크 점검: `docs/launch_strategy_vs_daglo.md`
+
 ## 📁 프로젝트 구조
 
 ```
