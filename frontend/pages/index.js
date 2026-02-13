@@ -239,6 +239,10 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!authToken) {
+      setError('파일 변환은 로그인 후 이용할 수 있습니다.')
+      return
+    }
     if (!file) {
       setError('파일을 선택해주세요.')
       return
@@ -260,6 +264,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
       const response = await fetch(`${API_URL}/api/transcribe`, {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData,
       })
 
@@ -547,7 +552,7 @@ export default function Home({ darkMode, setDarkMode }) {
               OURS
             </a>
             <span className="text-slate-300 dark:text-slate-700">/</span>
-            <Mallog24Logo className="h-5 w-auto rounded-md border border-slate-200" />
+            <Mallog24Logo className="h-[18px] w-auto shrink-0" />
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
@@ -751,7 +756,7 @@ export default function Home({ darkMode, setDarkMode }) {
             {/* 변환 버튼 */}
             <button
               type="submit"
-              disabled={loading || !file}
+              disabled={loading || !file || !authToken}
               className="w-full mt-5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 dark:disabled:bg-slate-700
                 text-white disabled:text-slate-400 dark:disabled:text-slate-500
                 py-3.5 rounded-xl font-semibold text-sm
@@ -760,7 +765,7 @@ export default function Home({ darkMode, setDarkMode }) {
                 disabled:shadow-none disabled:cursor-not-allowed
                 active:scale-[0.98]"
             >
-              {loading ? '변환 중...' : '변환하기'}
+              {loading ? '변환 중...' : authToken ? '변환하기' : '로그인 후 변환하기'}
             </button>
           </form>
 

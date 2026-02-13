@@ -1,13 +1,13 @@
 export default function Mallog24Logo({ className = '', title = 'mallog24' }) {
   return (
     <svg
-      className={className}
-      viewBox="0 0 1200 300"
+      className={`block ${className}`.trim()}
+      viewBox="72 40 840 220"
+      preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={title}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect width="1200" height="300" fill="#ffffff" />
       <text
         x="100"
         y="190"

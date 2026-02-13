@@ -560,9 +560,12 @@ async def transcribe_audio(
     language: str = Form("ko"),
     correct: bool = Form(True),
     transcription_type: str = Form("sermon"),
+    authorization: str | None = Header(default=None),
 ):
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
     try:
+        # 파일 변환은 로그인 사용자만 허용
+        _get_current_user(authorization)
         contents = await file.read()
         if len(contents) > 100 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="파일 크기는 100MB 이하")
@@ -599,6 +602,8 @@ async def transcribe_audio(
             "transcription_type": transcription_type,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"오류: {str(e)}")
 

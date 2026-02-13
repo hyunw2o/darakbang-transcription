@@ -79,6 +79,7 @@ uvicorn main:app --reload
 
 ## 신규 API (인증/기록본)
 
+- `POST /api/transcribe` : 음성 변환 시작 (인증 필요)
 - `POST /api/auth/signup` : 회원가입
 - `POST /api/auth/login` : 로그인
 - `GET /api/auth/me` : 현재 사용자 조회
