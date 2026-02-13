@@ -1,4 +1,4 @@
--- malloc24 saved records table
+-- mallog24 saved records table
 -- Run this in Supabase SQL Editor before using /api/records endpoints.
 
 create table if not exists public.saved_records (

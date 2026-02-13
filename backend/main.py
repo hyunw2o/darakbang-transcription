@@ -34,7 +34,7 @@ from church_terms import (
 
 load_dotenv()
 
-app = FastAPI(title="말록24 API")
+app = FastAPI(title="말로그24 API")
 
 app.add_middleware(
     CORSMiddleware,

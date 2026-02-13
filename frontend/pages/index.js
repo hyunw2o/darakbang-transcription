@@ -100,7 +100,7 @@ export default function Home({ darkMode, setDarkMode }) {
   const pollStartTime = useRef(null)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
-  const AUTH_TOKEN_KEY = 'malloc24_access_token'
+  const AUTH_TOKEN_KEY = 'mallog24_access_token'
 
   useEffect(() => {
     fetchHistory()
@@ -532,7 +532,7 @@ export default function Home({ darkMode, setDarkMode }) {
   return (
     <div className="min-h-screen pb-12">
       <Head>
-        <title>malloc24 - AI Speech to Text</title>
+        <title>mallog24 - AI Speech to Text</title>
       </Head>
 
       {/* 헤더 */}
@@ -547,7 +547,7 @@ export default function Home({ darkMode, setDarkMode }) {
             </a>
             <span className="text-slate-300 dark:text-slate-700">/</span>
             <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-              malloc24
+              mallog24
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -1085,7 +1085,7 @@ export default function Home({ darkMode, setDarkMode }) {
         {/* 푸터 */}
         <footer className="mt-12 text-center">
           <p className="text-[11px] text-slate-400 dark:text-slate-600">
-            malloc24 &middot; Copyright 2026. OURS All rights reserved.
+            mallog24 &middot; Copyright 2026. OURS All rights reserved.
           </p>
         </footer>
       </main>
