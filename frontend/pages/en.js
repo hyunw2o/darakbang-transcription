@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import Mallog24Logo from '../components/Mallog24Logo'
 
 function ThemeToggle({ darkMode, setDarkMode }) {
   return (
@@ -546,9 +547,7 @@ export default function Home({ darkMode, setDarkMode }) {
               OURS
             </a>
             <span className="text-slate-300 dark:text-slate-700">/</span>
-            <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-              mallog24
-            </h1>
+            <Mallog24Logo className="h-5 w-auto rounded-md border border-slate-200" />
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
