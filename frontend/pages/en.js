@@ -7,7 +7,7 @@ function ThemeToggle({ darkMode, setDarkMode }) {
     <button
       onClick={() => setDarkMode(!darkMode)}
       className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-      aria-label="다크 모드 전환"
+      aria-label="Toggle dark mode"
     >
       {darkMode ? (
         <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
@@ -24,9 +24,9 @@ function ThemeToggle({ darkMode, setDarkMode }) {
 
 function StepIndicator({ currentStep }) {
   const steps = [
-    { label: '업로드', num: 1 },
-    { label: '음성 인식', num: 2 },
-    { label: '교정', num: 3 },
+    { label: 'Upload', num: 1 },
+    { label: 'STT', num: 2 },
+    { label: 'Refine', num: 3 },
   ]
 
   return (
@@ -71,7 +71,7 @@ function StepIndicator({ currentStep }) {
 
 export default function Home({ darkMode, setDarkMode }) {
   const [file, setFile] = useState(null)
-  const [language, setLanguage] = useState('ko')
+  const [language, setLanguage] = useState('en')
   const [transcriptionType, setTranscriptionType] = useState('sermon')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
@@ -111,7 +111,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const validateAndSetFile = (selectedFile) => {
     if (selectedFile.size > 100 * 1024 * 1024) {
-      setError('파일 크기는 100MB 이하여야 합니다.')
+      setError('File size must be 100MB or less.')
       return
     }
     setFile(selectedFile)
@@ -166,7 +166,7 @@ export default function Home({ darkMode, setDarkMode }) {
           }, 800)
         } else if (data.status === 'error') {
           stopPolling()
-          setError(data.error || '변환 중 오류가 발생했습니다.')
+          setError(data.error || 'An error occurred during transcription.')
           setLoading(false)
           setCurrentStep(0)
         } else if (data.status === 'processing') {
@@ -181,7 +181,7 @@ export default function Home({ darkMode, setDarkMode }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!file) {
-      setError('파일을 선택해주세요.')
+      setError('Please select an audio file.')
       return
     }
 
@@ -204,7 +204,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.detail || '변환 실패')
+        throw new Error(errorData.detail || 'Transcription failed.')
       }
 
       const data = await response.json()
@@ -218,7 +218,7 @@ export default function Home({ darkMode, setDarkMode }) {
         setCurrentStep(0)
       }
     } catch (err) {
-      setError(err.message || '오류가 발생했습니다.')
+      setError(err.message || 'An error occurred.')
       setLoading(false)
       setCurrentStep(0)
     }
@@ -236,10 +236,10 @@ export default function Home({ darkMode, setDarkMode }) {
       if (data.status === 'completed') {
         setResult(data)
       } else {
-        setError('해당 기록을 불러올 수 없습니다.')
+        setError('Unable to load this record.')
       }
     } catch (e) {
-      setError('불러오기 실패')
+      setError('Failed to load record.')
     } finally {
       setLoading(false)
     }
@@ -258,7 +258,7 @@ export default function Home({ darkMode, setDarkMode }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `녹취록_${new Date().toISOString().slice(0, 10)}.txt`
+    a.download = `transcript_${new Date().toISOString().slice(0, 10)}.txt`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -288,7 +288,7 @@ export default function Home({ darkMode, setDarkMode }) {
     const docContent = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
       <head><meta charset="utf-8"><style>
-        body { font-family: '맑은 고딕', sans-serif; font-size: 11pt; line-height: 1.8; }
+        body { font-family: 'Segoe UI', sans-serif; font-size: 11pt; line-height: 1.8; }
         h2 { font-size: 14pt; color: #1a365d; border-bottom: 1px solid #3182ce; padding-bottom: 4px; margin-top: 20px; }
         p { margin: 6px 0; }
       </style></head>
@@ -297,7 +297,7 @@ export default function Home({ darkMode, setDarkMode }) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `녹취록_${new Date().toISOString().slice(0, 10)}.doc`
+    a.download = `transcript_${new Date().toISOString().slice(0, 10)}.doc`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -317,13 +317,13 @@ export default function Home({ darkMode, setDarkMode }) {
       const data = await response.json()
       setResult({ ...result, summary: data.summary })
     } catch (err) {
-      setError('요약 실패')
+      setError('Summary generation failed.')
     } finally {
       setLoading(false)
     }
   }
 
-  const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
+  const typeLabels = { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치',
     'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
 
@@ -352,13 +352,13 @@ export default function Home({ darkMode, setDarkMode }) {
             <nav className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
               <Link
                 href="/"
-                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
               >
                 KR
               </Link>
               <Link
                 href="/en"
-                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
               >
                 EN
               </Link>
@@ -407,7 +407,7 @@ export default function Home({ darkMode, setDarkMode }) {
                     onClick={(e) => { e.stopPropagation(); setFile(null) }}
                     className="text-xs text-red-500 hover:text-red-600 font-medium mt-1"
                   >
-                    파일 변경
+                    Change File
                   </button>
                 </div>
               ) : (
@@ -418,9 +418,9 @@ export default function Home({ darkMode, setDarkMode }) {
                     </svg>
                   </div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    파일을 끌어다 놓거나 <span className="text-blue-500 font-medium">클릭</span>하여 선택
+                    Drag & drop your file, or <span className="text-blue-500 font-medium">click</span> to browse
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">MP3, WAV, M4A, OGG, FLAC (up to 100MB)</p>
                 </div>
               )}
             </div>
@@ -428,7 +428,7 @@ export default function Home({ darkMode, setDarkMode }) {
             {/* 설정 */}
             <div className="mt-4 flex gap-3">
               <div className="flex-1 relative">
-                <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">언어</label>
+                <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">Language</label>
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
@@ -436,12 +436,12 @@ export default function Home({ darkMode, setDarkMode }) {
                     focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition-all
                     text-slate-700 dark:text-slate-200"
                 >
-                  <option value="ko">한국어</option>
+                  <option value="ko">Korean</option>
                   <option value="en">English</option>
                 </select>
               </div>
               <div className="flex-1 relative">
-                <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">유형</label>
+                <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">Type</label>
                 <select
                   value={transcriptionType}
                   onChange={(e) => setTranscriptionType(e.target.value)}
@@ -449,9 +449,9 @@ export default function Home({ darkMode, setDarkMode }) {
                     focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition-all
                     text-slate-700 dark:text-slate-200"
                 >
-                  <option value="sermon">설교 녹취</option>
-                  <option value="phonecall">통화 기록</option>
-                  <option value="conversation">대화/회의 기록</option>
+                  <option value="sermon">Sermon Transcript</option>
+                  <option value="phonecall">Call Record</option>
+                  <option value="conversation">Meeting/Conversation Record</option>
                 </select>
               </div>
             </div>
@@ -468,7 +468,7 @@ export default function Home({ darkMode, setDarkMode }) {
                 disabled:shadow-none disabled:cursor-not-allowed
                 active:scale-[0.98]"
             >
-              {loading ? '변환 중...' : '변환하기'}
+              {loading ? 'Transcribing...' : 'Start Transcription'}
             </button>
           </form>
 
@@ -491,9 +491,9 @@ export default function Home({ darkMode, setDarkMode }) {
               />
             </div>
             <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-3">
-              {currentStep === 1 && '파일을 업로드하고 있습니다...'}
-              {currentStep === 2 && 'AI가 음성을 인식하고 있습니다...'}
-              {currentStep === 3 && '텍스트를 교정하고 구조화하고 있습니다...'}
+              {currentStep === 1 && 'Uploading file...'}
+              {currentStep === 2 && 'AI is recognizing speech...'}
+              {currentStep === 3 && 'Refining and structuring text...'}
             </p>
           </div>
         )}
@@ -506,7 +506,7 @@ export default function Home({ darkMode, setDarkMode }) {
             <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">변환 결과</h2>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Transcription Result</h2>
                   {result.transcription_type && result.transcription_type !== 'sermon' && (
                     <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-[11px] font-medium">
                       {typeLabels[result.transcription_type] || result.transcription_type}
@@ -514,7 +514,7 @@ export default function Home({ darkMode, setDarkMode }) {
                   )}
                 </div>
                 <span className="px-2.5 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-[11px] font-medium">
-                  {result.characters?.toLocaleString()} 자
+                  {result.characters?.toLocaleString()} chars
                 </span>
               </div>
 
@@ -558,7 +558,7 @@ export default function Home({ darkMode, setDarkMode }) {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
-                  {copied === 'text' ? '복사됨' : '복사'}
+                  {copied === 'text' ? 'Copied' : 'Copy'}
                 </button>
                 <button onClick={exportAsTxt} className="action-btn">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -586,17 +586,17 @@ export default function Home({ darkMode, setDarkMode }) {
                     hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? '요약 생성 중...' : '주보용 요약 생성'}
+                  {loading ? 'Generating summary...' : 'Generate Bulletin Summary'}
                 </button>
               ) : (
                 <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">주보용 요약</h3>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Bulletin Summary</h3>
                     <button
                       onClick={() => copyToClipboard(result.summary, 'summary')}
                       className="text-xs text-blue-500 hover:text-blue-600 font-medium"
                     >
-                      {copied === 'summary' ? '복사됨' : '복사'}
+                      {copied === 'summary' ? 'Copied' : 'Copy'}
                     </button>
                   </div>
                   <div className="bg-blue-50/80 dark:bg-blue-900/15 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
@@ -612,7 +612,7 @@ export default function Home({ darkMode, setDarkMode }) {
             {result.corrected_text && (
               <details className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden">
                 <summary className="p-4 cursor-pointer text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-medium select-none transition-colors">
-                  원본 텍스트 보기
+                  View Raw Text
                 </summary>
                 <div className="px-5 pb-5">
                   <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
@@ -636,7 +636,7 @@ export default function Home({ darkMode, setDarkMode }) {
               <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showHistory ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-              최근 변환 기록 ({history.length})
+              Recent Transcriptions ({history.length})
             </button>
 
             {showHistory && (
@@ -656,21 +656,21 @@ export default function Home({ darkMode, setDarkMode }) {
                                 item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
                               }`} />
                               <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                                {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                {new Date(item.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </span>
                               {item.transcription_type && item.transcription_type !== 'sermon' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
-                                  {item.transcription_type === 'phonecall' ? '통화' : '회의'}
+                                  {item.transcription_type === 'phonecall' ? 'Call' : 'Meeting'}
                                 </span>
                               )}
                               {item.characters > 0 && (
                                 <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                                  {item.characters?.toLocaleString()}자
+                                  {item.characters?.toLocaleString()} chars
                                 </span>
                               )}
                             </div>
                             <p className="text-sm text-slate-600 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                              {item.summary_preview || "내용 없음"}
+                              {item.summary_preview || "No content"}
                             </p>
                           </div>
                           <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-blue-400 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
