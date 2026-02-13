@@ -9,6 +9,8 @@
 - **약어 인식**: TCK, CCK, NCK
 - **성경 구절 자동 정리**: "요한복음 3장 16절" 형식
 - **주보용 요약 자동 생성**
+- **로그인/회원가입**: Supabase Auth 기반 계정 기능
+- **별도 기록본 저장**: 회의 키워드/진료 도움 기록/설교 핵심 요약 분리 저장
 
 ## 🚀 빠른 시작
 
@@ -76,6 +78,7 @@ npm run dev
 1. https://supabase.com 접속
 2. 프로젝트 생성 후 URL / API Key 확인
 3. backend/.env 파일에 입력 (`SUPABASE_URL`, `SUPABASE_KEY`)
+4. Supabase SQL Editor에서 `backend/sql/saved_records.sql` 실행 (기록본 저장 테이블 생성)
 
 ## 🌐 배포
 

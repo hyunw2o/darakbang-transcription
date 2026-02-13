@@ -49,6 +49,7 @@ uvicorn main:app --reload
 3. `.env`에 아래 값 입력
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
+4. Supabase SQL Editor에서 `backend/sql/saved_records.sql` 실행 (저장 기록 테이블 생성)
 
 ## 배포 (Render)
 
@@ -75,3 +76,12 @@ uvicorn main:app --reload
 
 - 용어 추가: church_terms.py의 DARAKBANG_CORE 수정
 - 교정 규칙: church_terms.py의 COMMON_MISTAKES 수정
+
+## 신규 API (인증/기록본)
+
+- `POST /api/auth/signup` : 회원가입
+- `POST /api/auth/login` : 로그인
+- `GET /api/auth/me` : 현재 사용자 조회
+- `POST /api/records/draft` : 기록본 초안 생성
+- `POST /api/records` : 기록본 저장 (인증 필요)
+- `GET /api/records` : 내 기록본 목록 조회 (인증 필요)

@@ -76,22 +76,47 @@ export default function Home({ darkMode, setDarkMode }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
   const [history, setHistory] = useState([])
   const [currentStep, setCurrentStep] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showRecords, setShowRecords] = useState(false)
   const [copied, setCopied] = useState(null)
+  const [authMode, setAuthMode] = useState('login')
+  const [authName, setAuthName] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authToken, setAuthToken] = useState('')
+  const [authUser, setAuthUser] = useState(null)
+  const [savedRecords, setSavedRecords] = useState([])
+  const [recordDrafts, setRecordDrafts] = useState({})
+  const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
+  const [savingCategory, setSavingCategory] = useState('')
 
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
   const pollStartTime = useRef(null)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
+  const AUTH_TOKEN_KEY = 'malloc24_access_token'
 
   useEffect(() => {
     fetchHistory()
+    const savedToken = window.localStorage.getItem(AUTH_TOKEN_KEY)
+    if (savedToken) {
+      setAuthToken(savedToken)
+      fetchCurrentUser(savedToken)
+      fetchSavedRecords(savedToken)
+    }
     return () => stopPolling()
   }, [])
+
+  const getAuthHeaders = (token = authToken) => {
+    if (!token) return {}
+    return { Authorization: `Bearer ${token}` }
+  }
 
   const fetchHistory = async () => {
     try {
@@ -99,6 +124,37 @@ export default function Home({ darkMode, setDarkMode }) {
       if (res.ok) setHistory(await res.json())
     } catch (e) {
       console.error("Failed to fetch history", e)
+    }
+  }
+
+  const fetchCurrentUser = async (token = authToken) => {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        headers: getAuthHeaders(token),
+      })
+      if (!res.ok) throw new Error('사용자 인증이 만료되었습니다.')
+      const data = await res.json()
+      setAuthUser(data.user || null)
+    } catch (e) {
+      setAuthToken('')
+      setAuthUser(null)
+      window.localStorage.removeItem(AUTH_TOKEN_KEY)
+      console.error('Failed to fetch current user', e)
+    }
+  }
+
+  const fetchSavedRecords = async (token = authToken) => {
+    if (!token) return
+    try {
+      const res = await fetch(`${API_URL}/api/records`, {
+        headers: getAuthHeaders(token),
+      })
+      if (!res.ok) throw new Error('저장 기록을 불러오지 못했습니다.')
+      const data = await res.json()
+      setSavedRecords(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error("Failed to fetch saved records", e)
     }
   }
 
@@ -116,7 +172,9 @@ export default function Home({ darkMode, setDarkMode }) {
     }
     setFile(selectedFile)
     setError(null)
+    setNotice(null)
     setResult(null)
+    setRecordDrafts({})
   }
 
   const handleFileChange = (e) => {
@@ -187,7 +245,9 @@ export default function Home({ darkMode, setDarkMode }) {
 
     setLoading(true)
     setError(null)
+    setNotice(null)
     setResult(null)
+    setRecordDrafts({})
     setCurrentStep(1)
 
     try {
@@ -227,7 +287,9 @@ export default function Home({ darkMode, setDarkMode }) {
   const handleLoadHistory = async (taskId) => {
     setLoading(true)
     setError(null)
+    setNotice(null)
     setResult(null)
+    setRecordDrafts({})
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
     try {
@@ -249,6 +311,57 @@ export default function Home({ darkMode, setDarkMode }) {
     navigator.clipboard.writeText(text)
     setCopied(label)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault()
+    setError(null)
+    setNotice(null)
+    setAuthLoading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('email', authEmail.trim())
+      formData.append('password', authPassword)
+      if (authMode === 'signup') {
+        formData.append('full_name', authName.trim())
+      }
+
+      const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login'
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.detail || '인증 처리에 실패했습니다.')
+      }
+
+      if (data.access_token) {
+        setAuthToken(data.access_token)
+        window.localStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
+        setAuthUser(data.user || null)
+        fetchSavedRecords(data.access_token)
+        setNotice(authMode === 'signup' ? '회원가입 및 로그인이 완료되었습니다.' : '로그인되었습니다.')
+      } else {
+        setNotice(data.message || '회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.')
+      }
+
+      setAuthPassword('')
+      if (authMode === 'signup') setAuthMode('login')
+    } catch (err) {
+      setError(err.message || '인증 오류가 발생했습니다.')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    setAuthToken('')
+    setAuthUser(null)
+    setSavedRecords([])
+    window.localStorage.removeItem(AUTH_TOKEN_KEY)
+    setNotice('로그아웃되었습니다.')
   }
 
   const exportAsTxt = () => {
@@ -305,6 +418,8 @@ export default function Home({ darkMode, setDarkMode }) {
   const handleSummarize = async () => {
     if (!result?.corrected_text && !result?.raw_text) return
     setLoading(true)
+    setError(null)
+    setNotice(null)
     try {
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
@@ -323,7 +438,94 @@ export default function Home({ darkMode, setDarkMode }) {
     }
   }
 
+  const handleGenerateRecordDraft = async (category) => {
+    if (!result?.corrected_text && !result?.raw_text) return
+    setError(null)
+    setNotice(null)
+    setDraftLoadingCategory(category)
+    try {
+      const formData = new FormData()
+      formData.append('text', result.corrected_text || result.raw_text)
+      formData.append('category', category)
+      formData.append('language', language)
+
+      const response = await fetch(`${API_URL}/api/records/draft`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.detail || '기록본 초안 생성에 실패했습니다.')
+      }
+
+      setRecordDrafts((prev) => ({ ...prev, [category]: data.content || '' }))
+      setNotice(`${data.category_label || '기록본'} 초안을 생성했습니다.`)
+    } catch (err) {
+      setError(err.message || '기록본 초안 생성 실패')
+    } finally {
+      setDraftLoadingCategory('')
+    }
+  }
+
+  const handleRecordDraftChange = (category, value) => {
+    setRecordDrafts((prev) => ({ ...prev, [category]: value }))
+  }
+
+  const handleSaveRecord = async (category) => {
+    if (!authToken) {
+      setError('기록본 저장은 로그인 후 이용할 수 있습니다.')
+      return
+    }
+
+    const content = (recordDrafts[category] || '').trim()
+    if (!content) {
+      setError('저장할 기록본 내용이 없습니다.')
+      return
+    }
+
+    setError(null)
+    setNotice(null)
+    setSavingCategory(category)
+
+    try {
+      const formData = new FormData()
+      formData.append('category', category)
+      formData.append('title', recordTypeLabels[category] || category)
+      formData.append('content', content)
+      formData.append('task_id', result?.task_id || '')
+      formData.append('source_type', result?.transcription_type || '')
+
+      const response = await fetch(`${API_URL}/api/records`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.detail || '기록본 저장 실패')
+      }
+
+      setNotice('기록본이 별도 저장되었습니다.')
+      fetchSavedRecords()
+      setShowRecords(true)
+    } catch (err) {
+      setError(err.message || '기록본 저장 실패')
+    } finally {
+      setSavingCategory('')
+    }
+  }
+
   const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
+  const recordTypeLabels = {
+    meeting_keywords: '회의 중요 키워드',
+    clinical_notes: '진료 도움 기록',
+    sermon_core_summary: '설교 핵심 요약',
+  }
+  const recordCategories = [
+    { key: 'meeting_keywords', label: '회의 중요 키워드' },
+    { key: 'clinical_notes', label: '진료 도움 기록' },
+    { key: 'sermon_core_summary', label: '설교 핵심 요약' },
+  ]
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치',
     'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
 
@@ -369,6 +571,97 @@ export default function Home({ darkMode, setDarkMode }) {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pt-6">
+
+        {/* 인증 카드 */}
+        <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
+          {!authToken ? (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">회원 인증</h2>
+                <div className="flex rounded-lg bg-slate-100 dark:bg-slate-700 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('login')}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                      authMode === 'login'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
+                        : 'text-slate-500 dark:text-slate-300'
+                    }`}
+                  >
+                    로그인
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('signup')}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                      authMode === 'signup'
+                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
+                        : 'text-slate-500 dark:text-slate-300'
+                    }`}
+                  >
+                    회원가입
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleAuthSubmit} className="space-y-3">
+                {authMode === 'signup' && (
+                  <input
+                    type="text"
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    placeholder="이름"
+                    className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none"
+                  />
+                )}
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="이메일"
+                  required
+                  className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none"
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="비밀번호 (8자 이상)"
+                  required
+                  minLength={8}
+                  className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-2.5 text-sm font-semibold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {authLoading
+                    ? '처리 중...'
+                    : authMode === 'signup'
+                    ? '회원가입하기'
+                    : '로그인하기'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-xs text-slate-400 dark:text-slate-500">로그인 사용자</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {authUser?.email || '인증된 사용자'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+              >
+                로그아웃
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* 업로드 카드 */}
         <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
@@ -476,6 +769,11 @@ export default function Home({ darkMode, setDarkMode }) {
           {error && (
             <div className="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200/80 dark:border-red-800/50 rounded-xl animate-slide-up">
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
+          {notice && (
+            <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/80 dark:border-blue-800/50 rounded-xl animate-slide-up">
+              <p className="text-sm text-blue-600 dark:text-blue-300">{notice}</p>
             </div>
           )}
         </div>
@@ -608,6 +906,61 @@ export default function Home({ darkMode, setDarkMode }) {
               )
             )}
 
+            {/* 기록본 생성/저장 */}
+            <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">별도 기록본</h3>
+                <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                  회의/진료/설교 포맷
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                결과 텍스트를 기반으로 전용 기록본 초안을 생성한 뒤, 로그인 사용자 계정으로 별도 저장할 수 있습니다.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                {recordCategories.map((recordCategory) => (
+                  <button
+                    key={recordCategory.key}
+                    type="button"
+                    onClick={() => handleGenerateRecordDraft(recordCategory.key)}
+                    disabled={draftLoadingCategory === recordCategory.key}
+                    className="action-btn"
+                  >
+                    {draftLoadingCategory === recordCategory.key ? '생성 중...' : recordCategory.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {recordCategories.map((recordCategory) => (
+                  recordDrafts[recordCategory.key] ? (
+                    <div key={recordCategory.key} className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          {recordCategory.label}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveRecord(recordCategory.key)}
+                          disabled={savingCategory === recordCategory.key}
+                          className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold disabled:opacity-50"
+                        >
+                          {savingCategory === recordCategory.key ? '저장 중...' : '저장'}
+                        </button>
+                      </div>
+                      <textarea
+                        value={recordDrafts[recordCategory.key]}
+                        onChange={(e) => handleRecordDraftChange(recordCategory.key, e.target.value)}
+                        rows={6}
+                        className="w-full px-3 py-2 text-xs leading-relaxed bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500/30"
+                      />
+                    </div>
+                  ) : null
+                ))}
+              </div>
+            </div>
+
             {/* 원본 텍스트 */}
             {result.corrected_text && (
               <details className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden">
@@ -681,6 +1034,49 @@ export default function Home({ darkMode, setDarkMode }) {
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 저장된 기록본 */}
+        {authToken && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowRecords(!showRecords)}
+              className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showRecords ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              내 저장 기록본 ({savedRecords.length})
+            </button>
+
+            {showRecords && (
+              <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
+                {savedRecords.length === 0 ? (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 p-4">아직 저장된 기록본이 없습니다.</p>
+                ) : (
+                  <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
+                    {savedRecords.map((item) => (
+                      <li key={item.id} className="p-4">
+                        <div className="flex items-center justify-between gap-3 mb-1.5">
+                          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            {recordTypeLabels[item.category] || item.title || item.category}
+                          </p>
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {item.created_at
+                              ? new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
+                          {item.content}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </div>

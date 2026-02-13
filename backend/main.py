@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
 from openai import OpenAI
@@ -14,6 +14,8 @@ import tempfile
 import pathlib
 import time
 import math
+import urllib.request
+import urllib.error
 
 # 다락방 용어 임포트
 from church_terms import (
@@ -97,6 +99,141 @@ task_status = {}
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
 MODEL_CACHE_TTL = 3600
+AUTH_TIMEOUT = 20
+ALLOWED_RECORD_CATEGORIES = {
+    "meeting_keywords",
+    "clinical_notes",
+    "sermon_core_summary",
+}
+
+
+def _extract_auth_error_message(raw_text: str) -> str:
+    try:
+        payload = json.loads(raw_text)
+        return (
+            payload.get("msg")
+            or payload.get("error_description")
+            or payload.get("error")
+            or payload.get("message")
+            or raw_text
+        )
+    except Exception:
+        return raw_text or "인증 서버 오류"
+
+
+def _supabase_auth_request(path: str, method: str = "POST", payload: dict | None = None, token: str | None = None) -> dict:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise HTTPException(status_code=500, detail="Supabase 인증 환경이 설정되지 않았습니다.")
+
+    base_url = SUPABASE_URL.rstrip("/")
+    target_path = path.lstrip("/")
+    url = f"{base_url}/auth/v1/{target_path}"
+
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(url, headers=headers, data=body, method=method)
+
+    try:
+        with urllib.request.urlopen(request, timeout=AUTH_TIMEOUT) as response:
+            raw = response.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as e:
+        error_raw = e.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=e.code, detail=_extract_auth_error_message(error_raw))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Supabase 인증 요청 실패: {str(e)}")
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="인증 토큰이 필요합니다.")
+
+    parts = authorization.strip().split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1]:
+        raise HTTPException(status_code=401, detail="Authorization 헤더 형식이 올바르지 않습니다.")
+    return parts[1].strip()
+
+
+def _get_current_user(authorization: str | None) -> dict:
+    token = _extract_bearer_token(authorization)
+    user = _supabase_auth_request("user", method="GET", token=token)
+    if not user.get("id"):
+        raise HTTPException(status_code=401, detail="유효하지 않은 사용자 토큰입니다.")
+    return user
+
+
+def _get_record_category_label(category: str, language: str = "ko") -> str:
+    labels = {
+        "meeting_keywords": {"ko": "회의 중요 키워드", "en": "Meeting Keywords"},
+        "clinical_notes": {"ko": "진료 도움 기록", "en": "Clinical Notes"},
+        "sermon_core_summary": {"ko": "설교 핵심 요약", "en": "Sermon Core Summary"},
+    }
+    return labels.get(category, {}).get(language, category)
+
+
+def _build_record_draft_prompt(category: str, language: str = "ko") -> str:
+    if language == "en":
+        prompt_map = {
+            "meeting_keywords": (
+                "Extract high-impact meeting keywords and action points.\n"
+                "Format:\n"
+                "1) Top Keywords (5-10)\n"
+                "2) Key Decisions\n"
+                "3) Next Actions (owner and due if available)\n"
+                "Keep it concise and practical."
+            ),
+            "clinical_notes": (
+                "Summarize clinically helpful notes from the transcript.\n"
+                "Format:\n"
+                "1) Main Symptoms/Concerns\n"
+                "2) Medication/Test/Follow-up Mentions\n"
+                "3) Risk Flags or Clarifications Needed\n"
+                "Do not give diagnosis. Keep neutral and factual."
+            ),
+            "sermon_core_summary": (
+                "Create a core sermon summary for ministry records.\n"
+                "Format:\n"
+                "1) Core Message (1-2 lines)\n"
+                "2) Key Scriptures or Themes\n"
+                "3) Practical Application\n"
+                "4) Prayer Focus"
+            ),
+        }
+    else:
+        prompt_map = {
+            "meeting_keywords": (
+                "회의 내용에서 실무적으로 중요한 키워드와 액션 아이템을 추출하세요.\n"
+                "형식:\n"
+                "1) 핵심 키워드(5~10개)\n"
+                "2) 주요 결정 사항\n"
+                "3) 후속 조치(담당자/기한이 있으면 포함)\n"
+                "간결하고 실행 중심으로 작성하세요."
+            ),
+            "clinical_notes": (
+                "대화에서 진료에 도움이 될 핵심 기록을 정리하세요.\n"
+                "형식:\n"
+                "1) 주요 증상/호소 내용\n"
+                "2) 약물·검사·추적 관찰 관련 언급\n"
+                "3) 확인이 필요한 위험 신호/추가 질문\n"
+                "진단을 단정하지 말고 사실 중심으로 정리하세요."
+            ),
+            "sermon_core_summary": (
+                "설교 핵심 요약을 목회 기록용으로 정리하세요.\n"
+                "형식:\n"
+                "1) 핵심 메시지(1~2문장)\n"
+                "2) 주요 본문/주제\n"
+                "3) 삶의 적용\n"
+                "4) 기도제목"
+            ),
+        }
+
+    return prompt_map.get(category, prompt_map["meeting_keywords"])
 
 def get_optimal_model():
     """Gemini 모델 동적 선택"""
@@ -535,6 +672,180 @@ async def get_history():
         })
 
     return history
+
+
+@app.post("/api/auth/signup")
+async def signup(
+    email: str = Form(...),
+    password: str = Form(...),
+    full_name: str = Form(""),
+):
+    """Supabase Auth 회원가입"""
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
+
+    payload = {
+        "email": email.strip().lower(),
+        "password": password,
+    }
+    if full_name.strip():
+        payload["data"] = {"full_name": full_name.strip()}
+
+    data = _supabase_auth_request("signup", payload=payload)
+    session = data.get("session") or {}
+    access_token = data.get("access_token") or session.get("access_token")
+    refresh_token = data.get("refresh_token") or session.get("refresh_token")
+
+    return {
+        "success": True,
+        "message": "회원가입이 완료되었습니다. 이메일 인증 설정 여부에 따라 추가 인증이 필요할 수 있습니다.",
+        "user": data.get("user"),
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
+
+
+@app.post("/api/auth/login")
+async def login(
+    email: str = Form(...),
+    password: str = Form(...),
+):
+    """Supabase Auth 로그인"""
+    data = _supabase_auth_request(
+        "token?grant_type=password",
+        payload={"email": email.strip().lower(), "password": password},
+    )
+    return {
+        "success": True,
+        "user": data.get("user"),
+        "access_token": data.get("access_token"),
+        "refresh_token": data.get("refresh_token"),
+        "expires_in": data.get("expires_in"),
+        "token_type": data.get("token_type", "bearer"),
+    }
+
+
+@app.get("/api/auth/me")
+async def me(authorization: str | None = Header(default=None)):
+    """현재 로그인 사용자 조회"""
+    user = _get_current_user(authorization)
+    return {
+        "success": True,
+        "user": user,
+    }
+
+
+@app.post("/api/records/draft")
+async def generate_record_draft(
+    text: str = Form(...),
+    category: str = Form(...),
+    language: str = Form("ko"),
+):
+    """기록본 초안 생성 (회의 키워드/진료 도움 기록/설교 핵심 요약)"""
+    normalized_category = category.strip()
+    if normalized_category not in ALLOWED_RECORD_CATEGORIES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="원문 텍스트가 비어 있습니다.")
+
+    prompt = _build_record_draft_prompt(normalized_category, language)
+    target_model = get_optimal_model()
+    model = genai.GenerativeModel(model_name=target_model)
+
+    full_prompt = f"""{prompt}
+
+[원문]
+{text}
+"""
+
+    response = None
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(
+                full_prompt,
+                request_options={"timeout": 120}
+            )
+            break
+        except Exception as e:
+            if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
+                wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                print(f"[records-draft] Quota exceeded (429). Retrying in {wait_time:.1f}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                raise HTTPException(status_code=500, detail=f"기록본 초안 생성 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "category": normalized_category,
+        "category_label": _get_record_category_label(normalized_category, language),
+        "title": _get_record_category_label(normalized_category, language),
+        "content": response.text if response else "",
+    }
+
+
+@app.post("/api/records")
+async def save_record(
+    category: str = Form(...),
+    content: str = Form(...),
+    title: str = Form(""),
+    task_id: str = Form(""),
+    source_type: str = Form(""),
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 기록본 저장"""
+    user = _get_current_user(authorization)
+    normalized_category = category.strip()
+    normalized_content = content.strip()
+
+    if normalized_category not in ALLOWED_RECORD_CATEGORIES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
+    if not normalized_content:
+        raise HTTPException(status_code=400, detail="저장할 기록 내용이 비어 있습니다.")
+
+    insert_row = {
+        "user_id": user["id"],
+        "category": normalized_category,
+        "title": (title.strip() or _get_record_category_label(normalized_category, "ko")),
+        "content": normalized_content,
+        "task_id": task_id.strip() or None,
+        "source_type": source_type.strip() or None,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    try:
+        response = supabase.table("saved_records").insert(insert_row).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"saved_records 저장 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "record": response.data[0] if response.data else insert_row,
+    }
+
+
+@app.get("/api/records")
+async def get_records(
+    category: str = "",
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 저장 기록 조회"""
+    user = _get_current_user(authorization)
+
+    try:
+        query = (
+            supabase.table("saved_records")
+            .select("*")
+            .eq("user_id", user["id"])
+            .order("created_at", desc=True)
+        )
+        if category:
+            query = query.eq("category", category)
+        response = query.execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"saved_records 조회 실패: {str(e)}")
+
+    return response.data or []
 
 
 @app.post("/api/summarize")
