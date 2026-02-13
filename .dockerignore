@@ -1,0 +1,11 @@
+.git
+.gitignore
+.DS_Store
+.vscode
+.idea
+debug_venv
+frontend
+backend/.env
+backend/transcripts
+backend/__pycache__
+backend/*.pyc

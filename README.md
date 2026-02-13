@@ -16,8 +16,9 @@
 
 - Python 3.8+
 - Node.js 16+
-- OpenAI API 키 ($18 무료 크레딧)
-- Anthropic API 키 ($5 무료 크레딧)
+- Gemini API 키
+- OpenAI API 키 (Whisper STT)
+- Supabase 프로젝트 (URL + API Key)
 
 ### 1. 백엔드 실행
 
@@ -62,30 +63,40 @@ npm run dev
 
 ## 📋 API 키 발급
 
-### OpenAI ($18 무료)
+### Gemini
+1. https://aistudio.google.com/app/apikey 접속
+2. API Key 발급
+3. backend/.env 파일에 입력 (`GEMINI_API_KEY`)
+
+### OpenAI
 1. https://platform.openai.com 접속
 2. API Keys → Create new secret key
-3. backend/.env 파일에 입력
+3. backend/.env 파일에 입력 (`OPENAI_API_KEY`)
 
-### Anthropic ($5 무료)
-1. https://console.anthropic.com 접속
-2. API Keys → Create Key
-3. backend/.env 파일에 입력
+### Supabase
+1. https://supabase.com 접속
+2. 프로젝트 생성 후 URL / API Key 확인
+3. backend/.env 파일에 입력 (`SUPABASE_URL`, `SUPABASE_KEY`)
 
 ## 🌐 배포
 
-### 백엔드 (Railway - 무료)
-1. railway.app 가입
+### 백엔드 (Render)
+1. render.com 가입
 2. GitHub 연결
-3. backend 폴더 배포
-4. 환경변수 설정
-5. 배포 URL 복사
+3. New + → Blueprint
+4. 저장소 import (`render.yaml` 자동 인식)
+5. 환경변수 설정
+   - GEMINI_API_KEY
+   - OPENAI_API_KEY
+   - SUPABASE_URL
+   - SUPABASE_KEY
+6. 배포 URL 복사
 
 ### 프론트엔드 (Vercel - 무료)
 1. vercel.com 가입
 2. GitHub 연결
 3. frontend 폴더 배포
-4. 환경변수 설정 (NEXT_PUBLIC_API_URL)
+4. 환경변수 설정 (`NEXT_PUBLIC_API_URL` = Render 백엔드 URL)
 5. 배포 완료
 
 ## 📁 프로젝트 구조

@@ -32,27 +32,38 @@ uvicorn main:app --reload
 - http://localhost:8000/docs - Swagger UI
 - http://localhost:8000/api/terms - 다락방 용어 확인
 
-## API 키 발급
+## API 키 / DB
 
-### OpenAI ($18 무료)
+### Gemini API 키
+1. https://aistudio.google.com/app/apikey
+2. `GEMINI_API_KEY` 발급 후 `.env`에 입력
+
+### OpenAI API 키 (Whisper)
 1. https://platform.openai.com
 2. API Keys → Create new secret key
-3. .env 파일에 입력
+3. `OPENAI_API_KEY`를 `.env`에 입력
 
-### Anthropic ($5 무료)
-1. https://console.anthropic.com
-2. API Keys → Create Key
-3. .env 파일에 입력
+### Supabase
+1. https://supabase.com 에서 프로젝트 생성
+2. Project URL / API Key 확인
+3. `.env`에 아래 값 입력
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY`
 
-## 배포 (Railway)
+## 배포 (Render)
 
-1. railway.app 가입
-2. GitHub 연결
-3. 프로젝트 import
-4. 환경변수 설정 (Railway 대시보드)
-   - OPENAI_API_KEY
-   - ANTHROPIC_API_KEY
-5. 자동 배포 완료!
+이 저장소 루트에 `render.yaml`과 `backend/Dockerfile`이 준비되어 있습니다.
+
+1. Render 대시보드에서 `New +` → `Blueprint` 선택
+2. GitHub 저장소 `darakbang-transcription` 연결
+3. `render.yaml` 인식 후 `Apply` 실행
+4. 환경변수 설정
+   - `GEMINI_API_KEY`
+   - `OPENAI_API_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY`
+5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
+6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
 
 ## 다락방 용어 특화
 
