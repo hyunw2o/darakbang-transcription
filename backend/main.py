@@ -14,8 +14,10 @@ import tempfile
 import pathlib
 import time
 import math
+import mimetypes
 import urllib.request
 import urllib.error
+import urllib.parse
 
 # 다락방 용어 임포트
 from church_terms import (
@@ -105,6 +107,16 @@ ALLOWED_RECORD_CATEGORIES = {
     "clinical_notes",
     "sermon_core_summary",
 }
+ALLOWED_OAUTH_PROVIDERS = {"google", "kakao", "naver"}
+AUDIO_MIME_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    ".webm": "audio/webm",
+    ".mp4": "audio/mp4",
+}
 
 
 def _extract_auth_error_message(raw_text: str) -> str:
@@ -166,6 +178,27 @@ def _get_current_user(authorization: str | None) -> dict:
     if not user.get("id"):
         raise HTTPException(status_code=401, detail="유효하지 않은 사용자 토큰입니다.")
     return user
+
+
+def _validate_redirect_url(redirect_to: str) -> str:
+    normalized = (redirect_to or "").strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="redirect_to 값이 필요합니다.")
+
+    parsed = urllib.parse.urlparse(normalized)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="redirect_to URL 형식이 올바르지 않습니다.")
+    return normalized
+
+
+def _resolve_audio_mime_type(file_path: str) -> str:
+    extension = pathlib.Path(file_path).suffix.lower()
+    mapped = AUDIO_MIME_TYPES.get(extension)
+    if mapped:
+        return mapped
+
+    guessed, _ = mimetypes.guess_type(file_path)
+    return guessed or "audio/mpeg"
 
 
 def _get_record_category_label(category: str, language: str = "ko") -> str:
@@ -469,7 +502,8 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             # ===== 폴백: Gemini 단일 방식 (기존) =====
             print(f"[{task_id}] Fallback: Gemini-only mode")
 
-            audio_file = genai.upload_file(temp_file_path)
+            mime_type = _resolve_audio_mime_type(temp_file_path)
+            audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
             target_model = get_optimal_model()
             model = genai.GenerativeModel(
                 target_model,
@@ -727,6 +761,31 @@ async def login(
         "refresh_token": data.get("refresh_token"),
         "expires_in": data.get("expires_in"),
         "token_type": data.get("token_type", "bearer"),
+    }
+
+
+@app.get("/api/auth/oauth-url")
+async def get_oauth_url(
+    provider: str,
+    redirect_to: str,
+):
+    """Supabase OAuth 로그인 URL 생성"""
+    normalized_provider = provider.strip().lower()
+    if normalized_provider not in ALLOWED_OAUTH_PROVIDERS:
+        raise HTTPException(status_code=400, detail="지원하지 않는 소셜 로그인 공급자입니다.")
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Supabase 인증 환경이 설정되지 않았습니다.")
+
+    validated_redirect_url = _validate_redirect_url(redirect_to)
+    query = urllib.parse.urlencode({
+        "provider": normalized_provider,
+        "redirect_to": validated_redirect_url,
+    })
+    auth_url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/authorize?{query}"
+    return {
+        "success": True,
+        "provider": normalized_provider,
+        "auth_url": auth_url,
     }
 
 

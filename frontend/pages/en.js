@@ -89,6 +89,7 @@ export default function Home({ darkMode, setDarkMode }) {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [socialLoading, setSocialLoading] = useState('')
   const [authToken, setAuthToken] = useState('')
   const [authUser, setAuthUser] = useState(null)
   const [savedRecords, setSavedRecords] = useState([])
@@ -105,11 +106,35 @@ export default function Home({ darkMode, setDarkMode }) {
 
   useEffect(() => {
     fetchHistory()
-    const savedToken = window.localStorage.getItem(AUTH_TOKEN_KEY)
-    if (savedToken) {
-      setAuthToken(savedToken)
-      fetchCurrentUser(savedToken)
-      fetchSavedRecords(savedToken)
+    const oauthParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const queryParams = new URLSearchParams(window.location.search)
+    const oauthAccessToken = oauthParams.get('access_token') || queryParams.get('access_token')
+    const oauthError =
+      oauthParams.get('error_description') ||
+      oauthParams.get('error') ||
+      queryParams.get('error_description') ||
+      queryParams.get('error')
+
+    if (oauthAccessToken) {
+      setAuthToken(oauthAccessToken)
+      window.localStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
+      fetchCurrentUser(oauthAccessToken)
+      fetchSavedRecords(oauthAccessToken)
+      setNotice('Social sign-in completed.')
+    } else {
+      const savedToken = window.localStorage.getItem(AUTH_TOKEN_KEY)
+      if (savedToken) {
+        setAuthToken(savedToken)
+        fetchCurrentUser(savedToken)
+        fetchSavedRecords(savedToken)
+      }
+    }
+
+    if (oauthError) {
+      setError(`Social sign-in failed: ${oauthError}`)
+    }
+    if (oauthAccessToken || oauthError) {
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`)
     }
     return () => stopPolling()
   }, [])
@@ -362,6 +387,28 @@ export default function Home({ darkMode, setDarkMode }) {
     }
   }
 
+  const handleSocialLogin = async (provider) => {
+    if (socialLoading) return
+    setError(null)
+    setNotice(null)
+    setSocialLoading(provider)
+
+    try {
+      const redirectTo = `${window.location.origin}${window.location.pathname}`
+      const response = await fetch(
+        `${API_URL}/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to get social sign-in URL.')
+      }
+      window.location.href = data.auth_url
+    } catch (err) {
+      setError(err.message || 'Social sign-in error.')
+      setSocialLoading('')
+    }
+  }
+
   const handleLogout = () => {
     setAuthToken('')
     setAuthUser(null)
@@ -532,6 +579,11 @@ export default function Home({ darkMode, setDarkMode }) {
     { key: 'clinical_notes', label: 'Clinical Notes' },
     { key: 'sermon_core_summary', label: 'Sermon Core Summary' },
   ]
+  const socialProviders = [
+    { key: 'google', label: 'Google' },
+    { key: 'kakao', label: 'Kakao' },
+    { key: 'naver', label: 'Naver' },
+  ]
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치',
     'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
 
@@ -647,6 +699,32 @@ export default function Home({ darkMode, setDarkMode }) {
                     : 'Login'}
                 </button>
               </form>
+              <div className="mt-4">
+                <div className="relative mb-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200 dark:border-slate-700" />
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="px-2 text-[11px] text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800">Or continue with social sign-in</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {socialProviders.map((provider) => (
+                    <button
+                      key={provider.key}
+                      type="button"
+                      onClick={() => handleSocialLogin(provider.key)}
+                      disabled={authLoading || Boolean(socialLoading)}
+                      className="py-2.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:opacity-50 transition-colors"
+                    >
+                      {socialLoading === provider.key ? 'Redirecting...' : provider.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                  Social sign-in works after each provider is configured in Supabase.
+                </p>
+              </div>
             </>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
