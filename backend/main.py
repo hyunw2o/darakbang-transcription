@@ -107,7 +107,7 @@ ALLOWED_RECORD_CATEGORIES = {
     "clinical_notes",
     "sermon_core_summary",
 }
-ALLOWED_OAUTH_PROVIDERS = {"google", "kakao", "naver"}
+ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",

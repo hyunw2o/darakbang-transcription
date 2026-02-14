@@ -105,7 +105,6 @@ export default function Home({ darkMode, setDarkMode }) {
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
 
   useEffect(() => {
-    fetchHistory()
     const oauthParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const queryParams = new URLSearchParams(window.location.search)
     const oauthAccessToken = oauthParams.get('access_token') || queryParams.get('access_token')
@@ -162,9 +161,16 @@ export default function Home({ darkMode, setDarkMode }) {
       if (!res.ok) throw new Error('Session expired.')
       const data = await res.json()
       setAuthUser(data.user || null)
+      fetchHistory()
     } catch (e) {
       setAuthToken('')
       setAuthUser(null)
+      setSavedRecords([])
+      setHistory([])
+      setResult(null)
+      setRecordDrafts({})
+      setShowHistory(false)
+      setShowRecords(false)
       window.localStorage.removeItem(AUTH_TOKEN_KEY)
       console.error('Failed to fetch current user', e)
     }
@@ -373,6 +379,7 @@ export default function Home({ darkMode, setDarkMode }) {
         window.localStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
         setAuthUser(data.user || null)
         fetchSavedRecords(data.access_token)
+        fetchHistory()
         setNotice(authMode === 'signup' ? 'Sign-up and login completed.' : 'Logged in successfully.')
       } else {
         setNotice(data.message || 'Sign-up completed. Please verify your email and log in.')
@@ -413,6 +420,13 @@ export default function Home({ darkMode, setDarkMode }) {
     setAuthToken('')
     setAuthUser(null)
     setSavedRecords([])
+    setHistory([])
+    setResult(null)
+    setFile(null)
+    setRecordDrafts({})
+    setShowHistory(false)
+    setShowRecords(false)
+    setError(null)
     window.localStorage.removeItem(AUTH_TOKEN_KEY)
     setNotice('You have been logged out.')
   }
@@ -582,7 +596,6 @@ export default function Home({ darkMode, setDarkMode }) {
   const socialProviders = [
     { key: 'google', label: 'Google' },
     { key: 'kakao', label: 'Kakao' },
-    { key: 'naver', label: 'Naver' },
   ]
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치',
     'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
@@ -725,6 +738,16 @@ export default function Home({ darkMode, setDarkMode }) {
                   Social sign-in works after each provider is configured in Supabase.
                 </p>
               </div>
+              {error && (
+                <div className="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200/80 dark:border-red-800/50 rounded-xl animate-slide-up">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+              )}
+              {notice && (
+                <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/80 dark:border-blue-800/50 rounded-xl animate-slide-up">
+                  <p className="text-sm text-blue-600 dark:text-blue-300">{notice}</p>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -745,6 +768,17 @@ export default function Home({ darkMode, setDarkMode }) {
           )}
         </div>
 
+        {!authToken && (
+          <div className="mb-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/50 bg-white dark:bg-slate-800/60 p-5 text-center animate-fade-in">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Sign-in required</h3>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              After sign-in or sign-up, the upload and transcription workspace will be shown.
+            </p>
+          </div>
+        )}
+
+        {authToken && (
+          <>
         {/* 업로드 카드 */}
         <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
           <form onSubmit={handleSubmit}>
@@ -1162,6 +1196,8 @@ export default function Home({ darkMode, setDarkMode }) {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
 
         {/* 푸터 */}
