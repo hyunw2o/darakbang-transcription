@@ -143,10 +143,17 @@ export default function Home({ darkMode, setDarkMode }) {
     return { Authorization: `Bearer ${token}` }
   }
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (token = authToken) => {
+    if (!token) {
+      setHistory([])
+      return
+    }
     try {
-      const res = await fetch(`${API_URL}/api/history`)
-      if (res.ok) setHistory(await res.json())
+      const res = await fetch(`${API_URL}/api/history`, {
+        headers: getAuthHeaders(token),
+      })
+      if (!res.ok) throw new Error('Failed to load transcription history.')
+      setHistory(await res.json())
     } catch (e) {
       console.error("Failed to fetch history", e)
     }
@@ -161,7 +168,7 @@ export default function Home({ darkMode, setDarkMode }) {
       if (!res.ok) throw new Error('Session expired.')
       const data = await res.json()
       setAuthUser(data.user || null)
-      fetchHistory()
+      fetchHistory(token)
     } catch (e) {
       setAuthToken('')
       setAuthUser(null)
@@ -240,7 +247,9 @@ export default function Home({ darkMode, setDarkMode }) {
         const elapsed = Date.now() - pollStartTime.current
         if (elapsed > 3000) setCurrentStep(prev => Math.max(prev, 2))
 
-        const res = await fetch(`${API_URL}/api/status/${taskId}`)
+        const res = await fetch(`${API_URL}/api/status/${taskId}`, {
+          headers: getAuthHeaders(),
+        })
         if (!res.ok) return
 
         const data = await res.json()
@@ -330,7 +339,9 @@ export default function Home({ darkMode, setDarkMode }) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
     try {
-      const res = await fetch(`${API_URL}/api/status/${taskId}`)
+      const res = await fetch(`${API_URL}/api/status/${taskId}`, {
+        headers: getAuthHeaders(),
+      })
       const data = await res.json()
       if (data.status === 'completed') {
         setResult(data)
@@ -379,7 +390,7 @@ export default function Home({ darkMode, setDarkMode }) {
         window.localStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
         setAuthUser(data.user || null)
         fetchSavedRecords(data.access_token)
-        fetchHistory()
+        fetchHistory(data.access_token)
         setNotice(authMode === 'signup' ? 'Sign-up and login completed.' : 'Logged in successfully.')
       } else {
         setNotice(data.message || 'Sign-up completed. Please verify your email and log in.')

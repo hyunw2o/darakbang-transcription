@@ -49,7 +49,9 @@ uvicorn main:app --reload
 3. `.env`에 아래 값 입력
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
-4. Supabase SQL Editor에서 `backend/sql/saved_records.sql` 실행 (저장 기록 테이블 생성)
+4. Supabase SQL Editor에서 아래 SQL 실행
+   - `backend/sql/saved_records.sql` (저장 기록 테이블)
+   - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 컬럼/인덱스)
 
 ## 배포 (Render)
 
@@ -80,6 +82,8 @@ uvicorn main:app --reload
 ## 신규 API (인증/기록본)
 
 - `POST /api/transcribe` : 음성 변환 시작 (인증 필요)
+- `GET /api/status/{task_id}` : 작업 상태 조회 (인증 필요, 본인 작업만)
+- `GET /api/history` : 내 변환 기록 조회 (인증 필요)
 - `POST /api/auth/signup` : 회원가입
 - `POST /api/auth/login` : 로그인
 - `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=google|kakao`, `redirect_to` 필요)

@@ -97,6 +97,7 @@ supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
 
 # 인메모리 상태 추적
 task_status = {}
+task_owner = {}
 
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
@@ -108,6 +109,7 @@ ALLOWED_RECORD_CATEGORIES = {
     "sermon_core_summary",
 }
 ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
+TRANSCRIPTION_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -189,6 +191,24 @@ def _validate_redirect_url(redirect_to: str) -> str:
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise HTTPException(status_code=400, detail="redirect_to URL 형식이 올바르지 않습니다.")
     return normalized
+
+
+def _ensure_transcriptions_user_scope_ready() -> None:
+    global TRANSCRIPTION_SCOPE_VALIDATED
+    if TRANSCRIPTION_SCOPE_VALIDATED:
+        return
+
+    try:
+        supabase.table("transcriptions").select("user_id").limit(1).execute()
+        TRANSCRIPTION_SCOPE_VALIDATED = True
+    except Exception as e:
+        error_text = str(e).lower()
+        if "user_id" in error_text and ("column" in error_text or "does not exist" in error_text):
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase 설정 필요: backend/sql/transcriptions_user_scope.sql 을 먼저 실행하세요.",
+            )
+        raise
 
 
 def _resolve_audio_mime_type(file_path: str) -> str:
@@ -471,7 +491,14 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
     return response.text
 
 
-async def process_transcription(task_id: str, temp_file_path: str, language: str, correct: bool, transcription_type: str = "sermon"):
+async def process_transcription(
+    task_id: str,
+    user_id: str,
+    temp_file_path: str,
+    language: str,
+    correct: bool,
+    transcription_type: str = "sermon",
+):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     try:
         task_status[task_id] = "processing"
@@ -557,6 +584,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
 
         supabase.table("transcriptions").insert({
             "task_id": task_id,
+            "user_id": user_id,
             "status": "completed",
             "created_at": result_data["created_at"],
             "language": language,
@@ -569,6 +597,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         }).execute()
 
         task_status[task_id] = "completed"
+        task_owner.pop(task_id, None)
 
     except Exception as e:
         print(f"Transcription error: {e}")
@@ -578,6 +607,7 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
         try:
             supabase.table("transcriptions").insert({
                 "task_id": task_id,
+                "user_id": user_id,
                 "status": "error",
                 "error": str(e),
                 "created_at": datetime.now().isoformat(),
@@ -585,6 +615,8 @@ async def process_transcription(task_id: str, temp_file_path: str, language: str
             }).execute()
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
+        finally:
+            task_owner.pop(task_id, None)
 
 
 @app.post("/api/transcribe")
@@ -599,7 +631,9 @@ async def transcribe_audio(
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
     try:
         # 파일 변환은 로그인 사용자만 허용
-        _get_current_user(authorization)
+        _ensure_transcriptions_user_scope_ready()
+        user = _get_current_user(authorization)
+        user_id = user["id"]
         contents = await file.read()
         if len(contents) > 100 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="파일 크기는 100MB 이하")
@@ -615,10 +649,12 @@ async def transcribe_audio(
 
         task_id = str(uuid.uuid4())
         task_status[task_id] = "queued"
+        task_owner[task_id] = user_id
 
         background_tasks.add_task(
             process_transcription,
             task_id,
+            user_id,
             temp_file_path,
             language,
             correct,
@@ -643,14 +679,30 @@ async def transcribe_audio(
 
 
 @app.get("/api/status/{task_id}")
-async def get_task_status(task_id: str):
+async def get_task_status(
+    task_id: str,
+    authorization: str | None = Header(default=None),
+):
     """작업 상태 조회"""
+    _ensure_transcriptions_user_scope_ready()
+    user = _get_current_user(authorization)
+    user_id = user["id"]
+
     if task_id in task_status:
         status = task_status[task_id]
+        owner_id = task_owner.get(task_id)
+        if owner_id is not None and owner_id != user_id:
+            return {"task_id": task_id, "status": "not_found"}
         if status == "processing" or status == "queued":
             return {"task_id": task_id, "status": status}
 
-    response = supabase.table("transcriptions").select("*").eq("task_id", task_id).execute()
+    response = (
+        supabase.table("transcriptions")
+        .select("*")
+        .eq("task_id", task_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
     if response.data:
         row = response.data[0]
         if row["status"] == "completed":
@@ -689,11 +741,16 @@ async def get_terms():
 
 
 @app.get("/api/history")
-async def get_history():
+async def get_history(authorization: str | None = Header(default=None)):
     """변환 기록 목록 조회"""
+    _ensure_transcriptions_user_scope_ready()
+    user = _get_current_user(authorization)
+    user_id = user["id"]
+
     response = (
         supabase.table("transcriptions")
         .select("task_id, status, created_at, characters, engine, corrected_text, transcription_type")
+        .eq("user_id", user_id)
         .order("created_at", desc=True)
         .execute()
     )
