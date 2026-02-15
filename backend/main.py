@@ -591,7 +591,8 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "This is a sermon or lecture recording. "
                 "Infer unclear words from context. "
                 "Bible, Scripture, Gospel, salvation, grace, faith, prayer, blessing, congregation, "
-                "sermon, worship, fellowship, testimony, discipleship, ministry, mission"
+                "sermon, worship, fellowship, testimony, discipleship, ministry, mission, "
+                "Droa Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS"
             )
         elif transcription_type == "phonecall":
             whisper_prompt = (
@@ -615,7 +616,7 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     else:
         # ===== 한국어 프롬프트 =====
         if transcription_type == "sermon":
-            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, RRTS, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
+            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
         elif transcription_type == "phonecall":
             whisper_prompt = (
                 "전화 통화 녹음입니다. 두 명의 화자가 대화합니다. "

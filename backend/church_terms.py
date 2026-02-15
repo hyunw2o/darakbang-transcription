@@ -29,7 +29,7 @@ DARAKBANG_CORE = [
     "777 기도",
     "1천망대",
     "1000 RUTC",
-    "7000 RT 선교사"
+    "7000 RT 선교사",
     
     # 단계/개념
     "오직", "유일성", "재창조", "천명", "소명", "사명",
@@ -39,6 +39,9 @@ DARAKBANG_CORE = [
     "다락방", "미션홈", "지교회", "팀사역",
     "마가다락방", "갈보리산", "감람산",
     "드로아교회",
+    "드로아 교회",
+    "하베스터선교교회",
+    "하베스터 선교 교회",
     
     # 특수 용어
     "홀리메이슨",
@@ -65,9 +68,14 @@ DARAKBANG_CORE = [
     "네피림", "바벨탑",
 
     # 행사/모임
-    "성회", "전도대회", "수련회", "전도집회", "집회", "세미나"
+    "성회", "전도대회", "수련회", "전도집회", "집회", "세미나",
 
-    # 선교 지역 약어
+    # 선교/교육 약어
+    "HMC",  # Harvester Mission Church
+    "HMIS", # Harvester Mission International School
+    "HMVS", # Harvester Mission Vision School
+    "RVIS", # Remnant Vision International School
+    "RRTS", # Remnant Reformed Theological Seminary
     "REA",  # Rwanda, East Africa, Africa
     "RUTC", # Remnant Training Unity Center
     "RTS",  # Remnant Theological Seminary
@@ -148,6 +156,45 @@ COMMON_MISTAKES = {
     "드로우게교회": "드로아교회",
     "드로에게": "드로아교회",
     "드로에게교회": "드로아교회",
+    "드로아 교회": "드로아교회",
+    "하베스터 선교 교회": "하베스터선교교회",
+    "하베스트 선교 교회": "하베스터선교교회",
+    "하베스터 선교교회": "하베스터선교교회",
+    "하베스턴선교교회": "하베스터선교교회",
+    "하베스터 미션 처치": "하베스터선교교회",
+    "H M C": "HMC",
+    "에이치 엠 씨": "HMC",
+    "에이치엠씨": "HMC",
+    "H M I S": "HMIS",
+    "에이치 엠 아이 에스": "HMIS",
+    "에이치엠아이에스": "HMIS",
+    "H M V S": "HMVS",
+    "에이치 엠 브이 에스": "HMVS",
+    "에이치엠브이에스": "HMVS",
+    "R R T S": "RRTS",
+    "알 알 티 에스": "RRTS",
+    "알알티에스": "RRTS",
+    "R V I S": "RVIS",
+    "알 브이 아이 에스": "RVIS",
+    "알브이아이에스": "RVIS",
+    "R T S": "RTS",
+    "알 티 에스": "RTS",
+    "알티에스": "RTS",
+    "R S T S": "RSTS",
+    "알 에스 티 에스": "RSTS",
+    "알에스티에스": "RSTS",
+    "R V S": "RVS",
+    "알 브이 에스": "RVS",
+    "알브이에스": "RVS",
+    "R P S": "RPS",
+    "알 피 에스": "RPS",
+    "알피에스": "RPS",
+    "R L S": "RLS",
+    "알 엘 에스": "RLS",
+    "알엘에스": "RLS",
+    "R G S": "RGS",
+    "알 지 에스": "RGS",
+    "알지에스": "RGS",
     "RLTS": "RRTS",
     "알리": "REA",
     "김근이": "김건희",
@@ -545,6 +592,18 @@ EN_COMMON_CORRECTIONS = {
     "dunno": "don't know",
     "lemme": "let me",
     "gimme": "give me",
+    # Church / school acronyms
+    "hmc": "HMC",
+    "hmis": "HMIS",
+    "hmvs": "HMVS",
+    "rrts": "RRTS",
+    "rvis": "RVIS",
+    "rts": "RTS",
+    "rsts": "RSTS",
+    "rvs": "RVS",
+    "rps": "RPS",
+    "rls": "RLS",
+    "rgs": "RGS",
 }
 
 # ===== 영어 의료 용어 STT 오류 교정 =====
@@ -655,6 +714,7 @@ def get_gemini_prompt():
 
 [필수 용어]
 237, 5000, 237나라, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
+드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 (이삼칠→237, 칠칠칠→777, 오천종족→5000종족 등 숫자/영어 표기 유지)
 
 [가장 중요한 규칙 - 완전 녹취]
@@ -762,9 +822,10 @@ def get_gemini_correction_prompt():
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
   237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중
   Heavenly, Thronely, Eternally, TCK, CCK, NCK, REA, RRTS
+  드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
   이삼칠→237, 칠칠칠→777, 오천종족→5000종족 (숫자/영어 표기 유지)
 - 음성인식 오류를 문맥에 맞게 교정하라:
-  드로우게/드로에게→드로아교회, 아수르→앗수르, 유락민/노량민→유랑민
+  드로우게/드로에게→드로아교회, 하베스터 선교 교회→하베스터선교교회, 아수르→앗수르, 유락민/노량민→유랑민
   할라고→하려고, 갈라고→가려고, 배심→뱃심
 - 인명 교정: 김근이→김건희, 김소현→김소영, 이지훈/이지호→이주현, 장현승→장한샘
 - 성경 구절 번호는 "23/" 형식으로 표기하라.
@@ -863,6 +924,8 @@ def get_phonecall_correction_prompt():
 - 음성인식 오류를 문맥에 맞게 교정하라.
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 인명, 지명, 회사명 등 고유명사는 문맥을 고려하여 정확하게 기록하라.
+- 교회/학교 고유명사는 아래 표기를 우선 유지하라:
+  드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - 전화번호, 주소, 날짜, 시간, 금액은 정확하게 기록하라.
 - 의료 관련 통화인 경우 의료 용어를 정확히 표기하라:
   약물명 (타이레놀, 메트포르민, 아목시실린 등)
@@ -957,6 +1020,8 @@ def get_conversation_correction_prompt():
 - 음성인식 오류를 문맥에 맞게 교정하라.
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 전문 용어, 프로젝트명, 고유명사는 문맥을 고려하여 정확하게 기록하라.
+- 교회/학교 고유명사는 아래 표기를 우선 유지하라:
+  드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - 숫자, 금액, 날짜, 퍼센트 등은 아라비아 숫자로 통일하라 (예: 삼십 퍼센트 → 30%)
 - 의료 관련 회의인 경우 의료 용어를 정확히 표기하라:
   약물명, 질병명, 검사명, 의료 절차 등
@@ -1114,6 +1179,8 @@ Correct and structure this text following the rules below.
 - Fix STT errors based on context.
 - Correct grammar and spelling while preserving conversational tone.
 - Proper nouns (names, companies, locations) should be accurately spelled.
+- Keep these church/school names exact if mentioned:
+  Droa Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - Phone numbers, addresses, dates, times, amounts should be recorded accurately.
 - Medical terminology must be accurately spelled:
   Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
@@ -1184,6 +1251,8 @@ Correct and structure this text following the rules below.
 - Fix STT errors based on context.
 - Correct grammar and spelling while preserving conversational tone.
 - Technical terms, project names, proper nouns should be accurately spelled.
+- Keep these church/school names exact if mentioned:
+  Droa Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
 - Medical terminology if applicable: drug names, disease names, procedure names
 - Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
@@ -1321,10 +1390,12 @@ def get_claude_context():
 【장소/구조】
 - 다락방, 미션홈, 지교회
 - 마가다락방, 갈보리산, 감람산
+- 드로아교회, 하베스터선교교회
 
 【영문 용어】
 - Heavenly, Thronely, Eternally (영문 그대로)
 - TCK, CCK, NCK, CVDIP (약어 그대로)
+- HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 
 【목회자】
 - 류광수 목사님
