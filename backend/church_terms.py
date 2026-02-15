@@ -36,7 +36,7 @@ DARAKBANG_CORE = [
     "보좌화", "생활화", "개인화", "제자화", "세계화",
     
     # 장소/구조
-    "다락방", "미션홈", "지교회", "팀사역",
+    "다락방", "미션홈", "태중 미션홈", "지교회", "팀사역",
     "마가다락방", "갈보리산", "감람산",
     "드로아교회",
     "드로아 교회",
@@ -68,7 +68,7 @@ DARAKBANG_CORE = [
     "네피림", "바벨탑",
 
     # 행사/모임
-    "성회", "전도대회", "수련회", "전도집회", "집회", "세미나",
+    "성회", "전도대회", "수련회", "전도집회", "집회", "세미나", "기도수첩",
 
     # 선교/교육 약어
     "HMC",  # Harvester Mission Church
@@ -157,6 +157,15 @@ COMMON_MISTAKES = {
     "드로에게": "드로아교회",
     "드로에게교회": "드로아교회",
     "드로아 교회": "드로아교회",
+    "미션 홈": "미션홈",
+    "미샨홈": "미션홈",
+    "미션훔": "미션홈",
+    "태중미션홈": "태중 미션홈",
+    "태중 미션 홈": "태중 미션홈",
+    "태중미션 홈": "태중 미션홈",
+    "기도 수첩": "기도수첩",
+    "기두수첩": "기도수첩",
+    "기도 수찹": "기도수첩",
     "하베스터 선교 교회": "하베스터선교교회",
     "하베스트 선교 교회": "하베스터선교교회",
     "하베스터 선교교회": "하베스터선교교회",
@@ -714,7 +723,7 @@ def get_gemini_prompt():
 
 [필수 용어]
 237, 5000, 237나라, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
-드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 (이삼칠→237, 칠칠칠→777, 오천종족→5000종족 등 숫자/영어 표기 유지)
 
 [가장 중요한 규칙 - 완전 녹취]
@@ -822,10 +831,10 @@ def get_gemini_correction_prompt():
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
   237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중
   Heavenly, Thronely, Eternally, TCK, CCK, NCK, REA, RRTS
-  드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
   이삼칠→237, 칠칠칠→777, 오천종족→5000종족 (숫자/영어 표기 유지)
 - 음성인식 오류를 문맥에 맞게 교정하라:
-  드로우게/드로에게→드로아교회, 하베스터 선교 교회→하베스터선교교회, 아수르→앗수르, 유락민/노량민→유랑민
+  드로우게/드로에게→드로아교회, 하베스터 선교 교회→하베스터선교교회, 미션 홈→미션홈, 태중미션홈→태중 미션홈, 기도 수첩→기도수첩, 아수르→앗수르, 유락민/노량민→유랑민
   할라고→하려고, 갈라고→가려고, 배심→뱃심
 - 인명 교정: 김근이→김건희, 김소현→김소영, 이지훈/이지호→이주현, 장현승→장한샘
 - 성경 구절 번호는 "23/" 형식으로 표기하라.
@@ -925,7 +934,7 @@ def get_phonecall_correction_prompt():
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 인명, 지명, 회사명 등 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
-  드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - 전화번호, 주소, 날짜, 시간, 금액은 정확하게 기록하라.
 - 의료 관련 통화인 경우 의료 용어를 정확히 표기하라:
   약물명 (타이레놀, 메트포르민, 아목시실린 등)
@@ -1021,7 +1030,7 @@ def get_conversation_correction_prompt():
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 전문 용어, 프로젝트명, 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
-  드로아교회, 하베스터선교교회, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - 숫자, 금액, 날짜, 퍼센트 등은 아라비아 숫자로 통일하라 (예: 삼십 퍼센트 → 30%)
 - 의료 관련 회의인 경우 의료 용어를 정확히 표기하라:
   약물명, 질병명, 검사명, 의료 절차 등
@@ -1180,7 +1189,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Proper nouns (names, companies, locations) should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Droa Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  Droa Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - Phone numbers, addresses, dates, times, amounts should be recorded accurately.
 - Medical terminology must be accurately spelled:
   Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
@@ -1252,7 +1261,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Technical terms, project names, proper nouns should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Droa Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  Droa Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
 - Medical terminology if applicable: drug names, disease names, procedure names
 - Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
@@ -1388,9 +1397,12 @@ def get_claude_context():
 - 보좌화 → 생활화 → 개인화 → 제자화 → 세계화
 
 【장소/구조】
-- 다락방, 미션홈, 지교회
+- 다락방, 미션홈, 태중 미션홈, 지교회
 - 마가다락방, 갈보리산, 감람산
 - 드로아교회, 하베스터선교교회
+
+【훈련/자료】
+- 기도수첩
 
 【영문 용어】
 - Heavenly, Thronely, Eternally (영문 그대로)
