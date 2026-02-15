@@ -855,6 +855,9 @@ def get_phonecall_correction_prompt():
 - 화자가 바뀔 때마다 빈 줄을 넣고 새 화자 레이블을 시작하라.
 - 같은 화자의 연속 발언은 하나의 블록으로 묶어라.
 - 이름이나 직함이 파악되면 레이블에 반영하라. (예: "화자 A(김과장):")
+- 통화 본문(요약 전 구간)의 모든 문장은 반드시 화자 레이블로 시작해야 한다.
+- 화자가 불명확해도 문맥상 가장 가능성 높은 화자로 임시 배정하라. 레이블 없는 줄을 남기지 마라.
+- 질문 뒤에 이어지는 짧은 응답(네/예/알겠습니다 등)은 반대 화자로 우선 배정하라.
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
@@ -946,6 +949,9 @@ def get_conversation_correction_prompt():
 - 이름이나 직함이 언급되면 레이블에 반영하라. (예: "참석자 1(김팀장):")
 - 화자가 바뀔 때마다 빈 줄을 넣고 새 화자 레이블을 시작하라.
 - 같은 화자의 연속 발언은 하나의 블록으로 묶어라.
+- 회의 본문(요약 전 구간)의 모든 문장은 반드시 참석자 레이블로 시작해야 한다.
+- 화자가 애매한 문장도 문맥상 가장 가능성 높은 참석자에게 임시 배정하라. 레이블 없는 줄을 남기지 마라.
+- 질문/답변, 보고/피드백 흐름을 기준으로 발언 턴을 유지하라.
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
@@ -1100,6 +1106,9 @@ Correct and structure this text following the rules below.
   5) If names/titles are identified, reflect in labels (e.g., "Speaker A (Dr. Kim):")
 - Add blank lines between speaker changes.
 - Group consecutive statements by the same speaker.
+- Every sentence in the call body (before summary) must start with a speaker label.
+- If speaker identity is uncertain, assign the most likely speaker from context. Do not leave unlabeled lines.
+- For short acknowledgment after a question ("yes", "okay", "got it"), prefer assigning the opposite speaker.
 
 [Text Correction]
 - Fix STT errors based on context.
@@ -1167,6 +1176,9 @@ Correct and structure this text following the rules below.
   5) Self/other references: "As I mentioned", "Like John said"
 - If names/titles are identified, reflect in labels (e.g., "Participant 1 (Sarah, PM):")
 - Add blank lines between speaker changes.
+- Every sentence in the meeting body (before summary) must start with a participant label.
+- If speaker identity is uncertain, assign the most likely participant from context. Do not leave unlabeled lines.
+- Preserve turn-taking using question→answer and report→feedback patterns.
 
 [Text Correction]
 - Fix STT errors based on context.

@@ -15,6 +15,7 @@ import pathlib
 import time
 import math
 import mimetypes
+import re
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -81,8 +82,8 @@ async def startup_event():
 @app.get("/")
 async def root():
     return {
-        "message": "설교 및 회의 녹취 API",
-        "version": "3.0",
+        "message": "설교·회의·의료 특화 녹취 API",
+        "version": "3.1",
         "engine": "Whisper STT + Gemini 교정" if openai_client else "Gemini (단일)",
         "darakbang_terms": len(DARAKBANG_CORE),
         "total_terms": len(ALL_CHURCH_TERMS),
@@ -119,6 +120,43 @@ AUDIO_MIME_TYPES = {
     ".webm": "audio/webm",
     ".mp4": "audio/mp4",
 }
+STRUCTURED_SUMMARY_HEADERS = {
+    "요약",
+    "주요 내용",
+    "논의 안건",
+    "결정 사항",
+    "후속 조치",
+    "Summary",
+    "Key Points",
+    "Agenda Items",
+    "Decisions",
+    "Action Items",
+}
+KO_RESPONSE_PREFIXES = (
+    "네",
+    "예",
+    "네네",
+    "아 네",
+    "알겠습니다",
+    "좋습니다",
+    "맞습니다",
+    "맞아요",
+    "그렇군요",
+)
+EN_RESPONSE_PREFIXES = (
+    "yes",
+    "yeah",
+    "yep",
+    "okay",
+    "ok",
+    "right",
+    "sure",
+    "agreed",
+    "i see",
+    "got it",
+    "understood",
+    "sounds good",
+)
 
 
 def _extract_auth_error_message(raw_text: str) -> str:
@@ -287,6 +325,181 @@ def _build_record_draft_prompt(category: str, language: str = "ko") -> str:
         }
 
     return prompt_map.get(category, prompt_map["meeting_keywords"])
+
+
+def _split_transcript_body_and_tail(text: str) -> tuple[list[str], list[str]]:
+    lines = (text or "").splitlines()
+    body_lines: list[str] = []
+    tail_lines: list[str] = []
+    in_tail = False
+
+    for line in lines:
+        stripped = line.strip()
+        if not in_tail and stripped in STRUCTURED_SUMMARY_HEADERS:
+            in_tail = True
+        if in_tail:
+            tail_lines.append(line)
+        else:
+            body_lines.append(line)
+
+    return body_lines, tail_lines
+
+
+def _parse_speaker_line(line: str) -> dict | None:
+    match = re.match(
+        r"^(화자|참석자|speaker|participant)\s*([A-Za-z0-9]+)(?:\s*\(([^)]*)\))?\s*[:：]\s*(.*)$",
+        line.strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    return {
+        "speaker_kind": match.group(1),
+        "speaker_id": match.group(2),
+        "speaker_alias": (match.group(3) or "").strip(),
+        "content": (match.group(4) or "").strip(),
+    }
+
+
+def _default_speaker_label(transcription_type: str, language: str, turn_index: int) -> str:
+    if transcription_type == "phonecall":
+        token = "Speaker" if language == "en" else "화자"
+        return f"{token} {'A' if turn_index % 2 == 0 else 'B'}"
+
+    token = "Participant" if language == "en" else "참석자"
+    return f"{token} {1 if turn_index % 2 == 0 else 2}"
+
+
+def _flip_phonecall_label(label: str, language: str) -> str:
+    token = "Speaker" if language == "en" else "화자"
+    current = "A"
+    if re.search(r"\bB\b", label, flags=re.IGNORECASE):
+        current = "B"
+    elif re.search(r"\bA\b", label, flags=re.IGNORECASE):
+        current = "A"
+    return f"{token} {'A' if current == 'B' else 'B'}"
+
+
+def _looks_like_short_response(content: str, language: str) -> bool:
+    stripped = content.strip()
+    if not stripped:
+        return False
+
+    if language == "en":
+        lowered = stripped.lower()
+        return any(lowered.startswith(prefix) for prefix in EN_RESPONSE_PREFIXES)
+
+    return any(stripped.startswith(prefix) for prefix in KO_RESPONSE_PREFIXES)
+
+
+def _normalize_speaker_label(
+    parsed: dict,
+    transcription_type: str,
+    language: str,
+    label_map: dict[str, int | str],
+) -> str:
+    speaker_id = (parsed.get("speaker_id") or "").strip()
+    alias = parsed.get("speaker_alias") or ""
+
+    if transcription_type == "phonecall":
+        token = "Speaker" if language == "en" else "화자"
+        canonical = "A"
+        if speaker_id.isdigit():
+            canonical = "A" if int(speaker_id) <= 1 else "B"
+        else:
+            upper = speaker_id.upper() or "A"
+            if upper in {"A", "B"}:
+                canonical = upper
+            else:
+                if upper not in label_map:
+                    label_map[upper] = "A" if len(label_map) % 2 == 0 else "B"
+                canonical = str(label_map[upper])
+
+        base = f"{token} {canonical}"
+        if alias:
+            return f"{base} ({alias})" if language == "en" else f"{base}({alias})"
+        return base
+
+    token = "Participant" if language == "en" else "참석자"
+    if speaker_id.isdigit():
+        number = max(1, int(speaker_id))
+    else:
+        upper = speaker_id.upper() or "A"
+        if len(upper) == 1 and "A" <= upper <= "Z":
+            number = ord(upper) - ord("A") + 1
+        else:
+            if upper not in label_map:
+                label_map[upper] = len(label_map) + 1
+            number = int(label_map[upper])
+
+    base = f"{token} {number}"
+    if alias:
+        return f"{base} ({alias})" if language == "en" else f"{base}({alias})"
+    return base
+
+
+def _enforce_speaker_separation(text: str, transcription_type: str, language: str) -> str:
+    if transcription_type not in {"phonecall", "conversation"}:
+        return text
+
+    body_lines, tail_lines = _split_transcript_body_and_tail(text)
+    existing_label_count = sum(1 for line in body_lines if _parse_speaker_line(line))
+    if not body_lines:
+        return text
+
+    utterances: list[list[str]] = []
+    turn_index = 0
+    current_label = ""
+    previous_had_question = False
+    label_map: dict[str, int | str] = {}
+
+    for line in body_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        parsed = _parse_speaker_line(stripped)
+        if parsed:
+            label = _normalize_speaker_label(parsed, transcription_type, language, label_map)
+            content = parsed["content"]
+            current_label = label
+        else:
+            content = stripped
+            if existing_label_count == 0:
+                label = _default_speaker_label(transcription_type, language, turn_index)
+                if transcription_type == "phonecall" and turn_index > 0:
+                    previous_label = utterances[-1][0]
+                    if previous_had_question or _looks_like_short_response(content, language):
+                        label = _flip_phonecall_label(previous_label, language)
+                current_label = label
+            else:
+                if not current_label:
+                    current_label = _default_speaker_label(transcription_type, language, turn_index)
+                label = current_label
+                if transcription_type == "phonecall" and (previous_had_question or _looks_like_short_response(content, language)):
+                    label = _flip_phonecall_label(current_label, language)
+                    current_label = label
+
+        if not content:
+            previous_had_question = False
+            continue
+
+        if utterances and utterances[-1][0] == label:
+            utterances[-1][1] = f"{utterances[-1][1]} {content}".strip()
+        else:
+            utterances.append([label, content])
+            turn_index += 1
+
+        previous_had_question = content.endswith("?") or content.endswith("？")
+
+    if not utterances:
+        return text
+
+    body_text = "\n\n".join(f"{label}: {content}" for label, content in utterances).strip()
+    tail_text = "\n".join(tail_lines).strip()
+    if tail_text:
+        return f"{body_text}\n\n{tail_text}".strip()
+    return body_text
 
 def get_optimal_model():
     """Gemini 모델 동적 선택"""
@@ -522,6 +735,7 @@ async def process_transcription(
 
             # 3단계: 규칙 기반 후처리
             corrected_text = correct_text(corrected_text, transcription_type, language)
+            corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
 
             engine = "whisper+gemini"
 
@@ -566,6 +780,7 @@ async def process_transcription(
                 pass
 
             corrected_text = correct_text(raw_text, transcription_type, language)
+            corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
             engine = "gemini-only"
 
         # 결과 저장

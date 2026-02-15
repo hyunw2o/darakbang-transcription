@@ -468,7 +468,7 @@ export default function Home({ darkMode, setDarkMode }) {
       } else if (trimmed === '') {
         html += '<br/>'
       } else {
-        const speakerMatch = trimmed.match(/^(화자\s*[A-Z]|참석자\s*\d+|Speaker\s*[A-Z]|Participant\s*\d+)\s*[:：]/)
+        const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
         if (speakerMatch) {
           html += `<p><b>${speakerMatch[1]}:</b> ${trimmed.slice(speakerMatch[0].length).trim()}</p>`
         } else {
@@ -594,6 +594,11 @@ export default function Home({ darkMode, setDarkMode }) {
   }
 
   const typeLabels = { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
+  const transcriptionTypeHints = {
+    sermon: 'Structured by sermon flow (Main Body / Conclusion / Prayer).',
+    phonecall: 'Separates call speakers (A/B) and reinforces clinical wording.',
+    conversation: 'Separates meeting participants and structures agenda/decisions/actions.',
+  }
   const recordTypeLabels = {
     meeting_keywords: 'Meeting Keywords',
     clinical_notes: 'Clinical Notes',
@@ -790,6 +795,11 @@ export default function Home({ darkMode, setDarkMode }) {
 
         {authToken && (
           <>
+        <div className="mb-5 rounded-2xl border border-blue-100/80 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-900/10 p-4 animate-fade-in">
+          <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-medium">
+            mallog24 focus: sermon flow + speaker separation for calls/meetings + clinical record structuring
+          </p>
+        </div>
         {/* 업로드 카드 */}
         <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
           <form onSubmit={handleSubmit}>
@@ -875,6 +885,9 @@ export default function Home({ darkMode, setDarkMode }) {
                 </select>
               </div>
             </div>
+            <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+              {transcriptionTypeHints[transcriptionType]}
+            </p>
 
             {/* 변환 버튼 */}
             <button
@@ -956,7 +969,7 @@ export default function Home({ darkMode, setDarkMode }) {
                           </div>
                         )
                       }
-                      const speakerMatch = trimmed.match(/^(화자\s*[A-Z](?:\([^)]*\))?|참석자\s*\d+(?:\([^)]*\))?|Speaker\s*[A-Z](?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
+                      const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
                       if (speakerMatch) {
                         return (
                           <p key={i} className="mb-1.5">

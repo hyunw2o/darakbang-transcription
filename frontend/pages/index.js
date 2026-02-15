@@ -468,7 +468,7 @@ export default function Home({ darkMode, setDarkMode }) {
       } else if (trimmed === '') {
         html += '<br/>'
       } else {
-        const speakerMatch = trimmed.match(/^(화자\s*[A-Z]|참석자\s*\d+|Speaker\s*[A-Z]|Participant\s*\d+)\s*[:：]/)
+        const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
         if (speakerMatch) {
           html += `<p><b>${speakerMatch[1]}:</b> ${trimmed.slice(speakerMatch[0].length).trim()}</p>`
         } else {
@@ -594,6 +594,11 @@ export default function Home({ darkMode, setDarkMode }) {
   }
 
   const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
+  const transcriptionTypeHints = {
+    sermon: '설교 흐름(본론/결론/기도) 중심으로 정리합니다.',
+    phonecall: '통화 화자를 A/B로 분리하고 의료 관련 표현을 보강합니다.',
+    conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치를 구조화합니다.',
+  }
   const recordTypeLabels = {
     meeting_keywords: '회의 중요 키워드',
     clinical_notes: '진료 도움 기록',
@@ -790,6 +795,11 @@ export default function Home({ darkMode, setDarkMode }) {
 
         {authToken && (
           <>
+        <div className="mb-5 rounded-2xl border border-blue-100/80 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-900/10 p-4 animate-fade-in">
+          <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-medium">
+            mallog24 특화: 설교 흐름 정리 + 통화/회의 화자 분리 + 의료 기록 구조화
+          </p>
+        </div>
         {/* 업로드 카드 */}
         <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
           <form onSubmit={handleSubmit}>
@@ -875,6 +885,9 @@ export default function Home({ darkMode, setDarkMode }) {
                 </select>
               </div>
             </div>
+            <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+              {transcriptionTypeHints[transcriptionType]}
+            </p>
 
             {/* 변환 버튼 */}
             <button
@@ -956,7 +969,7 @@ export default function Home({ darkMode, setDarkMode }) {
                           </div>
                         )
                       }
-                      const speakerMatch = trimmed.match(/^(화자\s*[A-Z](?:\([^)]*\))?|참석자\s*\d+(?:\([^)]*\))?|Speaker\s*[A-Z](?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
+                      const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
                       if (speakerMatch) {
                         return (
                           <p key={i} className="mb-1.5">
