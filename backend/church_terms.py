@@ -913,6 +913,22 @@ def get_phonecall_correction_prompt():
   "안녕하 세 요" → "안녕하세요" (끊어진 음절 복원)
   "다음 시요일에" → "다음 수요일에" (문맥 추정)
 
+[일상 용어 인식 강화]
+- 일상 대화에서 자주 쓰는 표현을 정확히 복원하라:
+  "잠시만요", "다시 말씀해 주세요", "확인 부탁드립니다", "전달 부탁드립니다", "그건 다음에 논의하죠"
+- 불완전한 종결어미/구어체도 의미를 유지해 자연스럽게 정리하라.
+
+[전문 분야 용어 인식 강화]
+- 통화 주제가 전문 영역이면 아래 용어를 문맥으로 우선 복원하라.
+- 경제학: 인플레이션, 기준금리, 환율, 공급망, 총수요
+- 법: 조문, 판례, 약관, 손해배상, 위약금, 합의서
+- 정치: 국회, 법안, 예산안, 외교, 여론조사
+- IT: API, SDK, CI/CD, 클라우드, Docker, Kubernetes, 데이터베이스, 보안
+- 환경: 탄소중립, 온실가스, 재생에너지, ESG, 배출권
+- 의료: 진단, 처방, 약물명, 검사명, 부작용
+- 인문학/교육: 철학, 윤리, 문해력, 서사, 해석, 교육과정, 학습목표, 평가
+- 경영/재무: KPI, ROI, 손익계산서, 현금흐름, 영업이익
+
 [화자 분리 - 반드시 적용]
 - 통화 참여자를 구분하여 각 발언 앞에 화자 레이블을 붙여라.
 - 화자가 2명인 경우: "화자 A:" 와 "화자 B:" 를 사용하라.
@@ -942,7 +958,10 @@ def get_phonecall_correction_prompt():
   검사명 (CT, MRI, 혈액검사 등)
 
 [추임새 제거]
-- 문장 시작의 습관적 추임새만 삭제: '예,', '자,', '아,', '어,', '응,', '네,'
+- 문장 시작의 습관적 추임새만 삭제: '예,', '자,', '아,', '어,', '음,', '응?', '네,'
+- 화자 라벨 뒤 시작 추임새도 제거하라:
+  "화자 A: 어, 그건..." → "화자 A: 그건..."
+  "화자 B: 음... 확인해볼게요" → "화자 B: 확인해볼게요"
 - 대화의 흐름에서 의미 있는 응답('네', '예', '아, 그렇군요' 등)은 유지하라.
 - "네네", "아 네", "맞아요" 등 동의/확인 표현은 유지하라.
 
@@ -1009,6 +1028,21 @@ def get_conversation_correction_prompt():
   "KPI를 맞 춰야" → "KPI를 맞춰야" (끊어진 음절)
   "삼분기 매출이" → "3분기 매출이" (숫자 통일)
 
+[일상 용어 인식 강화]
+- 회의/대화에서 자주 쓰는 일상 표현도 정확히 복원하라:
+  "잠시만요", "다시 설명해 주세요", "말씀하신 내용", "확인됐습니다", "정리해서 공유하겠습니다"
+- 짧은 맞장구(네/맞습니다/좋습니다)는 발화 의도가 있으면 유지하라.
+
+[전문 분야 용어 인식 강화]
+- 아래 분야 용어는 발음이 불명확해도 문맥으로 우선 복원하라.
+- 경제학/재무: 인플레이션, 기준금리, 환율, 손익계산서, 현금흐름, ROE, EBITDA
+- 법/정책: 조문, 판례, 준법감시, 개인정보보호법, 시행령, 규제영향평가
+- 정치/공공: 국회, 법안, 예산안, 조례, 공청회, 여론조사
+- IT/데이터: API, SDK, CI/CD, 마이크로서비스, 로그, 트래픽, 암호화, 권한관리
+- 환경/ESG: 탄소중립, 온실가스, Scope 1/2/3, 배출권거래제, 지속가능성
+- 의료/헬스케어: 진단, 처방, 임상, 프로토콜, CT, MRI, 부작용, 추적관찰
+- 인문/교육: 철학, 윤리, 역사해석, 문해력, 교육과정, 평가 루브릭
+
 [화자 분리 - 반드시 적용]
 - 회의 참석자를 구분하여 각 발언 앞에 화자 레이블을 붙여라.
 - 화자를 "참석자 1:", "참석자 2:", "참석자 3:" 등으로 표시하라.
@@ -1038,7 +1072,10 @@ def get_conversation_correction_prompt():
   API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes 등
 
 [추임새 제거]
-- 문장 시작의 습관적 추임새만 삭제.
+- 문장 시작의 습관적 추임새만 삭제: '어,', '음,', '응?', '예,', '네,', '자,'
+- 화자 라벨 뒤 시작 추임새도 제거하라:
+  "참석자 1: 음... 그러면" → "참석자 1: 그러면"
+  "참석자 2: 어, 맞습니다" → "참석자 2: 맞습니다"
 - 대화의 흐름에서 의미 있는 응답은 유지하라.
 - "좋습니다", "동의합니다", "그렇게 하시죠" 등 의사결정 관련 응답은 반드시 유지.
 
@@ -1170,6 +1207,22 @@ Correct and structure this text following the rules below.
   "can we sheh dule for" → "can we schedule for"
   "the pah tient needs" → "the patient needs"
 
+[Everyday Vocabulary Recovery]
+- Recover common daily expressions accurately:
+  "hold on a second", "could you repeat that", "please confirm", "I'll share it shortly", "let's discuss later".
+- Keep natural conversational tone while fixing broken words.
+
+[Domain Terminology Recovery]
+- If the call topic is domain-specific, prioritize context-based restoration of terms.
+- Economics: inflation, interest rate, exchange rate, supply chain, aggregate demand
+- Law: statute, case law, clause, damages, penalty, settlement
+- Politics/Public: parliament, bill, budget proposal, diplomacy, polling
+- IT: API, SDK, CI/CD, cloud, Docker, Kubernetes, database, cybersecurity
+- Environment: carbon neutrality, greenhouse gas, renewable energy, ESG, emissions trading
+- Medicine: diagnosis, prescription, dosage, side effects, follow-up
+- Humanities/Education: philosophy, ethics, interpretation, curriculum, assessment
+- Business/Finance: KPI, ROI, P&L, cash flow, operating profit
+
 [Speaker Separation - Must Apply]
 - Identify and label speakers: "Speaker A:" and "Speaker B:"
 - Criteria for speaker identification:
@@ -1199,6 +1252,9 @@ Correct and structure this text following the rules below.
 
 [Filler Removal]
 - Remove habitual fillers: "um", "uh", "like", "you know"
+- Also remove fillers at the start of speaker-labeled utterances:
+  "Speaker A: um, ..." -> "Speaker A: ..."
+  "Speaker B: uh... got it" -> "Speaker B: got it"
 - Keep meaningful responses: "yes", "right", "I see", "okay", "got it"
 
 [Output Format]
@@ -1242,6 +1298,21 @@ Correct and structure this text following the rules below.
   "we need to meet the KP eyes" → "we need to meet the KPIs"
   "the buh get for Q3" → "the budget for Q3"
 
+[Everyday Vocabulary Recovery]
+- Recover practical everyday phrases used in meetings:
+  "please walk us through", "as mentioned earlier", "can you share updates", "let's confirm", "I'll follow up".
+- Keep short acknowledgments when they signal agreement or decision.
+
+[Domain Terminology Recovery]
+- Prioritize restoration of domain terms if context indicates a specialized discussion.
+- Economics/Finance: inflation, interest rate, exchange rate, EBITDA, ROE, cash flow
+- Law/Compliance: statute, clause, precedent, liability, data protection, compliance
+- Politics/Public policy: parliament, bill, budget, regulation, public hearing
+- IT/Data: API, SDK, CI/CD, microservice, encryption, authorization, observability
+- Environment/ESG: carbon neutrality, Scope 1/2/3, emissions trading, sustainability
+- Medicine/Healthcare: diagnosis, protocol, adverse event, CT, MRI, follow-up
+- Humanities/Education: philosophy, ethics, literacy, interpretation, curriculum, rubric
+
 [Speaker Separation - Must Apply]
 - Label meeting participants: "Participant 1:", "Participant 2:", "Participant 3:", etc.
 - Criteria for speaker identification:
@@ -1268,6 +1339,9 @@ Correct and structure this text following the rules below.
 
 [Filler Removal]
 - Remove habitual fillers at sentence starts.
+- Also remove fillers at the start of participant utterances:
+  "Participant 1: um, ..." -> "Participant 1: ..."
+  "Participant 2: uh... let me add" -> "Participant 2: let me add"
 - Keep decision-related responses: "Agreed", "Let's do that", "Sounds good", "Approved"
 
 [Output Format]
@@ -1333,7 +1407,12 @@ def correct_text(text: str, transcription_type: str = "sermon", language: str = 
             corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
 
         # 영어 추임새 제거
-        corrected = re.sub(r'(?m)^(Um|Uh|So|Like|You know|I mean)[,.\s]+', '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(r'(?m)^(Um|Uh|So|Like|You know|I mean)[,.\s~?!]+', '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(
+            r'(?mi)^((?:Speaker|Participant)\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?\s*[:：]\s*)(?:um+|uh+|er+|ah+|hmm+|you know|i mean|like)[,.\s~?!]+',
+            r'\1',
+            corrected,
+        )
         corrected = re.sub(r'\n{3,}', '\n\n', corrected)
 
     else:
@@ -1368,8 +1447,13 @@ def correct_text(text: str, transcription_type: str = "sermon", language: str = 
             corrected = corrected.replace(wrong, right)
 
         # 추임새 제거 (한국어 공통)
-        corrected = re.sub(r'(?m)^(예|아|자|어|응|네|에|그)[,.\s~]+', '', corrected)
-        corrected = re.sub(r'(?<=[.?!])\s*(예|아|자|어|응|네)[,~]\s*', ' ', corrected)
+        corrected = re.sub(r'(?m)^(?:예+|아+|자+|어+|음+|응+|네+|에+|그+)[,.\s~?？！]+', '', corrected)
+        corrected = re.sub(
+            r'(?m)^((?:화자\s*(?:[A-Z]|\d+)(?:\([^)]*\))?|참석자\s*\d+(?:\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]\s*)(?:예+|아+|자+|어+|음+|응+|네+|에+|그+)[,.\s~?？！]+',
+            r'\1',
+            corrected,
+        )
+        corrected = re.sub(r'(?<=[.?!])\s*(?:예|아|자|어|음|응|네)[,~]\s*', ' ', corrected)
         corrected = re.sub(r'\n{3,}', '\n\n', corrected)
 
     return corrected

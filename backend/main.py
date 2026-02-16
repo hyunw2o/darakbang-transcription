@@ -120,6 +120,36 @@ AUDIO_MIME_TYPES = {
     ".webm": "audio/webm",
     ".mp4": "audio/mp4",
 }
+KO_DAILY_CONTEXT_TERMS = (
+    "안녕하세요, 여보세요, 잠시만요, 다시 말씀해 주세요, 확인 부탁드립니다, 전달 부탁드립니다, "
+    "일정 조율, 비용 문의, 계약 검토, 담당자 연결, 자료 공유, 회의록, 후속 조치"
+)
+KO_DOMAIN_CONTEXT_TERMS = (
+    "경제학(인플레이션, 기준금리, 환율, 공급망, 총수요), "
+    "법(판례, 조문, 약관, 손해배상, 위약금, 합의서), "
+    "정치(국회, 법안, 예산안, 외교, 여론조사), "
+    "IT(API, SDK, CI/CD, 클라우드, Docker, Kubernetes, 데이터베이스, 보안), "
+    "환경(탄소중립, 온실가스, 재생에너지, ESG, 배출권), "
+    "의료(진단, 처방, 약물, CT, MRI, 부작용), "
+    "인문학(철학, 윤리, 문해력, 서사, 해석), "
+    "교육(교육과정, 평가, 학습목표, 피드백), "
+    "경영/재무(KPI, ROI, 손익계산서, 현금흐름, 영업이익)"
+)
+EN_DAILY_CONTEXT_TERMS = (
+    "hello, hi, hold on, could you repeat that, please confirm, please share, "
+    "schedule coordination, cost inquiry, contract review, owner assignment, follow-up action"
+)
+EN_DOMAIN_CONTEXT_TERMS = (
+    "economics(inflation, interest rate, exchange rate, supply chain, aggregate demand), "
+    "law(case law, statute, clause, damages, penalty, settlement), "
+    "politics(parliament, bill, budget proposal, diplomacy, polling), "
+    "IT(API, SDK, CI/CD, cloud, Docker, Kubernetes, database, cybersecurity), "
+    "environment(carbon neutrality, greenhouse gas, renewable energy, ESG, emissions trading), "
+    "medicine(diagnosis, prescription, dosage, CT, MRI, side effects), "
+    "humanities(philosophy, ethics, literacy, narrative, interpretation), "
+    "education(curriculum, assessment, learning objective, feedback), "
+    "business/finance(KPI, ROI, P&L, cash flow, operating profit)"
+)
 STRUCTURED_SUMMARY_HEADERS = {
     "요약",
     "주요 내용",
@@ -602,7 +632,8 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
                 "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
                 "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
-                "blood pressure, blood sugar, CT, MRI, EEG, ECG, prescription, dosage, side effects"
+                "blood pressure, blood sugar, CT, MRI, EEG, ECG, prescription, dosage, side effects, "
+                f"{EN_DAILY_CONTEXT_TERMS}, {EN_DOMAIN_CONTEXT_TERMS}"
             )
         else:
             whisper_prompt = (
@@ -612,7 +643,8 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
                 "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
                 "blood pressure, CT, MRI, EEG, prescription, dosage, side effects, "
-                "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, profit margin"
+                "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, profit margin, "
+                f"{EN_DAILY_CONTEXT_TERMS}, {EN_DOMAIN_CONTEXT_TERMS}"
             )
     else:
         # ===== 한국어 프롬프트 =====
@@ -625,7 +657,8 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
                 "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
-                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증"
+                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, "
+                f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
         else:
             whisper_prompt = (
@@ -635,7 +668,8 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
                 "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
                 "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, "
-                "KPI, ROI, OKR, 프로젝트, 마일스톤, 스프린트, 데드라인, 예산, 매출, 영업이익"
+                "KPI, ROI, OKR, 프로젝트, 마일스톤, 스프린트, 데드라인, 예산, 매출, 영업이익, "
+                f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
 
     chunks = split_audio_file(file_path)
