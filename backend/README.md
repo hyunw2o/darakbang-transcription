@@ -50,8 +50,8 @@ uvicorn main:app --reload
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
 4. Supabase SQL Editor에서 아래 SQL 실행
-   - `backend/sql/saved_records.sql` (저장 기록 테이블)
-   - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 컬럼/인덱스)
+   - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
+   - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
 
 ## 배포 (Render)
 
@@ -64,6 +64,8 @@ uvicorn main:app --reload
    - `GEMINI_API_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
+   - `CORS_ALLOW_ORIGINS`
+   - `OAUTH_REDIRECT_ALLOW_HOSTS`
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
 
@@ -88,6 +90,16 @@ uvicorn main:app --reload
 - `POST /api/auth/login` : 로그인
 - `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=google|kakao`, `redirect_to` 필요)
 - `GET /api/auth/me` : 현재 사용자 조회
-- `POST /api/records/draft` : 기록본 초안 생성
+- `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
 - `POST /api/records` : 기록본 저장 (인증 필요)
 - `GET /api/records` : 내 기록본 목록 조회 (인증 필요)
+- `POST /api/summarize` : 설교 요약 (인증 필요)
+
+## 보안 설정 체크리스트
+
+- `CORS_ALLOW_ORIGINS`: 프론트엔드 도메인만 허용 (와일드카드 금지)
+- `OAUTH_REDIRECT_ALLOW_HOSTS`: OAuth 리다이렉트 도메인 화이트리스트 설정
+- `RATE_LIMIT_*`: 인증/변환 API 과도 호출 제한
+- `MAX_UPLOAD_BYTES`, `MAX_TEXT_INPUT_CHARS`: 대용량 요청 제한
+- `EXPOSE_TERMS_ENDPOINT=false`: 디버깅용 `/api/terms` 외부 비활성화
+- Supabase SQL에서 RLS 정책 적용 여부 확인

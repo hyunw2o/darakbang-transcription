@@ -1,5 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import google.generativeai as genai
 from openai import OpenAI
 import os
@@ -19,6 +20,7 @@ import re
 import urllib.request
 import urllib.error
 import urllib.parse
+from collections import defaultdict, deque
 
 # 다락방 용어 임포트
 from church_terms import (
@@ -37,14 +39,58 @@ from church_terms import (
 
 load_dotenv()
 
+def _parse_csv_env(name: str, default: list[str]) -> list[str]:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://malloc24.vercel.app",
+    "https://www.malloc24.vercel.app",
+    "https://mallog24.vercel.app",
+    "https://www.mallog24.vercel.app",
+]
+DEFAULT_OAUTH_REDIRECT_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "malloc24.vercel.app",
+    "www.malloc24.vercel.app",
+    "mallog24.vercel.app",
+    "www.mallog24.vercel.app",
+]
+
+CORS_ALLOW_ORIGINS = _parse_csv_env("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ORIGINS)
+CORS_ALLOW_ORIGIN_REGEX = (os.getenv("CORS_ALLOW_ORIGIN_REGEX") or "").strip() or None
+ALLOWED_OAUTH_REDIRECT_HOSTS = {
+    host.lower() for host in _parse_csv_env("OAUTH_REDIRECT_ALLOW_HOSTS", DEFAULT_OAUTH_REDIRECT_HOSTS)
+}
+
+RATE_LIMIT_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60")))
+RATE_LIMIT_GENERAL = max(1, int(os.getenv("RATE_LIMIT_GENERAL", "180")))
+RATE_LIMIT_AUTH = max(1, int(os.getenv("RATE_LIMIT_AUTH", "30")))
+RATE_LIMIT_TRANSCRIBE = max(1, int(os.getenv("RATE_LIMIT_TRANSCRIBE", "10")))
+
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+MAX_TEXT_INPUT_CHARS = int(os.getenv("MAX_TEXT_INPUT_CHARS", "120000"))
+MAX_RECORD_CONTENT_CHARS = int(os.getenv("MAX_RECORD_CONTENT_CHARS", "80000"))
+EXPOSE_TERMS_ENDPOINT = (os.getenv("EXPOSE_TERMS_ENDPOINT", "false").strip().lower() == "true")
+
+ALLOWED_LANGUAGES = {"ko", "en"}
+ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
+
 app = FastAPI(title="말로그24 API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOW_ORIGINS if not CORS_ALLOW_ORIGIN_REGEX else [],
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Gemini 설정
@@ -92,9 +138,14 @@ async def root():
 # Supabase 설정
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client | None = None
 if not SUPABASE_URL or not SUPABASE_KEY:
     print("Warning: SUPABASE_URL or SUPABASE_KEY not set.")
-supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
+else:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"Warning: Failed to initialize Supabase client: {e}")
 
 # 인메모리 상태 추적
 task_status = {}
@@ -119,6 +170,20 @@ AUDIO_MIME_TYPES = {
     ".flac": "audio/flac",
     ".webm": "audio/webm",
     ".mp4": "audio/mp4",
+}
+ALLOWED_AUDIO_CONTENT_TYPES = {
+    "application/octet-stream",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/flac",
+    "audio/ogg",
+    "audio/webm",
+    "audio/mp4",
+    "audio/x-m4a",
+    "video/mp4",
 }
 KO_DAILY_CONTEXT_TERMS = (
     "안녕하세요, 여보세요, 잠시만요, 다시 말씀해 주세요, 확인 부탁드립니다, 전달 부탁드립니다, "
@@ -187,6 +252,183 @@ EN_RESPONSE_PREFIXES = (
     "understood",
     "sounds good",
 )
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+_request_counters: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _normalize_content_type(content_type: str | None) -> str:
+    if not content_type:
+        return ""
+
+    normalized = content_type.split(";", 1)[0].strip().lower()
+    aliases = {
+        "audio/x-wav": "audio/wav",
+        "audio/wave": "audio/wav",
+        "audio/mp3": "audio/mpeg",
+        "audio/x-m4a": "audio/mp4",
+        "video/mp4": "audio/mp4",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _pick_extension_for_mime(mime_type: str | None) -> str | None:
+    if not mime_type:
+        return None
+    for ext, mapped in AUDIO_MIME_TYPES.items():
+        if mapped == mime_type:
+            return ext
+    return None
+
+
+def _detect_audio_mime_type_from_signature(content: bytes) -> str | None:
+    if not content:
+        return None
+
+    header = content[:64]
+    if header.startswith(b"ID3") or (len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0):
+        return "audio/mpeg"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WAVE":
+        return "audio/wav"
+    if content.startswith(b"fLaC"):
+        return "audio/flac"
+    if content.startswith(b"OggS"):
+        return "audio/ogg"
+    if content.startswith(b"\x1A\x45\xDF\xA3"):
+        return "audio/webm"
+    if len(content) >= 12 and content[4:8] == b"ftyp":
+        return "audio/mp4"
+
+    return None
+
+
+def _validate_uploaded_audio_payload(file: UploadFile, contents: bytes) -> tuple[str, str]:
+    if not contents:
+        raise HTTPException(status_code=400, detail="빈 파일은 업로드할 수 없습니다.")
+
+    signature_mime = _detect_audio_mime_type_from_signature(contents[:4096])
+    declared_content_type = _normalize_content_type(file.content_type)
+    file_name = file.filename or ""
+    extension = pathlib.Path(file_name).suffix.lower()
+
+    if extension not in AUDIO_MIME_TYPES:
+        inferred_extension = _pick_extension_for_mime(signature_mime)
+        if inferred_extension:
+            extension = inferred_extension
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="지원하지 않는 파일 형식입니다. mp3/wav/m4a/ogg/flac/webm/mp4만 업로드 가능합니다.",
+            )
+
+    expected_mime = AUDIO_MIME_TYPES[extension]
+    if declared_content_type and declared_content_type not in ALLOWED_AUDIO_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 Content-Type입니다.")
+    if (
+        declared_content_type
+        and declared_content_type != "application/octet-stream"
+        and declared_content_type != expected_mime
+    ):
+        raise HTTPException(status_code=400, detail="파일 확장자와 Content-Type이 일치하지 않습니다.")
+    if signature_mime and signature_mime != expected_mime:
+        raise HTTPException(status_code=400, detail="파일 확장자와 실제 파일 형식이 일치하지 않습니다.")
+
+    return extension, signature_mime or expected_mime
+
+
+def _get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip() or "unknown"
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _resolve_rate_limit_bucket(path: str, client_ip: str) -> tuple[str, int]:
+    if path == "/api/transcribe":
+        return f"transcribe:{client_ip}", RATE_LIMIT_TRANSCRIBE
+    if path.startswith("/api/auth/"):
+        return f"auth:{client_ip}", RATE_LIMIT_AUTH
+    return f"general:{client_ip}", RATE_LIMIT_GENERAL
+
+
+def _check_rate_limit(bucket_key: str, limit: int) -> tuple[bool, int]:
+    now = time.time()
+    window_start = now - RATE_LIMIT_WINDOW_SECONDS
+    bucket = _request_counters[bucket_key]
+
+    while bucket and bucket[0] <= window_start:
+        bucket.popleft()
+
+    if len(bucket) >= limit:
+        retry_after = RATE_LIMIT_WINDOW_SECONDS
+        if bucket:
+            retry_after = max(1, int(math.ceil(RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0]))))
+        return True, retry_after
+
+    bucket.append(now)
+    return False, 0
+
+
+def _apply_security_headers(response, scheme: str) -> None:
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Cache-Control", "no-store")
+    if scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/"):
+        bucket_key, limit = _resolve_rate_limit_bucket(path, _get_client_ip(request))
+        blocked, retry_after = _check_rate_limit(bucket_key, limit)
+        if blocked:
+            response = JSONResponse(
+                status_code=429,
+                content={"detail": "요청이 너무 많습니다. 잠시 후 다시 시도하세요."},
+            )
+            response.headers["Retry-After"] = str(retry_after)
+            _apply_security_headers(response, request.url.scheme)
+            return response
+
+    response = await call_next(request)
+    _apply_security_headers(response, request.url.scheme)
+    return response
+
+
+def _is_allowed_redirect_host(hostname: str | None) -> bool:
+    if not hostname:
+        return False
+    host = hostname.lower()
+
+    for allowed in ALLOWED_OAUTH_REDIRECT_HOSTS:
+        normalized = allowed.strip().lower()
+        if not normalized:
+            continue
+        if normalized.startswith("."):
+            if host.endswith(normalized):
+                return True
+        elif host == normalized:
+            return True
+    return False
+
+
+def _get_supabase_client() -> Client:
+    if supabase is None:
+        raise HTTPException(status_code=500, detail="Supabase DB 환경이 설정되지 않았습니다.")
+    return supabase
+
+
+def _normalize_email_or_raise(email: str) -> str:
+    normalized = (email or "").strip().lower()
+    if not EMAIL_REGEX.match(normalized):
+        raise HTTPException(status_code=400, detail="이메일 형식이 올바르지 않습니다.")
+    return normalized
 
 
 def _extract_auth_error_message(raw_text: str) -> str:
@@ -258,6 +500,8 @@ def _validate_redirect_url(redirect_to: str) -> str:
     parsed = urllib.parse.urlparse(normalized)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise HTTPException(status_code=400, detail="redirect_to URL 형식이 올바르지 않습니다.")
+    if not _is_allowed_redirect_host(parsed.hostname):
+        raise HTTPException(status_code=400, detail="허용되지 않은 redirect_to 도메인입니다.")
     return normalized
 
 
@@ -267,7 +511,7 @@ def _ensure_transcriptions_user_scope_ready() -> None:
         return
 
     try:
-        supabase.table("transcriptions").select("user_id").limit(1).execute()
+        _get_supabase_client().table("transcriptions").select("user_id").limit(1).execute()
         TRANSCRIPTION_SCOPE_VALIDATED = True
     except Exception as e:
         error_text = str(e).lower()
@@ -747,6 +991,7 @@ async def process_transcription(
     language: str,
     correct: bool,
     transcription_type: str = "sermon",
+    source_mime_type: str = "",
 ):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     try:
@@ -779,7 +1024,7 @@ async def process_transcription(
             # ===== 폴백: Gemini 단일 방식 (기존) =====
             print(f"[{task_id}] Fallback: Gemini-only mode")
 
-            mime_type = _resolve_audio_mime_type(temp_file_path)
+            mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
             audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
             target_model = get_optimal_model()
             model = genai.GenerativeModel(
@@ -833,7 +1078,7 @@ async def process_transcription(
             "transcription_type": transcription_type,
         }
 
-        supabase.table("transcriptions").insert({
+        _get_supabase_client().table("transcriptions").insert({
             "task_id": task_id,
             "user_id": user_id,
             "status": "completed",
@@ -856,7 +1101,7 @@ async def process_transcription(
         traceback.print_exc()
         task_status[task_id] = "error"
         try:
-            supabase.table("transcriptions").insert({
+            _get_supabase_client().table("transcriptions").insert({
                 "task_id": task_id,
                 "user_id": user_id,
                 "status": "error",
@@ -885,14 +1130,21 @@ async def transcribe_audio(
         _ensure_transcriptions_user_scope_ready()
         user = _get_current_user(authorization)
         user_id = user["id"]
-        contents = await file.read()
-        if len(contents) > 100 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="파일 크기는 100MB 이하")
 
-        # 원본 확장자 유지
-        original_ext = pathlib.Path(file.filename).suffix.lower() if file.filename else ".mp3"
-        if original_ext not in ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.webm', '.mp4']:
-            original_ext = ".mp3"
+        normalized_language = (language or "ko").strip().lower()
+        if normalized_language not in ALLOWED_LANGUAGES:
+            raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko 또는 en만 가능합니다.")
+
+        normalized_transcription_type = (transcription_type or "sermon").strip().lower()
+        if normalized_transcription_type not in ALLOWED_TRANSCRIPTION_TYPES:
+            raise HTTPException(status_code=400, detail="지원하지 않는 녹취 유형입니다.")
+
+        contents = await file.read()
+        if len(contents) > MAX_UPLOAD_BYTES:
+            size_mb = int(MAX_UPLOAD_BYTES / 1024 / 1024)
+            raise HTTPException(status_code=400, detail=f"파일 크기는 {size_mb}MB 이하")
+
+        original_ext, source_mime_type = _validate_uploaded_audio_payload(file, contents)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=original_ext) as temp_file:
             temp_file.write(contents)
@@ -907,9 +1159,10 @@ async def transcribe_audio(
             task_id,
             user_id,
             temp_file_path,
-            language,
+            normalized_language,
             correct,
-            transcription_type
+            normalized_transcription_type,
+            source_mime_type,
         )
 
         type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
@@ -918,9 +1171,9 @@ async def transcribe_audio(
             "success": True,
             "task_id": task_id,
             "status": "queued",
-            "message": f"{type_labels.get(transcription_type, '녹취')} 변환 작업이 시작되었습니다.",
+            "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환 작업이 시작되었습니다.",
             "engine": "whisper+gemini" if openai_client else "gemini-only",
-            "transcription_type": transcription_type,
+            "transcription_type": normalized_transcription_type,
         }
 
     except HTTPException:
@@ -948,7 +1201,7 @@ async def get_task_status(
             return {"task_id": task_id, "status": status}
 
     response = (
-        supabase.table("transcriptions")
+        _get_supabase_client().table("transcriptions")
         .select("*")
         .eq("task_id", task_id)
         .eq("user_id", user_id)
@@ -984,6 +1237,8 @@ async def get_task_status(
 @app.get("/api/terms")
 async def get_terms():
     """용어 확인 (디버깅용)"""
+    if not EXPOSE_TERMS_ENDPOINT:
+        raise HTTPException(status_code=404, detail="Not Found")
     return {
         "gemini_context": get_gemini_correction_prompt()[:500],
         "darakbang_core": DARAKBANG_CORE[:30],
@@ -999,7 +1254,7 @@ async def get_history(authorization: str | None = Header(default=None)):
     user_id = user["id"]
 
     response = (
-        supabase.table("transcriptions")
+        _get_supabase_client().table("transcriptions")
         .select("task_id, status, created_at, characters, engine, corrected_text, transcription_type")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
@@ -1030,9 +1285,12 @@ async def signup(
     """Supabase Auth 회원가입"""
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
+    if len(password) > 128:
+        raise HTTPException(status_code=400, detail="비밀번호 길이가 너무 깁니다.")
 
+    normalized_email = _normalize_email_or_raise(email)
     payload = {
-        "email": email.strip().lower(),
+        "email": normalized_email,
         "password": password,
     }
     if full_name.strip():
@@ -1058,9 +1316,10 @@ async def login(
     password: str = Form(...),
 ):
     """Supabase Auth 로그인"""
+    normalized_email = _normalize_email_or_raise(email)
     data = _supabase_auth_request(
         "token?grant_type=password",
-        payload={"email": email.strip().lower(), "password": password},
+        payload={"email": normalized_email, "password": password},
     )
     return {
         "success": True,
@@ -1112,22 +1371,31 @@ async def generate_record_draft(
     text: str = Form(...),
     category: str = Form(...),
     language: str = Form("ko"),
+    authorization: str | None = Header(default=None),
 ):
     """기록본 초안 생성 (회의 키워드/진료 도움 기록/설교 핵심 요약)"""
+    _get_current_user(authorization)
     normalized_category = category.strip()
+    normalized_language = (language or "ko").strip().lower()
+    normalized_text = text.strip()
+
     if normalized_category not in ALLOWED_RECORD_CATEGORIES:
         raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
-    if not text.strip():
+    if normalized_language not in ALLOWED_LANGUAGES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko 또는 en만 가능합니다.")
+    if not normalized_text:
         raise HTTPException(status_code=400, detail="원문 텍스트가 비어 있습니다.")
+    if len(normalized_text) > MAX_TEXT_INPUT_CHARS:
+        raise HTTPException(status_code=400, detail=f"원문 텍스트는 {MAX_TEXT_INPUT_CHARS}자 이하여야 합니다.")
 
-    prompt = _build_record_draft_prompt(normalized_category, language)
+    prompt = _build_record_draft_prompt(normalized_category, normalized_language)
     target_model = get_optimal_model()
     model = genai.GenerativeModel(model_name=target_model)
 
     full_prompt = f"""{prompt}
 
 [원문]
-{text}
+{normalized_text}
 """
 
     response = None
@@ -1150,8 +1418,8 @@ async def generate_record_draft(
     return {
         "success": True,
         "category": normalized_category,
-        "category_label": _get_record_category_label(normalized_category, language),
-        "title": _get_record_category_label(normalized_category, language),
+        "category_label": _get_record_category_label(normalized_category, normalized_language),
+        "title": _get_record_category_label(normalized_category, normalized_language),
         "content": response.text if response else "",
     }
 
@@ -1174,6 +1442,8 @@ async def save_record(
         raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
     if not normalized_content:
         raise HTTPException(status_code=400, detail="저장할 기록 내용이 비어 있습니다.")
+    if len(normalized_content) > MAX_RECORD_CONTENT_CHARS:
+        raise HTTPException(status_code=400, detail=f"기록 내용은 {MAX_RECORD_CONTENT_CHARS}자 이하여야 합니다.")
 
     insert_row = {
         "user_id": user["id"],
@@ -1186,7 +1456,7 @@ async def save_record(
     }
 
     try:
-        response = supabase.table("saved_records").insert(insert_row).execute()
+        response = _get_supabase_client().table("saved_records").insert(insert_row).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"saved_records 저장 실패: {str(e)}")
 
@@ -1203,16 +1473,19 @@ async def get_records(
 ):
     """로그인 사용자별 저장 기록 조회"""
     user = _get_current_user(authorization)
+    normalized_category = category.strip()
+    if normalized_category and normalized_category not in ALLOWED_RECORD_CATEGORIES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
 
     try:
         query = (
-            supabase.table("saved_records")
+            _get_supabase_client().table("saved_records")
             .select("*")
             .eq("user_id", user["id"])
             .order("created_at", desc=True)
         )
-        if category:
-            query = query.eq("category", category)
+        if normalized_category:
+            query = query.eq("category", normalized_category)
         response = query.execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"saved_records 조회 실패: {str(e)}")
@@ -1223,10 +1496,18 @@ async def get_records(
 @app.post("/api/summarize")
 async def summarize_sermon(
     text: str = Form(...),
-    summary_type: str = Form("short")
+    summary_type: str = Form("short"),
+    authorization: str | None = Header(default=None),
 ):
     """다락방 설교 요약 (Gemini)"""
     try:
+        _get_current_user(authorization)
+        normalized_text = text.strip()
+        if not normalized_text:
+            raise HTTPException(status_code=400, detail="요약할 텍스트가 비어 있습니다.")
+        if len(normalized_text) > MAX_TEXT_INPUT_CHARS:
+            raise HTTPException(status_code=400, detail=f"요약 입력은 {MAX_TEXT_INPUT_CHARS}자 이하여야 합니다.")
+
         target_model = get_optimal_model()
         model = genai.GenerativeModel(model_name=target_model)
 
@@ -1234,7 +1515,7 @@ async def summarize_sermon(
         full_prompt = f"""{prompt}
 
 설교 내용:
-{text}"""
+{normalized_text}"""
 
         response = None
         max_retries = 5

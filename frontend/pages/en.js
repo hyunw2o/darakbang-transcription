@@ -116,12 +116,12 @@ export default function Home({ darkMode, setDarkMode }) {
 
     if (oauthAccessToken) {
       setAuthToken(oauthAccessToken)
-      window.localStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
+      window.sessionStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
       fetchCurrentUser(oauthAccessToken)
       fetchSavedRecords(oauthAccessToken)
       setNotice('Social sign-in completed.')
     } else {
-      const savedToken = window.localStorage.getItem(AUTH_TOKEN_KEY)
+      const savedToken = window.sessionStorage.getItem(AUTH_TOKEN_KEY)
       if (savedToken) {
         setAuthToken(savedToken)
         fetchCurrentUser(savedToken)
@@ -178,7 +178,7 @@ export default function Home({ darkMode, setDarkMode }) {
       setRecordDrafts({})
       setShowHistory(false)
       setShowRecords(false)
-      window.localStorage.removeItem(AUTH_TOKEN_KEY)
+      window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
       console.error('Failed to fetch current user', e)
     }
   }
@@ -387,7 +387,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
       if (data.access_token) {
         setAuthToken(data.access_token)
-        window.localStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
         setAuthUser(data.user || null)
         fetchSavedRecords(data.access_token)
         fetchHistory(data.access_token)
@@ -438,7 +438,7 @@ export default function Home({ darkMode, setDarkMode }) {
     setShowHistory(false)
     setShowRecords(false)
     setError(null)
-    window.localStorage.removeItem(AUTH_TOKEN_KEY)
+    window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
     setNotice('You have been logged out.')
   }
 
@@ -495,6 +495,10 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const handleSummarize = async () => {
     if (!result?.corrected_text && !result?.raw_text) return
+    if (!authToken) {
+      setError('Please log in to generate summaries.')
+      return
+    }
     setLoading(true)
     setError(null)
     setNotice(null)
@@ -505,6 +509,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
       const response = await fetch(`${API_URL}/api/summarize`, {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData,
       })
       const data = await response.json()
@@ -518,6 +523,10 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const handleGenerateRecordDraft = async (category) => {
     if (!result?.corrected_text && !result?.raw_text) return
+    if (!authToken) {
+      setError('Please log in to generate record drafts.')
+      return
+    }
     setError(null)
     setNotice(null)
     setDraftLoadingCategory(category)
@@ -529,6 +538,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
       const response = await fetch(`${API_URL}/api/records/draft`, {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData,
       })
       const data = await response.json()
