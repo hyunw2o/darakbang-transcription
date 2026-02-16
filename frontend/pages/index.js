@@ -737,14 +737,14 @@ export default function Home({ darkMode, setDarkMode }) {
                     <span className="px-2 text-[11px] text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800">또는 소셜 로그인</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {socialProviders.map((provider) => (
                     <button
                       key={provider.key}
                       type="button"
                       onClick={() => handleSocialLogin(provider.key)}
                       disabled={authLoading || Boolean(socialLoading)}
-                      className="py-2.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:opacity-50 transition-colors"
+                      className="w-full h-11 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:opacity-50 transition-colors"
                     >
                       {socialLoading === provider.key ? '이동 중...' : provider.label}
                     </button>
