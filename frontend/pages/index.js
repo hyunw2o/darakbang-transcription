@@ -103,8 +103,34 @@ export default function Home({ darkMode, setDarkMode }) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
+  const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
+  const WARMUP_TIMEOUT_MS = 4000
+
+  const isJwtExpired = (token) => {
+    try {
+      const payload = token.split('.')[1]
+      if (!payload) return false
+      const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+      const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+      const decoded = JSON.parse(window.atob(padded))
+      if (!decoded?.exp || typeof decoded.exp !== 'number') return false
+      return Date.now() >= (decoded.exp * 1000) - AUTH_TOKEN_EXP_LEEWAY_MS
+    } catch {
+      return false
+    }
+  }
+
+  const warmUpBackend = () => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS)
+    fetch(`${API_URL}/health`, { signal: controller.signal })
+      .catch(() => {})
+      .finally(() => window.clearTimeout(timeoutId))
+  }
 
   useEffect(() => {
+    warmUpBackend()
+
     const oauthParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const queryParams = new URLSearchParams(window.location.search)
     const oauthAccessToken = oauthParams.get('access_token') || queryParams.get('access_token')
@@ -115,17 +141,26 @@ export default function Home({ darkMode, setDarkMode }) {
       queryParams.get('error')
 
     if (oauthAccessToken) {
+      if (isJwtExpired(oauthAccessToken)) {
+        window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+        setError('로그인 세션이 만료되었습니다. 다시 로그인해주세요.')
+      } else {
       setAuthToken(oauthAccessToken)
       window.sessionStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
       fetchCurrentUser(oauthAccessToken)
       fetchSavedRecords(oauthAccessToken)
       setNotice('소셜 로그인이 완료되었습니다.')
+      }
     } else {
       const savedToken = window.sessionStorage.getItem(AUTH_TOKEN_KEY)
       if (savedToken) {
-        setAuthToken(savedToken)
-        fetchCurrentUser(savedToken)
-        fetchSavedRecords(savedToken)
+        if (isJwtExpired(savedToken)) {
+          window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+        } else {
+          setAuthToken(savedToken)
+          fetchCurrentUser(savedToken)
+          fetchSavedRecords(savedToken)
+        }
       }
     }
 
