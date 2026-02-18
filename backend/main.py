@@ -807,44 +807,79 @@ def get_optimal_model():
     return "gemini-2.5-flash"
 
 
-def split_audio_file(file_path: str) -> list[str]:
+def _prepare_audio_for_whisper(audio, transcription_type: str):
     """
-    25MB 초과 파일을 청크로 분할.
-    ffmpeg으로 10분 단위 분할 (Whisper 제한 대응)
+    Whisper 인식용 오디오 전처리:
+    - 무손실 PCM(16kHz mono)로 통일
+    - 저역/고역 노이즈를 얕게 컷
+    - 동적 범위 압축 + 정규화로 빠른 발화 가독성 개선
     """
-    file_size = os.path.getsize(file_path)
-    if file_size <= WHISPER_MAX_SIZE:
-        return [file_path]
+    from pydub import effects
 
+    prepared = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+    prepared = prepared.high_pass_filter(80).low_pass_filter(7600)
+
+    # 설교/강의는 배경음(반주, 잔향) 영향이 잦아 저역 컷을 조금 더 강하게 적용
+    if transcription_type == "sermon":
+        prepared = prepared.high_pass_filter(100)
+
+    prepared = effects.compress_dynamic_range(
+        prepared,
+        threshold=-24.0,
+        ratio=3.0,
+        attack=5,
+        release=90,
+    )
+    prepared = effects.normalize(prepared, headroom=0.8)
+    return prepared
+
+
+def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list[tuple[str, float]]:
+    """
+    Whisper 전처리 + 청크 분할.
+    모든 입력을 16kHz mono WAV로 변환해 재압축 손실을 줄이고,
+    8분 단위로 분할해 25MB 제한을 안정적으로 회피한다.
+    반환값: [(chunk_path, duration_sec), ...]
+    """
     from pydub import AudioSegment
-
-    print(f"File size {file_size / 1024 / 1024:.1f}MB > 24MB, splitting...")
 
     # 파일 확장자 확인
     ext = pathlib.Path(file_path).suffix.lower()
-    format_map = {'.mp3': 'mp3', '.wav': 'wav', '.m4a': 'mp4', '.ogg': 'ogg', '.flac': 'flac', '.webm': 'webm'}
-    fmt = format_map.get(ext, 'mp3')
+    format_map = {".mp3": "mp3", ".wav": "wav", ".m4a": "mp4", ".ogg": "ogg", ".flac": "flac", ".webm": "webm"}
+    fmt = format_map.get(ext, "mp3")
 
-    audio = AudioSegment.from_file(file_path, format=fmt)
+    try:
+        audio = AudioSegment.from_file(file_path, format=fmt)
+        audio = _prepare_audio_for_whisper(audio, transcription_type)
+    except Exception as exc:
+        print(f"Audio preprocessing failed, using original file: {exc}")
+        return [(file_path, 0.0)]
+
     duration_ms = len(audio)
-
-    # 10분 단위로 분할 (겹침 2초)
-    chunk_duration = 10 * 60 * 1000  # 10분
+    chunk_duration = 8 * 60 * 1000  # 8분 (16k mono WAV 기준 약 15MB)
     overlap = 2000  # 2초 겹침 (문장 끊김 방지)
 
-    chunks = []
+    chunks: list[tuple[str, float]] = []
     start = 0
     chunk_idx = 0
 
     while start < duration_ms:
         end = min(start + chunk_duration, duration_ms)
         chunk = audio[start:end]
+        chunk_path = f"{file_path}_chunk{chunk_idx}.wav"
+        chunk.export(chunk_path, format="wav")
 
-        chunk_path = f"{file_path}_chunk{chunk_idx}.mp3"
-        chunk.export(chunk_path, format="mp3", bitrate="64k")
-        chunks.append(chunk_path)
-        print(f"  Chunk {chunk_idx}: {start/1000:.0f}s ~ {end/1000:.0f}s ({os.path.getsize(chunk_path)/1024/1024:.1f}MB)")
+        chunk_seconds = len(chunk) / 1000.0
+        chunk_size_mb = os.path.getsize(chunk_path) / 1024 / 1024
+        print(f"  Chunk {chunk_idx}: {start/1000:.0f}s ~ {end/1000:.0f}s ({chunk_size_mb:.1f}MB)")
 
+        # 안전장치: 혹시라도 제한을 넘으면 원본으로 폴백
+        if os.path.getsize(chunk_path) > WHISPER_MAX_SIZE:
+            print(f"  Chunk {chunk_idx} exceeds Whisper size limit, fallback to original file")
+            os.unlink(chunk_path)
+            return [(file_path, 0.0)]
+
+        chunks.append((chunk_path, chunk_seconds))
         chunk_idx += 1
         start = end - overlap if end < duration_ms else end
 
@@ -893,11 +928,12 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     else:
         # ===== 한국어 프롬프트 =====
         if transcription_type == "sermon":
-            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 앉은뱅이, 뉴에이지, 프리메이슨, REA, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터, 올해(연도), 오래(기간), 결재(승인), 결제(지불), 낫다(회복), 낳다(출산), 낮다(높이 반대), 안/않, 되/돼, 웬/왠지, 드로에게 교회/드로우게 교회=드로아교회, 베드로에게는(조사)=유지"
+            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 앉은뱅이, 뉴에이지, 프리메이슨, REA, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터, 올해(연도), 오래(기간), 결재(승인), 결제(지불), 낫다(회복), 낳다(출산), 낮다(높이 반대), 안/않, 되/돼, 웬/왠지, 드로에게 교회/드로우게 교회=드로아교회, 베드로에게는(조사)=유지, 초고속 발화(120BPM+), 랩처럼 빠른 단독 화자, 음절 경계 복원, 조사/어미 유지"
         elif transcription_type == "phonecall":
             whisper_prompt = (
                 "전화 통화 녹음입니다. 두 명의 화자가 대화합니다. "
                 "음질이 낮거나 불명확한 부분은 문맥에 맞게 추정하세요. "
+                "한 화자가 매우 빠르게(대략 120BPM 이상, 랩처럼) 말해도 음절 경계를 문맥으로 복원하고 누락 없이 기록하세요. "
                 "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)'는 문맥으로 구분하세요. "
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
@@ -909,6 +945,7 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
             whisper_prompt = (
                 "회의 또는 대화 녹음입니다. 여러 참석자가 있습니다. "
                 "음질이 낮거나 겹치는 목소리가 있을 수 있으며, 문맥에 맞게 추정하세요. "
+                "특정 화자가 매우 빠르게(대략 120BPM 이상, 랩처럼) 말해도 음절 경계를 문맥으로 복원하고 누락 없이 기록하세요. "
                 "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)'는 문맥으로 구분하세요. "
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
@@ -918,10 +955,19 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
 
-    chunks = split_audio_file(file_path)
+    chunks = split_audio_file(file_path, transcription_type)
     all_text = []
 
-    for i, chunk_path in enumerate(chunks):
+    rapid_retry_prompt = (
+        "초고속 발화 또는 랩처럼 빠른 한국어 발화가 포함될 수 있습니다. "
+        "붙어 들리는 음절도 단어 경계를 복원하여 누락 없이 전부 기록하세요."
+        if language == "ko"
+        else
+        "This audio may include very fast rap-like delivery. "
+        "Recover word boundaries from merged syllables and transcribe every audible word."
+    )
+
+    for i, (chunk_path, chunk_duration_sec) in enumerate(chunks):
         print(f"  Whisper transcribing chunk {i+1}/{len(chunks)}...")
 
         with open(chunk_path, "rb") as audio_file:
@@ -933,7 +979,24 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 response_format="text",
             )
 
-        all_text.append(response.strip())
+        chunk_text = response.strip()
+
+        # 빠른 발화/랩 구간에서 지나치게 짧게 인식된 경우 보수적으로 1회 재시도
+        if chunk_duration_sec >= 45 and len(chunk_text) < 25:
+            print(f"  Chunk {i+1}: sparse transcript detected, retrying with rapid-speech prompt...")
+            with open(chunk_path, "rb") as audio_file:
+                retry_response = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language=language,
+                    prompt=f"{whisper_prompt} {rapid_retry_prompt}",
+                    response_format="text",
+                )
+            retry_text = retry_response.strip()
+            if len(retry_text) > len(chunk_text):
+                chunk_text = retry_text
+
+        all_text.append(chunk_text)
 
         # 청크 파일 삭제 (원본 제외)
         if chunk_path != file_path:
