@@ -56,24 +56,53 @@ function parseResponseText(raw) {
   }
 }
 
-async function requestApi(path, { method = "GET", token = "", body = undefined } = {}) {
+function getFriendlyAuthError(message) {
+  const raw = (message || "").trim();
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("invalid login credentials")) {
+    return "이메일/비밀번호가 일치하지 않습니다. 기존 계정이 Google/Kakao로 가입된 계정이면 소셜 로그인 버튼을 사용하세요.";
+  }
+  if (normalized.includes("email not confirmed")) {
+    return "이메일 인증이 완료되지 않았습니다. 인증 메일 확인 후 다시 로그인해주세요.";
+  }
+  if (normalized.includes("timeout")) {
+    return "인증 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.";
+  }
+  return raw || "인증 처리 실패";
+}
+
+async function requestApi(path, { method = "GET", token = "", body = undefined, timeoutMs = 20000 } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const rawText = await response.text();
-  const data = parseResponseText(rawText);
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    throw new Error(data?.detail || data?.message || `요청 실패 (${response.status})`);
+    const rawText = await response.text();
+    const data = parseResponseText(rawText);
+
+    if (!response.ok) {
+      throw new Error(data?.detail || data?.message || `요청 실패 (${response.status})`);
+    }
+
+    return data;
+  } catch (e) {
+    if (e?.name === "AbortError") {
+      throw new Error("요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return data;
 }
 
 function normalizeMimeType(value) {
@@ -190,6 +219,10 @@ function App() {
 
   const isLoggedIn = !!authToken && !!authUser;
 
+  const warmUpBackend = () => {
+    requestApi("/health", { timeoutMs: 4000 }).catch(() => {});
+  };
+
   const clearMessages = () => {
     setNotice("");
     setError("");
@@ -248,13 +281,29 @@ function App() {
     }
   };
 
-  const hydrateWithToken = async (token, successMessage = "") => {
+  const loadWorkspaceInBackground = (token) => {
+    fetchHistory(token);
+    fetchRecords(token);
+  };
+
+  const hydrateWithToken = async (
+    token,
+    { successMessage = "", userHint = null, verifyUser = true, loadWorkspace = true } = {}
+  ) => {
     try {
-      const meData = await requestApi("/api/auth/me", { token });
+      const shouldVerifyUser = verifyUser || !userHint;
+      const userData = shouldVerifyUser
+        ? (await requestApi("/api/auth/me", { token, timeoutMs: 12000 }))?.user || null
+        : (userHint || null);
+
       setAuthToken(token);
-      setAuthUser(meData?.user || null);
+      setAuthUser(userData);
       await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-      await Promise.all([fetchHistory(token), fetchRecords(token)]);
+
+      if (loadWorkspace) {
+        loadWorkspaceInBackground(token);
+      }
+
       if (successMessage) setNotice(successMessage);
       setError("");
     } catch (e) {
@@ -275,7 +324,10 @@ function App() {
     if (!accessToken) return;
 
     try {
-      await hydrateWithToken(accessToken, "소셜 로그인이 완료되었습니다.");
+      await hydrateWithToken(accessToken, {
+        successMessage: "소셜 로그인이 완료되었습니다.",
+        verifyUser: true,
+      });
     } catch (e) {
       setError(e.message || "소셜 로그인 세션 처리 실패");
     } finally {
@@ -286,6 +338,8 @@ function App() {
   useEffect(() => {
     let active = true;
 
+    warmUpBackend();
+
     const subscription = Linking.addEventListener("url", ({ url }) => {
       handleDeepLink(url);
     });
@@ -293,13 +347,19 @@ function App() {
     (async () => {
       try {
         const initialUrl = await Linking.getInitialURL();
+        const initialAuth = parseAuthParamsFromUrl(initialUrl || "");
+        let consumedOauthToken = false;
+
         if (initialUrl) {
           await handleDeepLink(initialUrl);
+          consumedOauthToken = !!initialAuth.accessToken;
         }
 
-        const savedToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-        if (savedToken) {
-          await hydrateWithToken(savedToken);
+        if (!consumedOauthToken) {
+          const savedToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+          if (savedToken) {
+            await hydrateWithToken(savedToken, { verifyUser: true });
+          }
         }
       } catch {
         await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
@@ -342,10 +402,12 @@ function App() {
       const data = await requestApi(endpoint, { method: "POST", body });
 
       if (data?.access_token) {
-        await hydrateWithToken(
-          data.access_token,
-          authMode === "signup" ? "회원가입/로그인이 완료되었습니다." : "로그인되었습니다."
-        );
+        await hydrateWithToken(data.access_token, {
+          successMessage: authMode === "signup" ? "회원가입/로그인이 완료되었습니다." : "로그인되었습니다.",
+          userHint: data?.user || null,
+          verifyUser: false,
+          loadWorkspace: true,
+        });
       } else {
         setNotice(data?.message || "회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.");
       }
@@ -353,7 +415,7 @@ function App() {
       setAuthPassword("");
       if (authMode === "signup") setAuthMode("login");
     } catch (e) {
-      setError(e.message || "인증 처리 실패");
+      setError(getFriendlyAuthError(e.message));
     } finally {
       setAuthLoading(false);
     }
