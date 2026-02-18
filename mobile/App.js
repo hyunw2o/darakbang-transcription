@@ -14,7 +14,6 @@ import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as ExpoLinking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Mallog24Logo from "./components/Mallog24Logo";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://darakbang-transcription-backend.onrender.com";
 const AUTH_TOKEN_KEY = "mallog24_access_token";
@@ -745,29 +744,13 @@ function App() {
     <SafeAreaView style={styles.root}>
       <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <Mallog24Logo size="lg" />
-          {isLoggedIn ? (
-            <View style={styles.headerChip}>
-              <Text style={styles.headerChipText}>LIVE</Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={styles.appSubtitle}>네이티브 녹취 · 요약 · 기록본 저장</Text>
-      </View>
-
       <Banner type="error" text={error} />
       <Banner type="notice" text={notice} />
 
       {!isLoggedIn ? (
         <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
           <View style={[styles.card, styles.authCard]}>
-            <View style={styles.authLogoRow}>
-              <Mallog24Logo size="md" />
-            </View>
             <Text style={styles.authLabel}>회원 인증</Text>
-            <Text style={styles.authSubLabel}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
 
             <View style={styles.segmentRow}>
               <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} />
@@ -834,6 +817,7 @@ function App() {
             <Text style={styles.helpText}>
               소셜 로그인은 앱 리다이렉트 URL/공급자 설정이 맞아야 동작합니다.
             </Text>
+            <Text style={styles.authSubLabel}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
           </View>
         </ScrollView>
       ) : (
@@ -881,8 +865,6 @@ function App() {
                   ))}
                 </View>
 
-                <Text style={styles.helpText}>{selectedTypeHint}</Text>
-
                 <Pressable style={styles.secondaryButton} onPress={pickAudioFile}>
                   <Text style={styles.secondaryButtonText}>파일 선택</Text>
                 </Pressable>
@@ -901,6 +883,7 @@ function App() {
                   <Text style={styles.primaryButtonText}>{submitting ? "변환 중..." : "변환 시작"}</Text>
                 </Pressable>
 
+                <Text style={styles.helpText}>{selectedTypeHint}</Text>
                 {taskStateText ? <Text style={styles.taskStateText}>{taskStateText}</Text> : null}
               </View>
 
@@ -1058,40 +1041,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderColor: "#d8e2f0",
-    backgroundColor: "#f8fbff",
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  headerChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  headerChipText: {
-    color: "#1e40af",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  appSubtitle: {
-    marginTop: 6,
-    color: "#4b5563",
-    fontSize: 12,
-    fontWeight: "600",
-  },
   workspaceContainer: {
     flex: 1,
   },
@@ -1104,31 +1053,30 @@ const styles = StyleSheet.create({
   authScrollContent: {
     flexGrow: 1,
     paddingHorizontal: 14,
-    paddingTop: 18,
+    paddingTop: 10,
     paddingBottom: 24,
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   authCard: {
     width: "100%",
     maxWidth: 620,
     alignSelf: "center",
   },
-  authLogoRow: {
-    marginBottom: 2,
-  },
   authLabel: {
     color: "#0f172a",
     fontSize: 16,
     fontWeight: "800",
+    marginBottom: 2,
   },
   authSubLabel: {
     color: "#64748b",
     fontSize: 12,
     lineHeight: 18,
+    marginTop: 2,
   },
   banner: {
     marginHorizontal: 14,
-    marginTop: 10,
+    marginTop: 6,
     borderRadius: 12,
     paddingHorizontal: 13,
     paddingVertical: 11,
