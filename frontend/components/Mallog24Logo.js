@@ -13,7 +13,7 @@ export default function Mallog24Logo({ className = '', title = 'mallog24' }) {
         y="190"
         fontFamily="Arial, Helvetica, sans-serif"
         fontSize="160"
-        fill="#1E2A44"
+        fill="var(--mallog24-logo-text, #1E2A44)"
         fontWeight="600"
       >
         mall
@@ -30,7 +30,7 @@ export default function Mallog24Logo({ className = '', title = 'mallog24' }) {
         y="190"
         fontFamily="Arial, Helvetica, sans-serif"
         fontSize="160"
-        fill="#1E2A44"
+        fill="var(--mallog24-logo-text, #1E2A44)"
         fontWeight="600"
       >
         g
