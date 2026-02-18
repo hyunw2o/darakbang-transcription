@@ -7,7 +7,7 @@ function ThemeToggle({ darkMode, setDarkMode }) {
   return (
     <button
       onClick={() => setDarkMode(!darkMode)}
-      className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+      className="p-2.5 nm-btn rounded-xl"
       aria-label="다크 모드 전환"
     >
       {darkMode ? (
@@ -15,7 +15,7 @@ function ThemeToggle({ darkMode, setDarkMode }) {
           <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
         </svg>
       ) : (
-        <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+        <svg className="w-4 h-4 text-nm-text-secondary" fill="currentColor" viewBox="0 0 20 20">
           <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
         </svg>
       )}
@@ -40,9 +40,9 @@ function StepIndicator({ currentStep }) {
           <div key={i} className="flex items-center gap-1 sm:gap-2">
             <div className="flex flex-col items-center gap-1.5">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500
-                ${isCompleted ? 'bg-green-500 text-white shadow-sm shadow-green-500/30' :
-                  isActive ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/30 animate-pulse' :
-                    'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'}`}
+                ${isCompleted ? 'nm-raised bg-green-500 text-white' :
+                  isActive ? 'nm-raised bg-nm-accent text-white animate-pulse-slow' :
+                    'nm-concave text-nm-text-secondary'}`}
               >
                 {isCompleted ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,16 +50,16 @@ function StepIndicator({ currentStep }) {
                   </svg>
                 ) : step.num}
               </div>
-              <span className={`text-[11px] font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' :
-                isCompleted ? 'text-green-600 dark:text-green-400' :
-                  'text-slate-400 dark:text-slate-500'
+              <span className={`text-[11px] font-medium ${isActive ? 'text-nm-accent' :
+                isCompleted ? 'text-green-600' :
+                  'text-nm-text-secondary'
                 }`}>
                 {step.label}
               </span>
             </div>
             {i < steps.length - 1 && (
               <div className={`w-8 sm:w-14 h-0.5 mb-5 rounded-full transition-all duration-700
-                ${currentStep > step.num ? 'bg-green-400' : 'bg-slate-200 dark:bg-slate-700'}`}
+                ${currentStep > step.num ? 'bg-green-400' : 'nm-concave'}`}
               />
             )}
           </div>
@@ -667,29 +667,29 @@ export default function Home({ darkMode, setDarkMode }) {
       </Head>
 
       {/* 헤더 */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-b border-slate-200/60 dark:border-slate-800/60">
+      <header className="sticky top-0 z-50 bg-nm-bg shadow-nm-flat">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <a
               href={OURS_URL}
-              className="text-xs font-semibold text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              className="text-xs font-semibold text-nm-text-secondary hover:text-nm-accent transition-colors"
             >
               OURS
             </a>
-            <span className="text-slate-300 dark:text-slate-700">/</span>
+            <span className="text-nm-text-secondary">/</span>
             <Mallog24Logo className="h-[18px] w-auto shrink-0" />
           </div>
           <div className="flex items-center gap-2">
-            <nav className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+            <nav className="nm-segment-group">
               <Link
                 href="/"
-                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                className="nm-segment-item active"
               >
                 KR
               </Link>
               <Link
                 href="/en"
-                className="px-2.5 py-1 text-[11px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                className="nm-segment-item"
               >
                 EN
               </Link>
@@ -702,29 +702,23 @@ export default function Home({ darkMode, setDarkMode }) {
       <main className="max-w-2xl mx-auto px-4 pt-6">
 
         {/* 인증 카드 */}
-        <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
+        <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
           {!authToken ? (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">회원 인증</h2>
-                <div className="flex rounded-lg bg-slate-100 dark:bg-slate-700 p-1">
+                <h2 className="text-sm font-bold text-nm-text-primary">회원 인증</h2>
+                <div className="nm-segment-group">
                   <button
                     type="button"
                     onClick={() => setAuthMode('login')}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${authMode === 'login'
-                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
-                      : 'text-slate-500 dark:text-slate-300'
-                      }`}
+                    className={`nm-segment-item ${authMode === 'login' ? 'active' : ''}`}
                   >
                     로그인
                   </button>
                   <button
                     type="button"
                     onClick={() => setAuthMode('signup')}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${authMode === 'signup'
-                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
-                      : 'text-slate-500 dark:text-slate-300'
-                      }`}
+                    className={`nm-segment-item ${authMode === 'signup' ? 'active' : ''}`}
                   >
                     회원가입
                   </button>
@@ -738,7 +732,7 @@ export default function Home({ darkMode, setDarkMode }) {
                     value={authName}
                     onChange={(e) => setAuthName(e.target.value)}
                     placeholder="이름"
-                    className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none"
+                    className="w-full nm-input"
                   />
                 )}
                 <input
@@ -747,7 +741,7 @@ export default function Home({ darkMode, setDarkMode }) {
                   onChange={(e) => setAuthEmail(e.target.value)}
                   placeholder="이메일"
                   required
-                  className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none"
+                  className="w-full nm-input"
                 />
                 <input
                   type="password"
@@ -756,12 +750,12 @@ export default function Home({ darkMode, setDarkMode }) {
                   placeholder="비밀번호 (8자 이상)"
                   required
                   minLength={8}
-                  className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none"
+                  className="w-full nm-input"
                 />
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-2.5 text-sm font-semibold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  className="w-full nm-btn-primary py-2.5 text-sm font-semibold"
                 >
                   {authLoading
                     ? '처리 중...'
@@ -773,10 +767,10 @@ export default function Home({ darkMode, setDarkMode }) {
               <div className="mt-4">
                 <div className="relative mb-3">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200 dark:border-slate-700" />
+                    <div className="w-full border-t border-nm-dark/20" />
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="px-2 text-[11px] text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800">또는 소셜 로그인</span>
+                    <span className="px-2 text-[11px] text-nm-text-secondary bg-nm-bg">또는 소셜 로그인</span>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -786,39 +780,39 @@ export default function Home({ darkMode, setDarkMode }) {
                       type="button"
                       onClick={() => handleSocialLogin(provider.key)}
                       disabled={authLoading || Boolean(socialLoading)}
-                      className="w-full h-11 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/40 disabled:opacity-50 transition-colors"
+                      className="nm-btn w-full h-11 text-sm font-semibold text-nm-text-primary"
                     >
                       {socialLoading === provider.key ? '이동 중...' : provider.label}
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                <p className="mt-2 text-[11px] text-nm-text-secondary">
                   소셜 로그인은 Supabase에 각 공급자 설정이 완료되어야 동작합니다.
                 </p>
               </div>
               {error && (
-                <div className="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200/80 dark:border-red-800/50 rounded-xl animate-slide-up">
-                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-red-500 animate-slide-up">
+                  <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}
               {notice && (
-                <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/80 dark:border-blue-800/50 rounded-xl animate-slide-up">
-                  <p className="text-sm text-blue-600 dark:text-blue-300">{notice}</p>
+                <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-blue-500 animate-slide-up">
+                  <p className="text-sm text-nm-accent">{notice}</p>
                 </div>
               )}
             </>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <p className="text-xs text-slate-400 dark:text-slate-500">로그인 사용자</p>
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                <p className="text-xs text-nm-text-secondary">로그인 사용자</p>
+                <p className="text-sm font-semibold text-nm-text-primary">
                   {authUser?.email || '인증된 사용자'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                className="nm-btn inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-nm-text-primary"
               >
                 로그아웃
               </button>
@@ -827,9 +821,9 @@ export default function Home({ darkMode, setDarkMode }) {
         </div>
 
         {!authToken && (
-          <div className="mb-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/50 bg-white dark:bg-slate-800/60 p-5 text-center animate-fade-in">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">로그인이 필요합니다</h3>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="nm-raised p-5 mb-5 text-center animate-nm-card-in">
+            <h3 className="text-sm font-semibold text-nm-text-primary">로그인이 필요합니다</h3>
+            <p className="mt-2 text-xs text-nm-text-secondary">
               로그인 또는 회원가입 후 파일 업로드 및 변환 화면이 표시됩니다.
             </p>
           </div>
@@ -837,21 +831,21 @@ export default function Home({ darkMode, setDarkMode }) {
 
         {authToken && (
           <>
-            <div className="mb-5 rounded-2xl border border-blue-100/80 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-900/10 p-4 animate-fade-in">
-              <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-medium">
+            <div className="nm-flat p-4 mb-5 animate-nm-card-in">
+              <p className="text-xs sm:text-sm text-nm-accent font-medium">
                 mallog24 특화: 설교, 통화, 회의 기록을 목적에 맞게 구조화합니다.
               </p>
             </div>
             {/* 업로드 카드 */}
-            <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
+            <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
               <form onSubmit={handleSubmit}>
 
                 {/* 드래그 앤 드롭 영역 */}
                 <div
-                  className={`relative rounded-2xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
-                ${dragOver ? 'border-blue-400 bg-blue-50/80 dark:bg-blue-900/20 scale-[1.01]' :
-                      file ? 'border-green-400/60 dark:border-green-500/40 bg-green-50/50 dark:bg-green-900/10' :
-                        'border-slate-200 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-50/50 dark:hover:bg-slate-800/50'}`}
+                  className={`relative p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
+                ${dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
+                      file ? 'nm-raised' :
+                        'nm-concave'}`}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -867,13 +861,13 @@ export default function Home({ darkMode, setDarkMode }) {
 
                   {file ? (
                     <div className="space-y-2">
-                      <div className="w-11 h-11 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-11 h-11 mx-auto rounded-full bg-green-500/20 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       </div>
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{file.name}</p>
-                      <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                      <p className="text-sm font-medium text-nm-text-primary">{file.name}</p>
+                      <p className="text-xs text-nm-text-secondary">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setFile(null) }}
@@ -884,15 +878,15 @@ export default function Home({ darkMode, setDarkMode }) {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="w-11 h-11 mx-auto rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-11 h-11 mx-auto rounded-full nm-flat flex items-center justify-center">
+                        <svg className="w-5 h-5 text-nm-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
                       </div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        파일을 끌어다 놓거나 <span className="text-blue-500 font-medium">클릭</span>하여 선택
+                      <p className="text-sm text-nm-text-secondary">
+                        파일을 끌어다 놓거나 <span className="text-nm-accent font-medium">클릭</span>하여 선택
                       </p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
+                      <p className="text-xs text-nm-text-secondary">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
                     </div>
                   )}
                 </div>
@@ -900,26 +894,22 @@ export default function Home({ darkMode, setDarkMode }) {
                 {/* 설정 */}
                 <div className="mt-4 flex gap-3">
                   <div className="flex-1 relative">
-                    <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">언어</label>
+                    <label className="absolute -top-2 left-3 px-1 bg-nm-bg text-[10px] font-medium text-nm-text-secondary z-10">언어</label>
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value)}
-                      className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
-                    focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition-all
-                    text-slate-700 dark:text-slate-200"
+                      className="nm-input w-full"
                     >
                       <option value="ko">한국어</option>
                       <option value="en">English</option>
                     </select>
                   </div>
                   <div className="flex-1 relative">
-                    <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">유형</label>
+                    <label className="absolute -top-2 left-3 px-1 bg-nm-bg text-[10px] font-medium text-nm-text-secondary z-10">유형</label>
                     <select
                       value={transcriptionType}
                       onChange={(e) => setTranscriptionType(e.target.value)}
-                      className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
-                    focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition-all
-                    text-slate-700 dark:text-slate-200"
+                      className="nm-input w-full"
                     >
                       <option value="sermon">설교 녹취</option>
                       <option value="phonecall">통화 기록</option>
@@ -927,7 +917,7 @@ export default function Home({ darkMode, setDarkMode }) {
                     </select>
                   </div>
                 </div>
-                <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="mt-3 text-[11px] text-nm-text-secondary">
                   {transcriptionTypeHints[transcriptionType]}
                 </p>
 
@@ -935,13 +925,7 @@ export default function Home({ darkMode, setDarkMode }) {
                 <button
                   type="submit"
                   disabled={loading || !file || !authToken}
-                  className="w-full mt-5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 dark:disabled:bg-slate-700
-                text-white disabled:text-slate-400 dark:disabled:text-slate-500
-                py-3.5 rounded-xl font-semibold text-sm
-                transition-all duration-200
-                shadow-sm hover:shadow-md shadow-blue-600/10 hover:shadow-blue-600/20
-                disabled:shadow-none disabled:cursor-not-allowed
-                active:scale-[0.98]"
+                  className="w-full nm-btn-primary mt-5 py-3.5 font-semibold text-sm"
                 >
                   {loading ? '변환 중...' : authToken ? '변환하기' : '로그인 후 변환하기'}
                 </button>
@@ -949,28 +933,28 @@ export default function Home({ darkMode, setDarkMode }) {
 
               {/* 에러 메시지 */}
               {error && (
-                <div className="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200/80 dark:border-red-800/50 rounded-xl animate-slide-up">
-                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-red-500 animate-slide-up">
+                  <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}
               {notice && (
-                <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/80 dark:border-blue-800/50 rounded-xl animate-slide-up">
-                  <p className="text-sm text-blue-600 dark:text-blue-300">{notice}</p>
+                <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-blue-500 animate-slide-up">
+                  <p className="text-sm text-nm-accent">{notice}</p>
                 </div>
               )}
             </div>
 
             {/* 진행률 표시 */}
             {loading && currentStep > 0 && (
-              <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-6 mb-5 animate-slide-up">
+              <div className="nm-raised p-6 mb-5 animate-slide-up">
                 <StepIndicator currentStep={currentStep} />
-                <div className="h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mt-5">
+                <div className="progress-bar mt-5">
                   <div
-                    className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out"
+                    className="progress-bar-fill"
                     style={{ width: currentStep === 1 ? '20%' : currentStep === 2 ? '55%' : '85%' }}
                   />
                 </div>
-                <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-3">
+                <p className="text-center text-xs text-nm-text-secondary mt-3">
                   {currentStep === 1 && '파일을 업로드하고 있습니다...'}
                   {currentStep === 2 && 'AI가 음성을 인식하고 있습니다...'}
                   {currentStep === 3 && '텍스트를 교정하고 구조화하고 있습니다...'}
@@ -983,30 +967,30 @@ export default function Home({ darkMode, setDarkMode }) {
               <div className="space-y-4 animate-slide-up">
 
                 {/* 결과 헤더 + 텍스트 */}
-                <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+                <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold text-slate-900 dark:text-white">변환 결과</h2>
+                      <h2 className="text-base font-bold text-nm-text-primary">변환 결과</h2>
                       {result.transcription_type && result.transcription_type !== 'sermon' && (
-                        <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-[11px] font-medium">
+                        <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-nm-accent">
                           {typeLabels[result.transcription_type] || result.transcription_type}
                         </span>
                       )}
                     </div>
-                    <span className="px-2.5 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-[11px] font-medium">
+                    <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-green-600">
                       {result.characters?.toLocaleString()} 자
                     </span>
                   </div>
 
-                  <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 sm:p-5 rounded-xl border border-slate-100 dark:border-slate-800/50 max-h-[60vh] overflow-y-auto">
-                    <div className="text-[13px] leading-7 text-slate-700 dark:text-slate-300">
+                  <div className="nm-concave p-4 sm:p-5 max-h-[60vh] overflow-y-auto">
+                    <div className="text-[13px] leading-7 text-nm-text-primary">
                       {(result.corrected_text || result.raw_text)
                         .split('\n')
                         .map((line, i) => {
                           const trimmed = line.trim()
                           if (sectionHeaders.includes(trimmed)) {
                             return (
-                              <div key={i} className="text-sm font-bold text-blue-700 dark:text-blue-400 border-b border-blue-100 dark:border-blue-900/50 pb-1 mt-7 mb-3">
+                              <div key={i} className="text-sm font-bold text-nm-accent border-b border-nm-dark/20 pb-1 mt-7 mb-3">
                                 {trimmed}
                               </div>
                             )
@@ -1015,7 +999,7 @@ export default function Home({ darkMode, setDarkMode }) {
                           if (speakerMatch) {
                             return (
                               <p key={i} className="mb-1.5">
-                                <span className="inline-block px-2 py-0.5 mr-1.5 text-[11px] font-semibold rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40">
+                                <span className="inline-block px-2 py-0.5 mr-1.5 text-[11px] font-semibold rounded-md nm-flat text-nm-accent">
                                   {speakerMatch[1]}
                                 </span>
                                 {trimmed.slice(speakerMatch[0].length).trim()}
@@ -1061,26 +1045,23 @@ export default function Home({ darkMode, setDarkMode }) {
                     <button
                       onClick={handleSummarize}
                       disabled={loading}
-                      className="w-full bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50
-                    p-4 text-sm font-medium text-blue-600 dark:text-blue-400
-                    hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors
-                    disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full nm-btn p-4 text-sm font-medium text-nm-accent disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? '요약 생성 중...' : '주보용 요약 생성'}
                     </button>
                   ) : (
-                    <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+                    <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">주보용 요약</h3>
+                        <h3 className="text-sm font-bold text-nm-text-primary">주보용 요약</h3>
                         <button
                           onClick={() => copyToClipboard(result.summary, 'summary')}
-                          className="text-xs text-blue-500 hover:text-blue-600 font-medium"
+                          className="text-xs text-nm-accent hover:opacity-80 font-medium"
                         >
                           {copied === 'summary' ? '복사됨' : '복사'}
                         </button>
                       </div>
-                      <div className="bg-blue-50/80 dark:bg-blue-900/15 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                        <p className="whitespace-pre-wrap text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                      <div className="nm-concave p-4">
+                        <p className="whitespace-pre-wrap text-[13px] text-nm-text-primary leading-relaxed">
                           {result.summary}
                         </p>
                       </div>
@@ -1089,14 +1070,14 @@ export default function Home({ darkMode, setDarkMode }) {
                 )}
 
                 {/* 기록본 생성/저장 */}
-                <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+                <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">별도 기록본</h3>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    <h3 className="text-sm font-bold text-nm-text-primary">별도 기록본</h3>
+                    <span className="text-[11px] text-nm-text-secondary">
                       회의/진료/설교 포맷
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                  <p className="text-xs text-nm-text-secondary mb-4">
                     결과 텍스트를 기반으로 전용 기록본 초안을 생성한 뒤, 로그인 사용자 계정으로 별도 저장할 수 있습니다.
                   </p>
 
@@ -1117,16 +1098,16 @@ export default function Home({ darkMode, setDarkMode }) {
                   <div className="mt-4 space-y-3">
                     {recordCategories.map((recordCategory) => (
                       recordDrafts[recordCategory.key] ? (
-                        <div key={recordCategory.key} className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 p-3">
+                        <div key={recordCategory.key} className="nm-concave p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                            <p className="text-xs font-semibold text-nm-text-primary">
                               {recordCategory.label}
                             </p>
                             <button
                               type="button"
                               onClick={() => handleSaveRecord(recordCategory.key)}
                               disabled={savingCategory === recordCategory.key}
-                              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold disabled:opacity-50"
+                              className="nm-btn-primary text-[11px] px-2.5 py-1"
                             >
                               {savingCategory === recordCategory.key ? '저장 중...' : '저장'}
                             </button>
@@ -1135,7 +1116,7 @@ export default function Home({ darkMode, setDarkMode }) {
                             value={recordDrafts[recordCategory.key]}
                             onChange={(e) => handleRecordDraftChange(recordCategory.key, e.target.value)}
                             rows={6}
-                            className="w-full px-3 py-2 text-xs leading-relaxed bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500/30"
+                            className="nm-input w-full text-xs leading-relaxed"
                           />
                         </div>
                       ) : null
@@ -1145,13 +1126,13 @@ export default function Home({ darkMode, setDarkMode }) {
 
                 {/* 원본 텍스트 */}
                 {result.corrected_text && (
-                  <details className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden">
-                    <summary className="p-4 cursor-pointer text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-medium select-none transition-colors">
+                  <details className="nm-raised overflow-hidden">
+                    <summary className="p-4 cursor-pointer text-sm text-nm-text-secondary hover:text-nm-text-primary font-medium select-none transition-colors">
                       원본 텍스트 보기
                     </summary>
                     <div className="px-5 pb-5">
-                      <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
-                        <p className="whitespace-pre-wrap text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      <div className="nm-concave p-4">
+                        <p className="whitespace-pre-wrap text-xs text-nm-text-secondary leading-relaxed">
                           {result.raw_text}
                         </p>
                       </div>
@@ -1166,7 +1147,7 @@ export default function Home({ darkMode, setDarkMode }) {
               <div className="mt-8">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
-                  className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
+                  className="flex items-center gap-2 text-sm font-medium text-nm-text-secondary hover:text-nm-text-primary mb-3 transition-colors"
                 >
                   <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showHistory ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1175,13 +1156,13 @@ export default function Home({ darkMode, setDarkMode }) {
                 </button>
 
                 {showHistory && (
-                  <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
-                    <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
+                  <div className="nm-raised overflow-hidden animate-slide-up">
+                    <ul className="divide-y divide-nm-dark/20">
                       {history.map((item) => (
                         <li key={item.task_id}>
                           <button
                             onClick={() => handleLoadHistory(item.task_id)}
-                            className="w-full text-left p-4 hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group"
+                            className="w-full text-left p-4 hover:bg-nm-light/30 transition-colors group"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex-1 min-w-0 pr-4">
@@ -1189,25 +1170,25 @@ export default function Home({ darkMode, setDarkMode }) {
                                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === 'completed' ? 'bg-green-500' :
                                     item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
                                     }`} />
-                                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                  <span className="text-[11px] text-nm-text-secondary">
                                     {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                   {item.transcription_type && item.transcription_type !== 'sermon' && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
+                                    <span className="nm-flat px-2 py-0.5 text-[11px] text-nm-text-secondary font-medium">
                                       {item.transcription_type === 'phonecall' ? '통화' : '회의'}
                                     </span>
                                   )}
                                   {item.characters > 0 && (
-                                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                    <span className="text-[11px] text-nm-text-secondary">
                                       {item.characters?.toLocaleString()}자
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-sm text-slate-600 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                <p className="text-sm text-nm-text-primary truncate group-hover:text-nm-accent transition-colors">
                                   {item.summary_preview || "내용 없음"}
                                 </p>
                               </div>
-                              <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-blue-400 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-nm-text-secondary group-hover:text-nm-accent shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
                             </div>
@@ -1225,7 +1206,7 @@ export default function Home({ darkMode, setDarkMode }) {
               <div className="mt-8">
                 <button
                   onClick={() => setShowRecords(!showRecords)}
-                  className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
+                  className="flex items-center gap-2 text-sm font-medium text-nm-text-secondary hover:text-nm-text-primary mb-3 transition-colors"
                 >
                   <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showRecords ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1234,24 +1215,24 @@ export default function Home({ darkMode, setDarkMode }) {
                 </button>
 
                 {showRecords && (
-                  <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
+                  <div className="nm-raised overflow-hidden animate-slide-up">
                     {savedRecords.length === 0 ? (
-                      <p className="text-sm text-slate-400 dark:text-slate-500 p-4">아직 저장된 기록본이 없습니다.</p>
+                      <p className="text-sm text-nm-text-secondary p-4">아직 저장된 기록본이 없습니다.</p>
                     ) : (
-                      <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
+                      <ul className="divide-y divide-nm-dark/20">
                         {savedRecords.map((item) => (
                           <li key={item.id} className="p-4">
                             <div className="flex items-center justify-between gap-3 mb-1.5">
-                              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                              <p className="text-sm font-semibold text-nm-text-primary">
                                 {recordTypeLabels[item.category] || item.title || item.category}
                               </p>
-                              <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                              <span className="text-[11px] text-nm-text-secondary">
                                 {item.created_at
                                   ? new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                                   : ''}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
+                            <p className="text-xs text-nm-text-secondary whitespace-pre-wrap leading-relaxed">
                               {item.content}
                             </p>
                           </li>
@@ -1267,7 +1248,7 @@ export default function Home({ darkMode, setDarkMode }) {
 
         {/* 푸터 */}
         <footer className="mt-12 text-center">
-          <p className="text-[11px] text-slate-400 dark:text-slate-600">
+          <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.
           </p>
         </footer>

@@ -12,11 +12,32 @@ html {
   scroll-behavior: smooth;
 }
 
+/* ========== Neumorphism CSS Variables ========== */
 :root {
+  --nm-bg: #e0e5ec;
+  --nm-shadow-light: #ffffff;
+  --nm-shadow-dark: #a3b1c6;
+  --nm-shadow-distance: 6px;
+  --nm-shadow-blur: 12px;
+  --nm-radius: 16px;
+  --nm-radius-sm: 12px;
+  --nm-accent: #3b7dd8;
+  --nm-accent-soft: #5a9ae6;
+  --nm-text-primary: #2d3748;
+  --nm-text-secondary: #64748b;
+  --nm-transition: 250ms;
+  --nm-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mallog24-logo-text: #1E2A44;
 }
 
 html.dark {
+  --nm-bg: #2d3748;
+  --nm-shadow-light: #384457;
+  --nm-shadow-dark: #1a202c;
+  --nm-accent: #5a9ae6;
+  --nm-accent-soft: #7bb3f0;
+  --nm-text-primary: #e2e8f0;
+  --nm-text-secondary: #94a3b8;
   --mallog24-logo-text: #E4ECFF;
 }
 
@@ -32,46 +53,254 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  @apply bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(900px 450px at 110% 10%, rgba(163, 177, 198, 0.22), transparent 62%),
+    var(--nm-bg);
+  color: var(--nm-text-primary);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* 액션 버튼 */
+/* ========== Neumorphism Component Classes ========== */
+
+/* Raised surface (cards, panels) */
+.nm-raised {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius);
+  border: none;
+  box-shadow:
+    var(--nm-shadow-distance) var(--nm-shadow-distance) var(--nm-shadow-blur) var(--nm-shadow-dark),
+    calc(-1 * var(--nm-shadow-distance)) calc(-1 * var(--nm-shadow-distance)) var(--nm-shadow-blur) var(--nm-shadow-light);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease);
+}
+
+/* Concave / pressed surface (inputs, result boxes) */
+.nm-concave {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius-sm);
+  border: none;
+  box-shadow:
+    inset var(--nm-shadow-distance) var(--nm-shadow-distance) var(--nm-shadow-blur) var(--nm-shadow-dark),
+    inset calc(-1 * var(--nm-shadow-distance)) calc(-1 * var(--nm-shadow-distance)) var(--nm-shadow-blur) var(--nm-shadow-light);
+  transition: box-shadow var(--nm-transition) var(--nm-ease);
+}
+
+/* Flat subtle surface */
+.nm-flat {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius-sm);
+  border: none;
+  box-shadow:
+    3px 3px 6px var(--nm-shadow-dark),
+    -3px -3px 6px var(--nm-shadow-light);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease);
+}
+
+/* Interactive button (raised → concave on press) */
+.nm-btn {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius-sm);
+  border: none;
+  cursor: pointer;
+  box-shadow:
+    4px 4px 8px var(--nm-shadow-dark),
+    -4px -4px 8px var(--nm-shadow-light);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease);
+}
+.nm-btn:hover {
+  box-shadow:
+    6px 6px 14px var(--nm-shadow-dark),
+    -6px -6px 14px var(--nm-shadow-light);
+  transform: scale(1.01);
+}
+.nm-btn:active {
+  box-shadow:
+    inset 4px 4px 8px var(--nm-shadow-dark),
+    inset -4px -4px 8px var(--nm-shadow-light);
+  transform: scale(0.98);
+}
+.nm-btn:disabled {
+  opacity: 0.5;
+  box-shadow:
+    2px 2px 4px var(--nm-shadow-dark),
+    -2px -2px 4px var(--nm-shadow-light);
+  cursor: not-allowed;
+}
+
+/* Primary accent button */
+.nm-btn-primary {
+  background: var(--nm-accent);
+  color: #ffffff;
+  border-radius: var(--nm-radius-sm);
+  border: none;
+  cursor: pointer;
+  box-shadow:
+    4px 4px 10px var(--nm-shadow-dark),
+    -4px -4px 10px var(--nm-shadow-light),
+    inset 0 1px 0 rgba(255,255,255,0.15);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease), background var(--nm-transition) var(--nm-ease);
+}
+.nm-btn-primary:hover {
+  background: var(--nm-accent-soft);
+  box-shadow:
+    6px 6px 16px var(--nm-shadow-dark),
+    -6px -6px 16px var(--nm-shadow-light),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+  transform: scale(1.01);
+}
+.nm-btn-primary:active {
+  box-shadow:
+    inset 3px 3px 8px rgba(0,0,0,0.25),
+    inset -3px -3px 8px rgba(255,255,255,0.1);
+  transform: scale(0.98);
+}
+.nm-btn-primary:disabled {
+  opacity: 0.5;
+  background: var(--nm-bg);
+  color: var(--nm-text-secondary);
+  box-shadow:
+    2px 2px 4px var(--nm-shadow-dark),
+    -2px -2px 4px var(--nm-shadow-light);
+  cursor: not-allowed;
+}
+
+/* Input fields (concave) */
+.nm-input {
+  background: var(--nm-bg);
+  border: none;
+  border-radius: var(--nm-radius-sm);
+  box-shadow:
+    inset 3px 3px 6px var(--nm-shadow-dark),
+    inset -3px -3px 6px var(--nm-shadow-light);
+  padding: 10px 14px;
+  color: var(--nm-text-primary);
+  outline: none;
+  font-size: 14px;
+  transition: box-shadow var(--nm-transition) var(--nm-ease);
+}
+.nm-input:focus {
+  box-shadow:
+    inset 4px 4px 8px var(--nm-shadow-dark),
+    inset -4px -4px 8px var(--nm-shadow-light),
+    0 0 0 2px var(--nm-accent);
+}
+.nm-input::placeholder {
+  color: var(--nm-text-secondary);
+}
+
+/* Segment group (concave container) */
+.nm-segment-group {
+  display: flex;
+  gap: 0;
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius-sm);
+  box-shadow:
+    inset 3px 3px 6px var(--nm-shadow-dark),
+    inset -3px -3px 6px var(--nm-shadow-light);
+  padding: 4px;
+}
+.nm-segment-item {
+  flex: 1;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: calc(var(--nm-radius-sm) - 2px);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nm-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--nm-transition) var(--nm-ease);
+}
+.nm-segment-item:hover {
+  color: var(--nm-text-primary);
+}
+.nm-segment-item.active {
+  background: var(--nm-bg);
+  color: var(--nm-accent);
+  font-weight: 700;
+  box-shadow:
+    3px 3px 6px var(--nm-shadow-dark),
+    -3px -3px 6px var(--nm-shadow-light);
+}
+
+/* ========== Override existing component classes ========== */
+
+/* Action button */
 .action-btn {
-  @apply flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-xl
-    border border-slate-200 dark:border-slate-700
-    bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300
-    hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-slate-100
-    active:scale-[0.97] transition-all duration-150;
+  @apply flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium;
+  background: var(--nm-bg);
+  border: none;
+  border-radius: var(--nm-radius-sm);
+  color: var(--nm-text-primary);
+  cursor: pointer;
+  box-shadow:
+    3px 3px 6px var(--nm-shadow-dark),
+    -3px -3px 6px var(--nm-shadow-light);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform 150ms var(--nm-ease);
+}
+.action-btn:hover {
+  box-shadow:
+    5px 5px 10px var(--nm-shadow-dark),
+    -5px -5px 10px var(--nm-shadow-light);
+  transform: scale(1.02);
+}
+.action-btn:active {
+  box-shadow:
+    inset 3px 3px 6px var(--nm-shadow-dark),
+    inset -3px -3px 6px var(--nm-shadow-light);
+  transform: scale(0.97);
 }
 
-/* 프로그레스 바 */
+/* Progress bar */
 .progress-bar {
-  @apply h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden;
+  background: var(--nm-bg);
+  border-radius: 9999px;
+  height: 4px;
+  box-shadow:
+    inset 2px 2px 4px var(--nm-shadow-dark),
+    inset -2px -2px 4px var(--nm-shadow-light);
+  overflow: hidden;
 }
-
 .progress-bar-fill {
-  @apply h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out;
+  height: 100%;
+  background: var(--nm-accent);
+  border-radius: 9999px;
+  transition: width 1s ease-out;
 }
 
-/* 스크롤바 */
+@media (prefers-reduced-motion: reduce) {
+  .nm-raised,
+  .nm-concave,
+  .nm-flat,
+  .nm-btn,
+  .nm-btn-primary,
+  .nm-input,
+  .nm-segment-item,
+  .action-btn,
+  .progress-bar-fill {
+    transition-duration: 0ms !important;
+  }
+}
+
+/* ========== Utilities ========== */
+
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
 }
-
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 dark:bg-slate-600 rounded-full;
+  background: var(--nm-shadow-dark);
+  border-radius: 9999px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-400 dark:bg-slate-500;
+  background: var(--nm-text-secondary);
 }
 
-/* 선택 영역 */
+/* Selection */
 ::selection {
   @apply bg-blue-100 dark:bg-blue-900/50 text-blue-900 dark:text-blue-100;
 }

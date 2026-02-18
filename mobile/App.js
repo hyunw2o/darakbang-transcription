@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -14,10 +13,30 @@ import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as ExpoLinking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NmPressable from "./components/NmPressable";
+import FadeInView from "./components/FadeInView";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://darakbang-transcription-backend.onrender.com";
 const AUTH_TOKEN_KEY = "mallog24_access_token";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
+const NM = {
+  bg: "#e0e5ec",
+  light: "#ffffff",
+  dark: "#a3b1c6",
+  accent: "#3b7dd8",
+  accentSoft: "#5a9ae6",
+  textPrimary: "#2d3748",
+  textSecondary: "#64748b",
+  inputBg: "#d6dbe4",
+  inputBorder: "#c8ced8",
+  errorBg: "#e8d5d5",
+  errorText: "#b91c1c",
+  noticeBg: "#d5dfe8",
+  noticeText: "#1d4ed8",
+  radius: 18,
+  radiusSm: 14,
+};
 
 const MIME_BY_EXT = {
   mp3: "audio/mpeg",
@@ -161,20 +180,26 @@ function formatDate(value) {
 
 function SegmentButton({ label, active, onPress }) {
   return (
-    <Pressable onPress={onPress} style={[styles.segmentButton, active ? styles.segmentButtonActive : null]}>
+    <NmPressable
+      onPress={onPress}
+      style={[styles.segmentButton, active ? styles.segmentButtonActive : null]}
+      scaleDown={0.95}
+    >
       <Text style={[styles.segmentButtonText, active ? styles.segmentButtonTextActive : null]}>{label}</Text>
-    </Pressable>
+    </NmPressable>
   );
 }
 
 function Banner({ type = "notice", text }) {
   if (!text) return null;
   return (
-    <View style={[styles.banner, type === "error" ? styles.bannerError : styles.bannerNotice]}>
-      <Text style={[styles.bannerText, type === "error" ? styles.bannerTextError : styles.bannerTextNotice]}>
-        {text}
-      </Text>
-    </View>
+    <FadeInView duration={300}>
+      <View style={[styles.banner, type === "error" ? styles.bannerError : styles.bannerNotice]}>
+        <Text style={[styles.bannerText, type === "error" ? styles.bannerTextError : styles.bannerTextNotice]}>
+          {text}
+        </Text>
+      </View>
+    </FadeInView>
   );
 }
 
@@ -734,7 +759,7 @@ function App() {
     return (
       <SafeAreaView style={styles.centerScreen}>
         <StatusBar style="dark" />
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={NM.accent} />
         <Text style={styles.loadingText}>앱 초기화 중...</Text>
       </SafeAreaView>
     );
@@ -749,271 +774,291 @@ function App() {
 
       {!isLoggedIn ? (
         <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
-          <View style={[styles.card, styles.authCard]}>
-            <Text style={styles.authLabel}>회원 인증</Text>
+          <FadeInView duration={420}>
+            <View style={[styles.card, styles.authCard]}>
+              <Text style={styles.authLabel}>회원 인증</Text>
 
-            <View style={styles.segmentRow}>
-              <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} />
-              <SegmentButton label="회원가입" active={authMode === "signup"} onPress={() => setAuthMode("signup")} />
-            </View>
+              <View style={styles.segmentRow}>
+                <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} />
+                <SegmentButton label="회원가입" active={authMode === "signup"} onPress={() => setAuthMode("signup")} />
+              </View>
 
-            {authMode === "signup" ? (
+              {authMode === "signup" ? (
+                <TextInput
+                  style={styles.input}
+                  value={authName}
+                  onChangeText={setAuthName}
+                  placeholder="이름"
+                  placeholderTextColor={NM.textSecondary}
+                  autoCapitalize="none"
+                />
+              ) : null}
+
               <TextInput
                 style={styles.input}
-                value={authName}
-                onChangeText={setAuthName}
-                placeholder="이름"
+                value={authEmail}
+                onChangeText={setAuthEmail}
+                placeholder="이메일"
+                placeholderTextColor={NM.textSecondary}
                 autoCapitalize="none"
+                keyboardType="email-address"
               />
-            ) : null}
 
-            <TextInput
-              style={styles.input}
-              value={authEmail}
-              onChangeText={setAuthEmail}
-              placeholder="이메일"
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+              <TextInput
+                style={styles.input}
+                value={authPassword}
+                onChangeText={setAuthPassword}
+                placeholder="비밀번호"
+                placeholderTextColor={NM.textSecondary}
+                secureTextEntry
+              />
 
-            <TextInput
-              style={styles.input}
-              value={authPassword}
-              onChangeText={setAuthPassword}
-              placeholder="비밀번호"
-              secureTextEntry
-            />
+              <NmPressable style={[styles.primaryButton, authLoading ? styles.buttonDisabled : null]} onPress={handleAuthSubmit} disabled={authLoading}>
+                <Text style={styles.primaryButtonText}>
+                  {authLoading
+                    ? "처리 중..."
+                    : authMode === "signup"
+                      ? "회원가입"
+                      : "로그인"}
+                </Text>
+              </NmPressable>
 
-            <Pressable style={[styles.primaryButton, authLoading ? styles.buttonDisabled : null]} onPress={handleAuthSubmit} disabled={authLoading}>
-              <Text style={styles.primaryButtonText}>
-                {authLoading
-                  ? "처리 중..."
-                  : authMode === "signup"
-                    ? "회원가입"
-                    : "로그인"}
+              <Text style={styles.orText}>또는 소셜 로그인</Text>
+
+              <View style={styles.socialRow}>
+                <NmPressable
+                  style={[styles.socialButton, socialLoading ? styles.buttonDisabled : null]}
+                  onPress={() => handleSocialLogin("google")}
+                  disabled={!!socialLoading}
+                >
+                  <Text style={styles.socialButtonText}>{socialLoading === "google" ? "연결 중..." : "Google"}</Text>
+                </NmPressable>
+
+                <NmPressable
+                  style={[styles.socialButton, socialLoading ? styles.buttonDisabled : null]}
+                  onPress={() => handleSocialLogin("kakao")}
+                  disabled={!!socialLoading}
+                >
+                  <Text style={styles.socialButtonText}>{socialLoading === "kakao" ? "연결 중..." : "Kakao"}</Text>
+                </NmPressable>
+              </View>
+
+              <Text style={styles.helpText}>
+                소셜 로그인은 앱 리다이렉트 URL/공급자 설정이 맞아야 동작합니다.
               </Text>
-            </Pressable>
-
-            <Text style={styles.orText}>또는 소셜 로그인</Text>
-
-            <View style={styles.socialRow}>
-              <Pressable
-                style={[styles.socialButton, socialLoading ? styles.buttonDisabled : null]}
-                onPress={() => handleSocialLogin("google")}
-                disabled={!!socialLoading}
-              >
-                <Text style={styles.socialButtonText}>{socialLoading === "google" ? "연결 중..." : "Google"}</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.socialButton, socialLoading ? styles.buttonDisabled : null]}
-                onPress={() => handleSocialLogin("kakao")}
-                disabled={!!socialLoading}
-              >
-                <Text style={styles.socialButtonText}>{socialLoading === "kakao" ? "연결 중..." : "Kakao"}</Text>
-              </Pressable>
+              <Text style={styles.authSubLabel}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
             </View>
-
-            <Text style={styles.helpText}>
-              소셜 로그인은 앱 리다이렉트 URL/공급자 설정이 맞아야 동작합니다.
-            </Text>
-            <Text style={styles.authSubLabel}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
-          </View>
+          </FadeInView>
         </ScrollView>
       ) : (
         <View style={styles.workspaceContainer}>
-          <View style={styles.userBar}>
-            <View style={styles.userInfo}>
-              <Text style={styles.userEmail}>{authUser?.email || "로그인 사용자"}</Text>
-              <Text style={styles.userName}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
+          <FadeInView>
+            <View style={styles.userBar}>
+              <View style={styles.userInfo}>
+                <Text style={styles.userEmail}>{authUser?.email || "로그인 사용자"}</Text>
+                <Text style={styles.userName}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
+              </View>
+              <NmPressable style={styles.logoutButton} onPress={handleLogout}>
+                <Text style={styles.logoutButtonText}>로그아웃</Text>
+              </NmPressable>
             </View>
-            <Pressable style={styles.logoutButton} onPress={handleLogout}>
-              <Text style={styles.logoutButtonText}>로그아웃</Text>
-            </Pressable>
-          </View>
+          </FadeInView>
 
-          <View style={styles.tabsWrap}>
-            <View style={styles.segmentRow}>
-              {APP_TABS.map((tab) => (
-                <SegmentButton
-                  key={tab.key}
-                  label={tab.label}
-                  active={activeTab === tab.key}
-                  onPress={() => setActiveTab(tab.key)}
-                />
-              ))}
+          <FadeInView delay={70} duration={360}>
+            <View style={styles.tabsWrap}>
+              <View style={styles.segmentRow}>
+                {APP_TABS.map((tab) => (
+                  <SegmentButton
+                    key={tab.key}
+                    label={tab.label}
+                    active={activeTab === tab.key}
+                    onPress={() => setActiveTab(tab.key)}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
+          </FadeInView>
 
           {activeTab === "transcribe" ? (
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>변환 설정</Text>
-                <View style={styles.segmentRow}>
-                  <SegmentButton label="한국어" active={language === "ko"} onPress={() => setLanguage("ko")} />
-                  <SegmentButton label="English" active={language === "en"} onPress={() => setLanguage("en")} />
-                </View>
-
-                <View style={styles.segmentRow}>
-                  {TRANSCRIPTION_TYPES.map((item) => (
-                    <SegmentButton
-                      key={item.key}
-                      label={item.label}
-                      active={transcriptionType === item.key}
-                      onPress={() => setTranscriptionType(item.key)}
-                    />
-                  ))}
-                </View>
-
-                <Pressable style={styles.secondaryButton} onPress={pickAudioFile}>
-                  <Text style={styles.secondaryButtonText}>파일 선택</Text>
-                </Pressable>
-
-                <Text style={styles.fileInfo}>
-                  {pickedFile
-                    ? `${pickedFile.name} (${Math.max(1, Math.round((pickedFile.size || 0) / 1024))} KB · ${pickedFile.mimeType})`
-                    : "선택된 파일 없음"}
-                </Text>
-
-                <Pressable
-                  style={[styles.primaryButton, submitting ? styles.buttonDisabled : null]}
-                  onPress={handleTranscribe}
-                  disabled={submitting}
-                >
-                  <Text style={styles.primaryButtonText}>{submitting ? "변환 중..." : "변환 시작"}</Text>
-                </Pressable>
-
-                <Text style={styles.helpText}>{selectedTypeHint}</Text>
-                {taskStateText ? <Text style={styles.taskStateText}>{taskStateText}</Text> : null}
-              </View>
-
-              {result ? (
+              <FadeInView key="transcribe-settings">
                 <View style={styles.card}>
-                  <Text style={styles.cardTitle}>변환 결과</Text>
-                  <Text style={styles.metaText}>작업 ID: {result.task_id}</Text>
-                  <Text style={styles.metaText}>유형: {result.transcription_type || transcriptionType}</Text>
-                  <Text style={styles.metaText}>문자 수: {result.characters || 0}</Text>
-
-                  <Text style={styles.sectionTitle}>교정 텍스트</Text>
-                  <View style={styles.resultBox}>
-                    <Text selectable style={styles.resultText}>
-                      {result.corrected_text || result.raw_text || ""}
-                    </Text>
+                  <Text style={styles.cardTitle}>변환 설정</Text>
+                  <View style={styles.segmentRow}>
+                    <SegmentButton label="한국어" active={language === "ko"} onPress={() => setLanguage("ko")} />
+                    <SegmentButton label="English" active={language === "en"} onPress={() => setLanguage("en")} />
                   </View>
 
-                  <Pressable
-                    style={[styles.secondaryButton, summaryLoading ? styles.buttonDisabled : null]}
-                    onPress={handleSummarize}
-                    disabled={summaryLoading}
-                  >
-                    <Text style={styles.secondaryButtonText}>{summaryLoading ? "요약 생성 중..." : "설교 요약 생성"}</Text>
-                  </Pressable>
+                  <View style={styles.segmentRow}>
+                    {TRANSCRIPTION_TYPES.map((item) => (
+                      <SegmentButton
+                        key={item.key}
+                        label={item.label}
+                        active={transcriptionType === item.key}
+                        onPress={() => setTranscriptionType(item.key)}
+                      />
+                    ))}
+                  </View>
 
-                  {result.summary ? (
-                    <View style={styles.summaryBox}>
-                      <Text style={styles.sectionTitle}>요약</Text>
-                      <Text selectable style={styles.resultText}>{result.summary}</Text>
-                    </View>
-                  ) : null}
+                  <NmPressable style={styles.secondaryButton} onPress={pickAudioFile}>
+                    <Text style={styles.secondaryButtonText}>파일 선택</Text>
+                  </NmPressable>
+
+                  <Text style={styles.fileInfo}>
+                    {pickedFile
+                      ? `${pickedFile.name} (${Math.max(1, Math.round((pickedFile.size || 0) / 1024))} KB · ${pickedFile.mimeType})`
+                      : "선택된 파일 없음"}
+                  </Text>
+
+                  <NmPressable
+                    style={[styles.primaryButton, submitting ? styles.buttonDisabled : null]}
+                    onPress={handleTranscribe}
+                    disabled={submitting}
+                  >
+                    <Text style={styles.primaryButtonText}>{submitting ? "변환 중..." : "변환 시작"}</Text>
+                  </NmPressable>
+
+                  <Text style={styles.helpText}>{selectedTypeHint}</Text>
+                  {taskStateText ? <Text style={styles.taskStateText}>{taskStateText}</Text> : null}
                 </View>
+              </FadeInView>
+
+              {result ? (
+                <FadeInView key="transcribe-result" delay={100}>
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>변환 결과</Text>
+                    <Text style={styles.metaText}>작업 ID: {result.task_id}</Text>
+                    <Text style={styles.metaText}>유형: {result.transcription_type || transcriptionType}</Text>
+                    <Text style={styles.metaText}>문자 수: {result.characters || 0}</Text>
+
+                    <Text style={styles.sectionTitle}>교정 텍스트</Text>
+                    <View style={styles.resultBox}>
+                      <Text selectable style={styles.resultText}>
+                        {result.corrected_text || result.raw_text || ""}
+                      </Text>
+                    </View>
+
+                    <NmPressable
+                      style={[styles.secondaryButton, summaryLoading ? styles.buttonDisabled : null]}
+                      onPress={handleSummarize}
+                      disabled={summaryLoading}
+                    >
+                      <Text style={styles.secondaryButtonText}>{summaryLoading ? "요약 생성 중..." : "설교 요약 생성"}</Text>
+                    </NmPressable>
+
+                    {result.summary ? (
+                      <View style={styles.summaryBox}>
+                        <Text style={styles.sectionTitle}>요약</Text>
+                        <Text selectable style={styles.resultText}>{result.summary}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </FadeInView>
               ) : null}
 
               {result ? (
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>기록본 생성 및 저장</Text>
+                <FadeInView key="transcribe-records" delay={200}>
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>기록본 생성 및 저장</Text>
 
-                  {RECORD_CATEGORIES.map((category) => (
-                    <View key={category.key} style={styles.recordBlock}>
-                      <View style={styles.recordHeader}>
-                        <Text style={styles.sectionTitle}>{category.label}</Text>
-                        <View style={styles.recordActionRow}>
-                          <Pressable
-                            style={styles.tinyButton}
-                            onPress={() => handleGenerateRecordDraft(category.key)}
-                            disabled={!!draftLoadingCategory || !!savingCategory}
-                          >
-                            <Text style={styles.tinyButtonText}>
-                              {draftLoadingCategory === category.key ? "생성 중" : "초안"}
-                            </Text>
-                          </Pressable>
-                          <Pressable
-                            style={styles.tinyButton}
-                            onPress={() => handleSaveRecord(category.key)}
-                            disabled={!!draftLoadingCategory || !!savingCategory}
-                          >
-                            <Text style={styles.tinyButtonText}>
-                              {savingCategory === category.key ? "저장 중" : "저장"}
-                            </Text>
-                          </Pressable>
+                    {RECORD_CATEGORIES.map((category) => (
+                      <View key={category.key} style={styles.recordBlock}>
+                        <View style={styles.recordHeader}>
+                          <Text style={styles.sectionTitle}>{category.label}</Text>
+                          <View style={styles.recordActionRow}>
+                            <NmPressable
+                              style={styles.tinyButton}
+                              onPress={() => handleGenerateRecordDraft(category.key)}
+                              disabled={!!draftLoadingCategory || !!savingCategory}
+                            >
+                              <Text style={styles.tinyButtonText}>
+                                {draftLoadingCategory === category.key ? "생성 중" : "초안"}
+                              </Text>
+                            </NmPressable>
+                            <NmPressable
+                              style={styles.tinyButton}
+                              onPress={() => handleSaveRecord(category.key)}
+                              disabled={!!draftLoadingCategory || !!savingCategory}
+                            >
+                              <Text style={styles.tinyButtonText}>
+                                {savingCategory === category.key ? "저장 중" : "저장"}
+                              </Text>
+                            </NmPressable>
+                          </View>
                         </View>
-                      </View>
 
-                      <TextInput
-                        style={styles.recordEditor}
-                        multiline
-                        value={recordDrafts[category.key] || ""}
-                        onChangeText={(text) =>
-                          setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
-                        }
-                        placeholder={`${category.label} 내용을 여기에 편집하세요`}
-                      />
-                    </View>
-                  ))}
-                </View>
+                        <TextInput
+                          style={styles.recordEditor}
+                          multiline
+                          value={recordDrafts[category.key] || ""}
+                          onChangeText={(text) =>
+                            setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
+                          }
+                          placeholder={`${category.label} 내용을 여기에 편집하세요`}
+                          placeholderTextColor={NM.textSecondary}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </FadeInView>
               ) : null}
             </ScrollView>
           ) : null}
 
           {activeTab === "history" ? (
             <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.card}>
-                <View style={styles.inlineBetween}>
-                  <Text style={styles.cardTitle}>최근 변환 기록</Text>
-                  <Pressable style={styles.tinyButton} onPress={() => fetchHistory(authToken)}>
-                    <Text style={styles.tinyButtonText}>{historyLoading ? "로딩..." : "새로고침"}</Text>
-                  </Pressable>
-                </View>
+              <FadeInView key="history">
+                <View style={styles.card}>
+                  <View style={styles.inlineBetween}>
+                    <Text style={styles.cardTitle}>최근 변환 기록</Text>
+                    <NmPressable style={styles.tinyButton} onPress={() => fetchHistory(authToken)}>
+                      <Text style={styles.tinyButtonText}>{historyLoading ? "로딩..." : "새로고침"}</Text>
+                    </NmPressable>
+                  </View>
 
-                {history.length === 0 ? (
-                  <Text style={styles.emptyText}>변환 기록이 없습니다.</Text>
-                ) : (
-                  history.map((item) => (
-                    <View key={item.task_id} style={styles.listItem}>
-                      <Text style={styles.listTitle}>{item.transcription_type || "sermon"} · {item.status}</Text>
-                      <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
-                      <Text numberOfLines={2} style={styles.previewText}>{item.summary_preview || ""}</Text>
-                      <Pressable style={styles.tinyButton} onPress={() => handleLoadHistoryItem(item.task_id)}>
-                        <Text style={styles.tinyButtonText}>불러오기</Text>
-                      </Pressable>
-                    </View>
-                  ))
-                )}
-              </View>
+                  {history.length === 0 ? (
+                    <Text style={styles.emptyText}>변환 기록이 없습니다.</Text>
+                  ) : (
+                    history.map((item) => (
+                      <View key={item.task_id} style={styles.listItem}>
+                        <Text style={styles.listTitle}>{item.transcription_type || "sermon"} · {item.status}</Text>
+                        <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
+                        <Text numberOfLines={2} style={styles.previewText}>{item.summary_preview || ""}</Text>
+                        <NmPressable style={styles.tinyButton} onPress={() => handleLoadHistoryItem(item.task_id)}>
+                          <Text style={styles.tinyButtonText}>불러오기</Text>
+                        </NmPressable>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </FadeInView>
             </ScrollView>
           ) : null}
 
           {activeTab === "records" ? (
             <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.card}>
-                <View style={styles.inlineBetween}>
-                  <Text style={styles.cardTitle}>저장 기록본</Text>
-                  <Pressable style={styles.tinyButton} onPress={() => fetchRecords(authToken)}>
-                    <Text style={styles.tinyButtonText}>{recordsLoading ? "로딩..." : "새로고침"}</Text>
-                  </Pressable>
-                </View>
+              <FadeInView key="records">
+                <View style={styles.card}>
+                  <View style={styles.inlineBetween}>
+                    <Text style={styles.cardTitle}>저장 기록본</Text>
+                    <NmPressable style={styles.tinyButton} onPress={() => fetchRecords(authToken)}>
+                      <Text style={styles.tinyButtonText}>{recordsLoading ? "로딩..." : "새로고침"}</Text>
+                    </NmPressable>
+                  </View>
 
-                {records.length === 0 ? (
-                  <Text style={styles.emptyText}>저장된 기록본이 없습니다.</Text>
-                ) : (
-                  records.map((item) => (
-                    <View key={item.id || `${item.category}-${item.created_at}`} style={styles.listItem}>
-                      <Text style={styles.listTitle}>{item.title || item.category}</Text>
-                      <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
-                      <Text selectable style={styles.previewText}>{item.content || ""}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
+                  {records.length === 0 ? (
+                    <Text style={styles.emptyText}>저장된 기록본이 없습니다.</Text>
+                  ) : (
+                    records.map((item) => (
+                      <View key={item.id || `${item.category}-${item.created_at}`} style={styles.listItem}>
+                        <Text style={styles.listTitle}>{item.title || item.category}</Text>
+                        <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
+                        <Text selectable style={styles.previewText}>{item.content || ""}</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </FadeInView>
             </ScrollView>
           ) : null}
         </View>
@@ -1027,17 +1072,17 @@ export default App;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#edf2fb",
+    backgroundColor: NM.bg,
   },
   centerScreen: {
     flex: 1,
-    backgroundColor: "#eef4ff",
+    backgroundColor: NM.bg,
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   loadingText: {
-    color: "#334155",
+    color: NM.textPrimary,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -1045,16 +1090,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 18,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+    gap: 16,
   },
   authScrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 28,
     justifyContent: "flex-start",
   },
   authCard: {
@@ -1063,32 +1108,32 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   authLabel: {
-    color: "#0f172a",
+    color: NM.textPrimary,
     fontSize: 16,
     fontWeight: "800",
-    marginBottom: 2,
+    marginBottom: 4,
   },
   authSubLabel: {
-    color: "#64748b",
+    color: NM.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 2,
+    marginTop: 4,
   },
   banner: {
-    marginHorizontal: 14,
-    marginTop: 6,
-    borderRadius: 12,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    borderWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: NM.radiusSm,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderLeftWidth: 3,
   },
   bannerError: {
-    backgroundColor: "#fef2f2",
-    borderColor: "#fecaca",
+    backgroundColor: NM.errorBg,
+    borderLeftColor: NM.errorText,
   },
   bannerNotice: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
+    backgroundColor: NM.noticeBg,
+    borderLeftColor: NM.noticeText,
   },
   bannerText: {
     fontSize: 12,
@@ -1096,78 +1141,87 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   bannerTextError: {
-    color: "#b91c1c",
+    color: NM.errorText,
   },
   bannerTextNotice: {
-    color: "#1d4ed8",
+    color: NM.noticeText,
   },
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 15,
+    backgroundColor: NM.bg,
+    borderRadius: NM.radius,
+    padding: 16,
+    gap: 12,
     borderWidth: 1,
-    borderColor: "#dbe4f0",
-    gap: 11,
-    shadowColor: "#1e293b",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    borderColor: "#edf2f8",
+    shadowColor: NM.dark,
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 0.26,
+    shadowRadius: 9,
+    elevation: 3,
   },
   cardTitle: {
-    color: "#0f172a",
+    color: NM.textPrimary,
     fontSize: 15,
     fontWeight: "800",
   },
   tabsWrap: {
-    marginHorizontal: 14,
-    marginBottom: 4,
-    borderRadius: 14,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.inputBg,
+    padding: 5,
     borderWidth: 1,
-    borderColor: "#dbe4f0",
-    backgroundColor: "#ffffff",
-    padding: 6,
+    borderColor: "#d0d7e1",
   },
   segmentRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   segmentButton: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#d4dce8",
-    borderRadius: 11,
+    borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
-    backgroundColor: "#f8fbff",
+    backgroundColor: "transparent",
   },
   segmentButtonActive: {
-    backgroundColor: "#e7f1ff",
-    borderColor: "#93c5fd",
+    backgroundColor: NM.bg,
+    shadowColor: NM.dark,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 5,
+    elevation: 2,
   },
   segmentButtonText: {
     fontSize: 12,
-    color: "#4b5563",
+    color: NM.textSecondary,
     fontWeight: "700",
   },
   segmentButtonTextActive: {
-    color: "#1d4ed8",
+    color: NM.accent,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#d4dce8",
-    borderRadius: 11,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    backgroundColor: "#ffffff",
+    borderRadius: NM.radiusSm,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: NM.inputBg,
     fontSize: 14,
-    color: "#0f172a",
+    color: NM.textPrimary,
+    borderWidth: 1,
+    borderColor: NM.inputBorder,
   },
   primaryButton: {
-    borderRadius: 11,
-    backgroundColor: "#1d4ed8",
-    paddingVertical: 12,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.accent,
+    paddingVertical: 13,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4f8ce1",
+    shadowColor: NM.dark,
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.24,
+    shadowRadius: 7,
+    elevation: 3,
   },
   primaryButtonText: {
     color: "#ffffff",
@@ -1175,40 +1229,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   secondaryButton: {
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "#d4dce8",
-    backgroundColor: "#f8fbff",
-    paddingVertical: 11,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.bg,
+    paddingVertical: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#edf2f8",
+    shadowColor: NM.dark,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
   secondaryButtonText: {
-    color: "#1f2937",
+    color: NM.textPrimary,
     fontWeight: "700",
     fontSize: 13,
   },
   tinyButton: {
-    borderRadius: 9,
+    borderRadius: 10,
+    backgroundColor: NM.bg,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: "#d4dce8",
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderColor: "#edf2f8",
+    shadowColor: NM.dark,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tinyButtonText: {
-    color: "#334155",
+    color: NM.textPrimary,
     fontSize: 11,
     fontWeight: "700",
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.45,
   },
   orText: {
     textAlign: "center",
-    color: "#64748b",
+    color: NM.textSecondary,
     fontSize: 12,
     fontWeight: "700",
-    marginTop: 2,
+    marginTop: 4,
   },
   socialRow: {
     flexDirection: "row",
@@ -1216,59 +1280,74 @@ const styles = StyleSheet.create({
   },
   socialButton: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#d4dce8",
-    borderRadius: 11,
-    paddingVertical: 11,
+    borderRadius: NM.radiusSm,
+    paddingVertical: 12,
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: NM.bg,
+    borderWidth: 1,
+    borderColor: "#edf2f8",
+    shadowColor: NM.dark,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
   socialButtonText: {
-    color: "#1f2937",
+    color: NM.textPrimary,
     fontSize: 13,
     fontWeight: "700",
   },
   helpText: {
-    color: "#64748b",
+    color: NM.textSecondary,
     fontSize: 12,
     lineHeight: 18,
   },
   userBar: {
-    marginHorizontal: 14,
-    marginTop: 12,
+    marginHorizontal: 16,
+    marginTop: 14,
     marginBottom: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#dbe4f0",
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    borderRadius: NM.radius,
+    backgroundColor: NM.bg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    shadowColor: NM.dark,
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#edf2f8",
   },
   userInfo: {
     flex: 1,
   },
   userEmail: {
-    color: "#0f172a",
+    color: NM.textPrimary,
     fontWeight: "800",
     fontSize: 13,
   },
   userName: {
     marginTop: 2,
-    color: "#6b7280",
+    color: NM.textSecondary,
     fontWeight: "600",
     fontSize: 11,
   },
   logoutButton: {
-    borderRadius: 9,
+    borderRadius: 10,
+    backgroundColor: "#e0cece",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fff1f2",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderColor: "#ead5d5",
+    shadowColor: "#b0a0a0",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 2,
   },
   logoutButtonText: {
     color: "#be123c",
@@ -1276,54 +1355,58 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   fileInfo: {
-    color: "#334155",
+    color: NM.textPrimary,
     fontSize: 12,
     fontWeight: "600",
   },
   taskStateText: {
-    color: "#0369a1",
+    color: NM.accent,
     fontWeight: "700",
     fontSize: 12,
   },
   metaText: {
-    color: "#64748b",
+    color: NM.textSecondary,
     fontSize: 11,
     fontWeight: "600",
   },
   sectionTitle: {
-    color: "#0f172a",
+    color: NM.textPrimary,
     fontSize: 13,
     fontWeight: "800",
   },
   resultBox: {
-    borderWidth: 1,
-    borderColor: "#d4dce8",
-    borderRadius: 11,
-    backgroundColor: "#f8fbff",
-    padding: 11,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.inputBg,
+    padding: 12,
     maxHeight: 260,
+    borderWidth: 1,
+    borderColor: NM.inputBorder,
   },
   summaryBox: {
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    borderRadius: 10,
-    backgroundColor: "#eff6ff",
-    padding: 10,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.noticeBg,
+    padding: 12,
     gap: 6,
   },
   resultText: {
-    color: "#0f172a",
+    color: NM.textPrimary,
     fontSize: 12,
     lineHeight: 19,
   },
   recordBlock: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: "#dbe4f0",
-    borderRadius: 11,
-    padding: 10,
+    marginTop: 6,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.bg,
+    padding: 12,
     gap: 8,
+    shadowColor: NM.dark,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#edf2f8",
   },
   recordHeader: {
     flexDirection: "row",
@@ -1337,16 +1420,16 @@ const styles = StyleSheet.create({
   },
   recordEditor: {
     minHeight: 90,
-    borderWidth: 1,
-    borderColor: "#d4dce8",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     textAlignVertical: "top",
     fontSize: 12,
     lineHeight: 18,
-    color: "#0f172a",
-    backgroundColor: "#ffffff",
+    color: NM.textPrimary,
+    backgroundColor: NM.inputBg,
+    borderWidth: 1,
+    borderColor: NM.inputBorder,
   },
   inlineBetween: {
     flexDirection: "row",
@@ -1355,24 +1438,31 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
-    color: "#64748b",
+    color: NM.textSecondary,
     fontSize: 12,
     fontWeight: "600",
   },
   listItem: {
-    borderWidth: 1,
-    borderColor: "#dbe4f0",
-    borderRadius: 11,
-    padding: 10,
+    borderRadius: NM.radiusSm,
+    backgroundColor: NM.bg,
+    padding: 12,
     gap: 6,
+    shadowColor: NM.dark,
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#edf2f8",
   },
   listTitle: {
-    color: "#0f172a",
+    color: NM.textPrimary,
     fontSize: 13,
     fontWeight: "800",
   },
   previewText: {
-    color: "#334155",
+    color: NM.textPrimary,
     fontSize: 12,
     lineHeight: 18,
   },
