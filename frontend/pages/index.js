@@ -42,7 +42,7 @@ function StepIndicator({ currentStep }) {
               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500
                 ${isCompleted ? 'bg-green-500 text-white shadow-sm shadow-green-500/30' :
                   isActive ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/30 animate-pulse' :
-                  'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'}`}
+                    'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'}`}
               >
                 {isCompleted ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,11 +50,10 @@ function StepIndicator({ currentStep }) {
                   </svg>
                 ) : step.num}
               </div>
-              <span className={`text-[11px] font-medium ${
-                isActive ? 'text-blue-600 dark:text-blue-400' :
+              <span className={`text-[11px] font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' :
                 isCompleted ? 'text-green-600 dark:text-green-400' :
-                'text-slate-400 dark:text-slate-500'
-              }`}>
+                  'text-slate-400 dark:text-slate-500'
+                }`}>
                 {step.label}
               </span>
             </div>
@@ -124,7 +123,7 @@ export default function Home({ darkMode, setDarkMode }) {
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS)
     fetch(`${API_URL}/health`, { signal: controller.signal })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => window.clearTimeout(timeoutId))
   }
 
@@ -145,11 +144,11 @@ export default function Home({ darkMode, setDarkMode }) {
         window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
         setError('로그인 세션이 만료되었습니다. 다시 로그인해주세요.')
       } else {
-      setAuthToken(oauthAccessToken)
-      window.sessionStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
-      fetchCurrentUser(oauthAccessToken)
-      fetchSavedRecords(oauthAccessToken)
-      setNotice('소셜 로그인이 완료되었습니다.')
+        setAuthToken(oauthAccessToken)
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
+        fetchCurrentUser(oauthAccessToken)
+        fetchSavedRecords(oauthAccessToken)
+        setNotice('소셜 로그인이 완료되었습니다.')
       }
     } else {
       const savedToken = window.sessionStorage.getItem(AUTH_TOKEN_KEY)
@@ -640,9 +639,9 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
   const transcriptionTypeHints = {
-    sermon: '설교 흐름(본론/결론/기도) 중심으로 정리하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 문맥 교정을 강화합니다.',
-    phonecall: '통화 화자를 A/B로 분리하고 의료 관련 표현 및 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 보강합니다.',
-    conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치와 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 구조화합니다.',
+    sermon: '설교 흐름(본론/결론/기도) 중심으로 정리합니다.',
+    phonecall: '통화 화자를 A/B로 분리하여 정리합니다.',
+    conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치 하며 구조화 합니다.',
   }
   const recordTypeLabels = {
     meeting_keywords: '회의 중요 키워드',
@@ -712,22 +711,20 @@ export default function Home({ darkMode, setDarkMode }) {
                   <button
                     type="button"
                     onClick={() => setAuthMode('login')}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                      authMode === 'login'
-                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
-                        : 'text-slate-500 dark:text-slate-300'
-                    }`}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${authMode === 'login'
+                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
+                      : 'text-slate-500 dark:text-slate-300'
+                      }`}
                   >
                     로그인
                   </button>
                   <button
                     type="button"
                     onClick={() => setAuthMode('signup')}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                      authMode === 'signup'
-                        ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
-                        : 'text-slate-500 dark:text-slate-300'
-                    }`}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${authMode === 'signup'
+                      ? 'bg-white dark:bg-slate-600 text-slate-900 dark:text-white'
+                      : 'text-slate-500 dark:text-slate-300'
+                      }`}
                   >
                     회원가입
                   </button>
@@ -769,8 +766,8 @@ export default function Home({ darkMode, setDarkMode }) {
                   {authLoading
                     ? '처리 중...'
                     : authMode === 'signup'
-                    ? '회원가입하기'
-                    : '로그인하기'}
+                      ? '회원가입하기'
+                      : '로그인하기'}
                 </button>
               </form>
               <div className="mt-4">
@@ -840,432 +837,431 @@ export default function Home({ darkMode, setDarkMode }) {
 
         {authToken && (
           <>
-        <div className="mb-5 rounded-2xl border border-blue-100/80 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-900/10 p-4 animate-fade-in">
-          <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-medium">
-            mallog24 특화: 설교 흐름 정리 + 통화/회의 화자 분리 + 의료 기록 구조화
-          </p>
-        </div>
-        {/* 업로드 카드 */}
-        <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
-          <form onSubmit={handleSubmit}>
+            <div className="mb-5 rounded-2xl border border-blue-100/80 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-900/10 p-4 animate-fade-in">
+              <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 font-medium">
+                mallog24 특화: 설교, 통화, 회의 기록을 목적에 맞게 구조화합니다.
+              </p>
+            </div>
+            {/* 업로드 카드 */}
+            <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6 mb-5 animate-fade-in">
+              <form onSubmit={handleSubmit}>
 
-            {/* 드래그 앤 드롭 영역 */}
-            <div
-              className={`relative rounded-2xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
+                {/* 드래그 앤 드롭 영역 */}
+                <div
+                  className={`relative rounded-2xl border-2 border-dashed p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
                 ${dragOver ? 'border-blue-400 bg-blue-50/80 dark:bg-blue-900/20 scale-[1.01]' :
-                  file ? 'border-green-400/60 dark:border-green-500/40 bg-green-50/50 dark:bg-green-900/10' :
-                  'border-slate-200 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-50/50 dark:hover:bg-slate-800/50'}`}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="audio/*"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+                      file ? 'border-green-400/60 dark:border-green-500/40 bg-green-50/50 dark:bg-green-900/10' :
+                        'border-slate-200 dark:border-slate-600 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-50/50 dark:hover:bg-slate-800/50'}`}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
 
-              {file ? (
-                <div className="space-y-2">
-                  <div className="w-11 h-11 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{file.name}</p>
-                  <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setFile(null) }}
-                    className="text-xs text-red-500 hover:text-red-600 font-medium mt-1"
-                  >
-                    파일 변경
-                  </button>
+                  {file ? (
+                    <div className="space-y-2">
+                      <div className="w-11 h-11 mx-auto rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{file.name}</p>
+                      <p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                        className="text-xs text-red-500 hover:text-red-600 font-medium mt-1"
+                      >
+                        파일 변경
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="w-11 h-11 mx-auto rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        파일을 끌어다 놓거나 <span className="text-blue-500 font-medium">클릭</span>하여 선택
+                      </p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="w-11 h-11 mx-auto rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    파일을 끌어다 놓거나 <span className="text-blue-500 font-medium">클릭</span>하여 선택
-                  </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
-                </div>
-              )}
-            </div>
 
-            {/* 설정 */}
-            <div className="mt-4 flex gap-3">
-              <div className="flex-1 relative">
-                <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">언어</label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
+                {/* 설정 */}
+                <div className="mt-4 flex gap-3">
+                  <div className="flex-1 relative">
+                    <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">언어</label>
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
                     focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition-all
                     text-slate-700 dark:text-slate-200"
-                >
-                  <option value="ko">한국어</option>
-                  <option value="en">English</option>
-                </select>
-              </div>
-              <div className="flex-1 relative">
-                <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">유형</label>
-                <select
-                  value={transcriptionType}
-                  onChange={(e) => setTranscriptionType(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
+                    >
+                      <option value="ko">한국어</option>
+                      <option value="en">English</option>
+                    </select>
+                  </div>
+                  <div className="flex-1 relative">
+                    <label className="absolute -top-2 left-3 px-1 bg-white dark:bg-slate-800 text-[10px] font-medium text-slate-400 dark:text-slate-500">유형</label>
+                    <select
+                      value={transcriptionType}
+                      onChange={(e) => setTranscriptionType(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl
                     focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition-all
                     text-slate-700 dark:text-slate-200"
-                >
-                  <option value="sermon">설교 녹취</option>
-                  <option value="phonecall">통화 기록</option>
-                  <option value="conversation">대화/회의 기록</option>
-                </select>
-              </div>
-            </div>
-            <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-              {transcriptionTypeHints[transcriptionType]}
-            </p>
+                    >
+                      <option value="sermon">설교 녹취</option>
+                      <option value="phonecall">통화 기록</option>
+                      <option value="conversation">대화/회의 기록</option>
+                    </select>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  {transcriptionTypeHints[transcriptionType]}
+                </p>
 
-            {/* 변환 버튼 */}
-            <button
-              type="submit"
-              disabled={loading || !file || !authToken}
-              className="w-full mt-5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 dark:disabled:bg-slate-700
+                {/* 변환 버튼 */}
+                <button
+                  type="submit"
+                  disabled={loading || !file || !authToken}
+                  className="w-full mt-5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 dark:disabled:bg-slate-700
                 text-white disabled:text-slate-400 dark:disabled:text-slate-500
                 py-3.5 rounded-xl font-semibold text-sm
                 transition-all duration-200
                 shadow-sm hover:shadow-md shadow-blue-600/10 hover:shadow-blue-600/20
                 disabled:shadow-none disabled:cursor-not-allowed
                 active:scale-[0.98]"
-            >
-              {loading ? '변환 중...' : authToken ? '변환하기' : '로그인 후 변환하기'}
-            </button>
-          </form>
-
-          {/* 에러 메시지 */}
-          {error && (
-            <div className="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200/80 dark:border-red-800/50 rounded-xl animate-slide-up">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            </div>
-          )}
-          {notice && (
-            <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/80 dark:border-blue-800/50 rounded-xl animate-slide-up">
-              <p className="text-sm text-blue-600 dark:text-blue-300">{notice}</p>
-            </div>
-          )}
-        </div>
-
-        {/* 진행률 표시 */}
-        {loading && currentStep > 0 && (
-          <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-6 mb-5 animate-slide-up">
-            <StepIndicator currentStep={currentStep} />
-            <div className="h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mt-5">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out"
-                style={{ width: currentStep === 1 ? '20%' : currentStep === 2 ? '55%' : '85%' }}
-              />
-            </div>
-            <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-3">
-              {currentStep === 1 && '파일을 업로드하고 있습니다...'}
-              {currentStep === 2 && 'AI가 음성을 인식하고 있습니다...'}
-              {currentStep === 3 && '텍스트를 교정하고 구조화하고 있습니다...'}
-            </p>
-          </div>
-        )}
-
-        {/* 결과 영역 */}
-        {result && (
-          <div className="space-y-4 animate-slide-up">
-
-            {/* 결과 헤더 + 텍스트 */}
-            <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">변환 결과</h2>
-                  {result.transcription_type && result.transcription_type !== 'sermon' && (
-                    <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-[11px] font-medium">
-                      {typeLabels[result.transcription_type] || result.transcription_type}
-                    </span>
-                  )}
-                </div>
-                <span className="px-2.5 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-[11px] font-medium">
-                  {result.characters?.toLocaleString()} 자
-                </span>
-              </div>
-
-              <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 sm:p-5 rounded-xl border border-slate-100 dark:border-slate-800/50 max-h-[60vh] overflow-y-auto">
-                <div className="text-[13px] leading-7 text-slate-700 dark:text-slate-300">
-                  {(result.corrected_text || result.raw_text)
-                    .split('\n')
-                    .map((line, i) => {
-                      const trimmed = line.trim()
-                      if (sectionHeaders.includes(trimmed)) {
-                        return (
-                          <div key={i} className="text-sm font-bold text-blue-700 dark:text-blue-400 border-b border-blue-100 dark:border-blue-900/50 pb-1 mt-7 mb-3">
-                            {trimmed}
-                          </div>
-                        )
-                      }
-                      const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
-                      if (speakerMatch) {
-                        return (
-                          <p key={i} className="mb-1.5">
-                            <span className="inline-block px-2 py-0.5 mr-1.5 text-[11px] font-semibold rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40">
-                              {speakerMatch[1]}
-                            </span>
-                            {trimmed.slice(speakerMatch[0].length).trim()}
-                          </p>
-                        )
-                      }
-                      if (trimmed === '') return <br key={i} />
-                      return <p key={i} className="mb-1.5">{line}</p>
-                    })
-                  }
-                </div>
-              </div>
-
-              {/* 액션 버튼들 */}
-              <div className="flex flex-wrap gap-2 mt-4">
-                <button
-                  onClick={() => copyToClipboard(result.corrected_text || result.raw_text, 'text')}
-                  className="action-btn"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  {copied === 'text' ? '복사됨' : '복사'}
+                  {loading ? '변환 중...' : authToken ? '변환하기' : '로그인 후 변환하기'}
                 </button>
-                <button onClick={exportAsTxt} className="action-btn">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  TXT
-                </button>
-                <button onClick={exportAsWord} className="action-btn">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Word
-                </button>
-              </div>
+              </form>
+
+              {/* 에러 메시지 */}
+              {error && (
+                <div className="mt-4 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200/80 dark:border-red-800/50 rounded-xl animate-slide-up">
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
+              )}
+              {notice && (
+                <div className="mt-4 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200/80 dark:border-blue-800/50 rounded-xl animate-slide-up">
+                  <p className="text-sm text-blue-600 dark:text-blue-300">{notice}</p>
+                </div>
+              )}
             </div>
 
-            {/* 요약 섹션 (설교 녹취만) */}
-            {(result.transcription_type || 'sermon') === 'sermon' && (
-              !result.summary ? (
-                <button
-                  onClick={handleSummarize}
-                  disabled={loading}
-                  className="w-full bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50
+            {/* 진행률 표시 */}
+            {loading && currentStep > 0 && (
+              <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-6 mb-5 animate-slide-up">
+                <StepIndicator currentStep={currentStep} />
+                <div className="h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mt-5">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: currentStep === 1 ? '20%' : currentStep === 2 ? '55%' : '85%' }}
+                  />
+                </div>
+                <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-3">
+                  {currentStep === 1 && '파일을 업로드하고 있습니다...'}
+                  {currentStep === 2 && 'AI가 음성을 인식하고 있습니다...'}
+                  {currentStep === 3 && '텍스트를 교정하고 구조화하고 있습니다...'}
+                </p>
+              </div>
+            )}
+
+            {/* 결과 영역 */}
+            {result && (
+              <div className="space-y-4 animate-slide-up">
+
+                {/* 결과 헤더 + 텍스트 */}
+                <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-bold text-slate-900 dark:text-white">변환 결과</h2>
+                      {result.transcription_type && result.transcription_type !== 'sermon' && (
+                        <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-[11px] font-medium">
+                          {typeLabels[result.transcription_type] || result.transcription_type}
+                        </span>
+                      )}
+                    </div>
+                    <span className="px-2.5 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg text-[11px] font-medium">
+                      {result.characters?.toLocaleString()} 자
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 sm:p-5 rounded-xl border border-slate-100 dark:border-slate-800/50 max-h-[60vh] overflow-y-auto">
+                    <div className="text-[13px] leading-7 text-slate-700 dark:text-slate-300">
+                      {(result.corrected_text || result.raw_text)
+                        .split('\n')
+                        .map((line, i) => {
+                          const trimmed = line.trim()
+                          if (sectionHeaders.includes(trimmed)) {
+                            return (
+                              <div key={i} className="text-sm font-bold text-blue-700 dark:text-blue-400 border-b border-blue-100 dark:border-blue-900/50 pb-1 mt-7 mb-3">
+                                {trimmed}
+                              </div>
+                            )
+                          }
+                          const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
+                          if (speakerMatch) {
+                            return (
+                              <p key={i} className="mb-1.5">
+                                <span className="inline-block px-2 py-0.5 mr-1.5 text-[11px] font-semibold rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40">
+                                  {speakerMatch[1]}
+                                </span>
+                                {trimmed.slice(speakerMatch[0].length).trim()}
+                              </p>
+                            )
+                          }
+                          if (trimmed === '') return <br key={i} />
+                          return <p key={i} className="mb-1.5">{line}</p>
+                        })
+                      }
+                    </div>
+                  </div>
+
+                  {/* 액션 버튼들 */}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    <button
+                      onClick={() => copyToClipboard(result.corrected_text || result.raw_text, 'text')}
+                      className="action-btn"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      {copied === 'text' ? '복사됨' : '복사'}
+                    </button>
+                    <button onClick={exportAsTxt} className="action-btn">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      TXT
+                    </button>
+                    <button onClick={exportAsWord} className="action-btn">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Word
+                    </button>
+                  </div>
+                </div>
+
+                {/* 요약 섹션 (설교 녹취만) */}
+                {(result.transcription_type || 'sermon') === 'sermon' && (
+                  !result.summary ? (
+                    <button
+                      onClick={handleSummarize}
+                      disabled={loading}
+                      className="w-full bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50
                     p-4 text-sm font-medium text-blue-600 dark:text-blue-400
                     hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? '요약 생성 중...' : '주보용 요약 생성'}
-                </button>
-              ) : (
-                <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">주보용 요약</h3>
-                    <button
-                      onClick={() => copyToClipboard(result.summary, 'summary')}
-                      className="text-xs text-blue-500 hover:text-blue-600 font-medium"
                     >
-                      {copied === 'summary' ? '복사됨' : '복사'}
+                      {loading ? '요약 생성 중...' : '주보용 요약 생성'}
                     </button>
-                  </div>
-                  <div className="bg-blue-50/80 dark:bg-blue-900/15 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                    <p className="whitespace-pre-wrap text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {result.summary}
-                    </p>
-                  </div>
-                </div>
-              )
-            )}
-
-            {/* 기록본 생성/저장 */}
-            <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">별도 기록본</h3>
-                <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                  회의/진료/설교 포맷
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                결과 텍스트를 기반으로 전용 기록본 초안을 생성한 뒤, 로그인 사용자 계정으로 별도 저장할 수 있습니다.
-              </p>
-
-              <div className="flex flex-wrap gap-2">
-                {recordCategories.map((recordCategory) => (
-                  <button
-                    key={recordCategory.key}
-                    type="button"
-                    onClick={() => handleGenerateRecordDraft(recordCategory.key)}
-                    disabled={draftLoadingCategory === recordCategory.key}
-                    className="action-btn"
-                  >
-                    {draftLoadingCategory === recordCategory.key ? '생성 중...' : recordCategory.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {recordCategories.map((recordCategory) => (
-                  recordDrafts[recordCategory.key] ? (
-                    <div key={recordCategory.key} className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                          {recordCategory.label}
-                        </p>
+                  ) : (
+                    <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">주보용 요약</h3>
                         <button
-                          type="button"
-                          onClick={() => handleSaveRecord(recordCategory.key)}
-                          disabled={savingCategory === recordCategory.key}
-                          className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold disabled:opacity-50"
+                          onClick={() => copyToClipboard(result.summary, 'summary')}
+                          className="text-xs text-blue-500 hover:text-blue-600 font-medium"
                         >
-                          {savingCategory === recordCategory.key ? '저장 중...' : '저장'}
+                          {copied === 'summary' ? '복사됨' : '복사'}
                         </button>
                       </div>
-                      <textarea
-                        value={recordDrafts[recordCategory.key]}
-                        onChange={(e) => handleRecordDraftChange(recordCategory.key, e.target.value)}
-                        rows={6}
-                        className="w-full px-3 py-2 text-xs leading-relaxed bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500/30"
-                      />
+                      <div className="bg-blue-50/80 dark:bg-blue-900/15 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
+                        <p className="whitespace-pre-wrap text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                          {result.summary}
+                        </p>
+                      </div>
                     </div>
-                  ) : null
-                ))}
-              </div>
-            </div>
+                  )
+                )}
 
-            {/* 원본 텍스트 */}
-            {result.corrected_text && (
-              <details className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden">
-                <summary className="p-4 cursor-pointer text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-medium select-none transition-colors">
-                  원본 텍스트 보기
-                </summary>
-                <div className="px-5 pb-5">
-                  <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
-                    <p className="whitespace-pre-wrap text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      {result.raw_text}
-                    </p>
+                {/* 기록본 생성/저장 */}
+                <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 p-5 sm:p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">별도 기록본</h3>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                      회의/진료/설교 포맷
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                    결과 텍스트를 기반으로 전용 기록본 초안을 생성한 뒤, 로그인 사용자 계정으로 별도 저장할 수 있습니다.
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+                    {recordCategories.map((recordCategory) => (
+                      <button
+                        key={recordCategory.key}
+                        type="button"
+                        onClick={() => handleGenerateRecordDraft(recordCategory.key)}
+                        disabled={draftLoadingCategory === recordCategory.key}
+                        className="action-btn"
+                      >
+                        {draftLoadingCategory === recordCategory.key ? '생성 중...' : recordCategory.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {recordCategories.map((recordCategory) => (
+                      recordDrafts[recordCategory.key] ? (
+                        <div key={recordCategory.key} className="rounded-xl border border-slate-200/80 dark:border-slate-700/60 p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                              {recordCategory.label}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveRecord(recordCategory.key)}
+                              disabled={savingCategory === recordCategory.key}
+                              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold disabled:opacity-50"
+                            >
+                              {savingCategory === recordCategory.key ? '저장 중...' : '저장'}
+                            </button>
+                          </div>
+                          <textarea
+                            value={recordDrafts[recordCategory.key]}
+                            onChange={(e) => handleRecordDraftChange(recordCategory.key, e.target.value)}
+                            rows={6}
+                            className="w-full px-3 py-2 text-xs leading-relaxed bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500/30"
+                          />
+                        </div>
+                      ) : null
+                    ))}
                   </div>
                 </div>
-              </details>
-            )}
-          </div>
-        )}
 
-        {/* 히스토리 */}
-        {history.length > 0 && (
-          <div className="mt-8">
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
-            >
-              <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showHistory ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              최근 변환 기록 ({history.length})
-            </button>
-
-            {showHistory && (
-              <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
-                <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
-                  {history.map((item) => (
-                    <li key={item.task_id}>
-                      <button
-                        onClick={() => handleLoadHistory(item.task_id)}
-                        className="w-full text-left p-4 hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0 pr-4">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                item.status === 'completed' ? 'bg-green-500' :
-                                item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
-                              }`} />
-                              <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                                {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                              {item.transcription_type && item.transcription_type !== 'sermon' && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
-                                  {item.transcription_type === 'phonecall' ? '통화' : '회의'}
-                                </span>
-                              )}
-                              {item.characters > 0 && (
-                                <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                                  {item.characters?.toLocaleString()}자
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-slate-600 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                              {item.summary_preview || "내용 없음"}
-                            </p>
-                          </div>
-                          <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-blue-400 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 저장된 기록본 */}
-        {authToken && (
-          <div className="mt-8">
-            <button
-              onClick={() => setShowRecords(!showRecords)}
-              className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
-            >
-              <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showRecords ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              내 저장 기록본 ({savedRecords.length})
-            </button>
-
-            {showRecords && (
-              <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
-                {savedRecords.length === 0 ? (
-                  <p className="text-sm text-slate-400 dark:text-slate-500 p-4">아직 저장된 기록본이 없습니다.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
-                    {savedRecords.map((item) => (
-                      <li key={item.id} className="p-4">
-                        <div className="flex items-center justify-between gap-3 mb-1.5">
-                          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                            {recordTypeLabels[item.category] || item.title || item.category}
-                          </p>
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                            {item.created_at
-                              ? new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                              : ''}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
-                          {item.content}
+                {/* 원본 텍스트 */}
+                {result.corrected_text && (
+                  <details className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden">
+                    <summary className="p-4 cursor-pointer text-sm text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-medium select-none transition-colors">
+                      원본 텍스트 보기
+                    </summary>
+                    <div className="px-5 pb-5">
+                      <div className="bg-slate-50/80 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800/50">
+                        <p className="whitespace-pre-wrap text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          {result.raw_text}
                         </p>
-                      </li>
-                    ))}
-                  </ul>
+                      </div>
+                    </div>
+                  </details>
                 )}
               </div>
             )}
-          </div>
-        )}
+
+            {/* 히스토리 */}
+            {history.length > 0 && (
+              <div className="mt-8">
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showHistory ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  최근 변환 기록 ({history.length})
+                </button>
+
+                {showHistory && (
+                  <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
+                    <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
+                      {history.map((item) => (
+                        <li key={item.task_id}>
+                          <button
+                            onClick={() => handleLoadHistory(item.task_id)}
+                            className="w-full text-left p-4 hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-colors group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0 pr-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === 'completed' ? 'bg-green-500' :
+                                    item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
+                                    }`} />
+                                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                    {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  {item.transcription_type && item.transcription_type !== 'sermon' && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium">
+                                      {item.transcription_type === 'phonecall' ? '통화' : '회의'}
+                                    </span>
+                                  )}
+                                  {item.characters > 0 && (
+                                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                      {item.characters?.toLocaleString()}자
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                  {item.summary_preview || "내용 없음"}
+                                </p>
+                              </div>
+                              <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-blue-400 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 저장된 기록본 */}
+            {authToken && (
+              <div className="mt-8">
+                <button
+                  onClick={() => setShowRecords(!showRecords)}
+                  className="flex items-center gap-2 text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 mb-3 transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showRecords ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  내 저장 기록본 ({savedRecords.length})
+                </button>
+
+                {showRecords && (
+                  <div className="bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-700/50 overflow-hidden animate-slide-up">
+                    {savedRecords.length === 0 ? (
+                      <p className="text-sm text-slate-400 dark:text-slate-500 p-4">아직 저장된 기록본이 없습니다.</p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100/80 dark:divide-slate-800/50">
+                        {savedRecords.map((item) => (
+                          <li key={item.id} className="p-4">
+                            <div className="flex items-center justify-between gap-3 mb-1.5">
+                              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                {recordTypeLabels[item.category] || item.title || item.category}
+                              </p>
+                              <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                {item.created_at
+                                  ? new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                  : ''}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap leading-relaxed">
+                              {item.content}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 

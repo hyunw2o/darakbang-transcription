@@ -220,7 +220,7 @@ function App() {
   const isLoggedIn = !!authToken && !!authUser;
 
   const warmUpBackend = () => {
-    requestApi("/health", { timeoutMs: 4000 }).catch(() => {});
+    requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
   };
 
   const clearMessages = () => {
@@ -725,9 +725,9 @@ function App() {
   };
 
   const selectedTypeHint = useMemo(() => {
-    if (transcriptionType === "sermon") return "설교 흐름 중심으로 구조화하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 문맥 교정을 강화합니다.";
-    if (transcriptionType === "phonecall") return "통화 화자 분리와 핵심 문장 중심으로 정리하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 보강합니다.";
-    return "회의 안건/결정/후속 조치 중심으로 정리하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 보강합니다.";
+    if (transcriptionType === "sermon") return "설교 흐름(본론/결론/기도) 중심으로 구조화합니다.";
+    if (transcriptionType === "phonecall") return "통화 화자 분리와 핵심 문장 중심으로 정리합니다.";
+    return "회의 안건/결정/후속 조치를 분리해 정리합니다.";
   }, [transcriptionType]);
 
   if (bootLoading) {
