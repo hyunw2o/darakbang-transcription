@@ -640,9 +640,9 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
   const transcriptionTypeHints = {
-    sermon: '설교 흐름(본론/결론/기도) 중심으로 정리합니다.',
-    phonecall: '통화 화자를 A/B로 분리하고 의료 관련 표현을 보강합니다.',
-    conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치를 구조화합니다.',
+    sermon: '설교 흐름(본론/결론/기도) 중심으로 정리하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 문맥 교정을 강화합니다.',
+    phonecall: '통화 화자를 A/B로 분리하고 의료 관련 표현 및 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 보강합니다.',
+    conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치와 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 구조화합니다.',
   }
   const recordTypeLabels = {
     meeting_keywords: '회의 중요 키워드',

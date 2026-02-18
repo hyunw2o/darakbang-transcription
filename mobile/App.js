@@ -14,6 +14,7 @@ import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as ExpoLinking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Mallog24Logo from "./components/Mallog24Logo";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://darakbang-transcription-backend.onrender.com";
 const AUTH_TOKEN_KEY = "mallog24_access_token";
@@ -725,9 +726,9 @@ function App() {
   };
 
   const selectedTypeHint = useMemo(() => {
-    if (transcriptionType === "sermon") return "설교 흐름 중심으로 구조화합니다.";
-    if (transcriptionType === "phonecall") return "통화 화자 분리와 핵심 문장 중심으로 정리합니다.";
-    return "회의 안건/결정/후속 조치 중심으로 정리합니다.";
+    if (transcriptionType === "sermon") return "설교 흐름 중심으로 구조화하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 문맥 교정을 강화합니다.";
+    if (transcriptionType === "phonecall") return "통화 화자 분리와 핵심 문장 중심으로 정리하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 보강합니다.";
+    return "회의 안건/결정/후속 조치 중심으로 정리하고 혼동어(3오늘/삼오늘/사모늘, 포럼방/포럼망) 교정을 보강합니다.";
   }, [transcriptionType]);
 
   if (bootLoading) {
@@ -745,7 +746,14 @@ function App() {
       <StatusBar style="dark" />
 
       <View style={styles.header}>
-        <Text style={styles.appTitle}>mallog24 App</Text>
+        <View style={styles.headerTopRow}>
+          <Mallog24Logo size="lg" />
+          {isLoggedIn ? (
+            <View style={styles.headerChip}>
+              <Text style={styles.headerChipText}>LIVE</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.appSubtitle}>네이티브 녹취 · 요약 · 기록본 저장</Text>
       </View>
 
@@ -753,9 +761,13 @@ function App() {
       <Banner type="notice" text={notice} />
 
       {!isLoggedIn ? (
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>회원 인증</Text>
+        <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
+          <View style={[styles.card, styles.authCard]}>
+            <View style={styles.authLogoRow}>
+              <Mallog24Logo size="md" />
+            </View>
+            <Text style={styles.authLabel}>회원 인증</Text>
+            <Text style={styles.authSubLabel}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
 
             <View style={styles.segmentRow}>
               <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} />
@@ -836,15 +848,17 @@ function App() {
             </Pressable>
           </View>
 
-          <View style={styles.segmentRow}>
-            {APP_TABS.map((tab) => (
-              <SegmentButton
-                key={tab.key}
-                label={tab.label}
-                active={activeTab === tab.key}
-                onPress={() => setActiveTab(tab.key)}
-              />
-            ))}
+          <View style={styles.tabsWrap}>
+            <View style={styles.segmentRow}>
+              {APP_TABS.map((tab) => (
+                <SegmentButton
+                  key={tab.key}
+                  label={tab.label}
+                  active={activeTab === tab.key}
+                  onPress={() => setActiveTab(tab.key)}
+                />
+              ))}
+            </View>
           </View>
 
           {activeTab === "transcribe" ? (
@@ -1030,36 +1044,51 @@ export default App;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#edf2fb",
   },
   centerScreen: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#eef4ff",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   loadingText: {
-    color: "#475569",
-    fontSize: 13,
+    color: "#334155",
+    fontSize: 14,
     fontWeight: "600",
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingTop: 14,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
+    borderColor: "#d8e2f0",
+    backgroundColor: "#f8fbff",
   },
-  appTitle: {
-    fontSize: 20,
-    color: "#0f172a",
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  headerChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  headerChipText: {
+    color: "#1e40af",
+    fontSize: 10,
     fontWeight: "800",
+    letterSpacing: 0.5,
   },
   appSubtitle: {
-    marginTop: 2,
-    color: "#475569",
+    marginTop: 6,
+    color: "#4b5563",
     fontSize: 12,
     fontWeight: "600",
   },
@@ -1067,15 +1096,42 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 14,
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 18,
+    gap: 14,
+  },
+  authScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 14,
+    paddingTop: 18,
+    paddingBottom: 24,
+    justifyContent: "center",
+  },
+  authCard: {
+    width: "100%",
+    maxWidth: 620,
+    alignSelf: "center",
+  },
+  authLogoRow: {
+    marginBottom: 2,
+  },
+  authLabel: {
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  authSubLabel: {
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 18,
   },
   banner: {
     marginHorizontal: 14,
-    marginTop: 8,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    marginTop: 10,
+    borderRadius: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     borderWidth: 1,
   },
   bannerError: {
@@ -1099,16 +1155,30 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    padding: 15,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    gap: 10,
+    borderColor: "#dbe4f0",
+    gap: 11,
+    shadowColor: "#1e293b",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
   cardTitle: {
     color: "#0f172a",
     fontSize: 15,
     fontWeight: "800",
+  },
+  tabsWrap: {
+    marginHorizontal: 14,
+    marginBottom: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbe4f0",
+    backgroundColor: "#ffffff",
+    padding: 6,
   },
   segmentRow: {
     flexDirection: "row",
@@ -1117,38 +1187,38 @@ const styles = StyleSheet.create({
   segmentButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingVertical: 9,
+    borderColor: "#d4dce8",
+    borderRadius: 11,
+    paddingVertical: 10,
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#f8fbff",
   },
   segmentButtonActive: {
-    backgroundColor: "#e0f2fe",
-    borderColor: "#7dd3fc",
+    backgroundColor: "#e7f1ff",
+    borderColor: "#93c5fd",
   },
   segmentButtonText: {
     fontSize: 12,
-    color: "#475569",
+    color: "#4b5563",
     fontWeight: "700",
   },
   segmentButtonTextActive: {
-    color: "#0c4a6e",
+    color: "#1d4ed8",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
+    borderColor: "#d4dce8",
+    borderRadius: 11,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     backgroundColor: "#ffffff",
     fontSize: 14,
     color: "#0f172a",
   },
   primaryButton: {
-    borderRadius: 10,
-    backgroundColor: "#2563eb",
-    paddingVertical: 11,
+    borderRadius: 11,
+    backgroundColor: "#1d4ed8",
+    paddingVertical: 12,
     alignItems: "center",
   },
   primaryButtonText: {
@@ -1157,22 +1227,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   secondaryButton: {
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
-    paddingVertical: 10,
+    borderColor: "#d4dce8",
+    backgroundColor: "#f8fbff",
+    paddingVertical: 11,
     alignItems: "center",
   },
   secondaryButtonText: {
-    color: "#0f172a",
+    color: "#1f2937",
     fontWeight: "700",
     fontSize: 13,
   },
   tinyButton: {
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#d4dce8",
     backgroundColor: "#ffffff",
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -1194,19 +1264,19 @@ const styles = StyleSheet.create({
   },
   socialRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
   },
   socialButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderColor: "#d4dce8",
+    borderRadius: 11,
+    paddingVertical: 11,
     alignItems: "center",
     backgroundColor: "#ffffff",
   },
   socialButtonText: {
-    color: "#0f172a",
+    color: "#1f2937",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -1218,13 +1288,13 @@ const styles = StyleSheet.create({
   userBar: {
     marginHorizontal: 14,
     marginTop: 12,
-    marginBottom: 8,
-    borderRadius: 12,
+    marginBottom: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#dbe4f0",
     backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1240,12 +1310,12 @@ const styles = StyleSheet.create({
   },
   userName: {
     marginTop: 2,
-    color: "#64748b",
+    color: "#6b7280",
     fontWeight: "600",
     fontSize: 11,
   },
   logoutButton: {
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: "#fecaca",
     backgroundColor: "#fff1f2",
@@ -1279,10 +1349,10 @@ const styles = StyleSheet.create({
   },
   resultBox: {
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    backgroundColor: "#f8fafc",
-    padding: 10,
+    borderColor: "#d4dce8",
+    borderRadius: 11,
+    backgroundColor: "#f8fbff",
+    padding: 11,
     maxHeight: 260,
   },
   summaryBox: {
@@ -1302,8 +1372,8 @@ const styles = StyleSheet.create({
   recordBlock: {
     marginTop: 4,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 10,
+    borderColor: "#dbe4f0",
+    borderRadius: 11,
     padding: 10,
     gap: 8,
   },
@@ -1320,7 +1390,7 @@ const styles = StyleSheet.create({
   recordEditor: {
     minHeight: 90,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#d4dce8",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -1343,8 +1413,8 @@ const styles = StyleSheet.create({
   },
   listItem: {
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 10,
+    borderColor: "#dbe4f0",
+    borderRadius: 11,
     padding: 10,
     gap: 6,
   },

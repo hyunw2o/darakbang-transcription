@@ -640,9 +640,9 @@ export default function Home({ darkMode, setDarkMode }) {
 
   const typeLabels = { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
   const transcriptionTypeHints = {
-    sermon: 'Structured by sermon flow (Main Body / Conclusion / Prayer).',
-    phonecall: 'Separates call speakers (A/B) and reinforces clinical wording.',
-    conversation: 'Separates meeting participants and structures agenda/decisions/actions.',
+    sermon: 'Structured by sermon flow (Main Body / Conclusion / Prayer) with stronger homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
+    phonecall: 'Separates call speakers (A/B), reinforces clinical wording, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
+    conversation: 'Separates meeting participants, structures agenda/decisions/actions, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
   }
   const recordTypeLabels = {
     meeting_keywords: 'Meeting Keywords',
