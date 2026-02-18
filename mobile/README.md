@@ -25,6 +25,7 @@ EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
 cd mobile
 rm -rf node_modules package-lock.json
 npm install
+npx expo install expo-linking
 npx expo install --fix
 npm run start
 ```
