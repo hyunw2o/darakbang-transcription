@@ -65,7 +65,7 @@ DARAKBANG_CORE = [
     "3단체", "뉴에이지", "프리메이슨", "유대인", "재앙", "지옥배경",
 
     # 성경 관련
-    "네피림", "바벨탑",
+    "네피림", "바벨탑", "앉은뱅이",
 
     # 행사/모임
     "성회", "전도대회", "수련회", "전도집회", "집회", "세미나", "기도수첩",
@@ -152,9 +152,7 @@ COMMON_MISTAKES = {
     "배심": "뱃심",
     "최상머리": "책상머리",
     "찌나는": "찐한",
-    "드로우게": "드로아교회",
     "드로우게교회": "드로아교회",
-    "드로에게": "드로아교회",
     "드로에게교회": "드로아교회",
     "드로아 교회": "드로아교회",
     "미션 홈": "미션홈",
@@ -216,6 +214,10 @@ COMMON_MISTAKES = {
     "두구": "투구",
     "렘피림": "네피림",
     "회 버아웃이": "회복이",
+    "앉은 뱅이": "앉은뱅이",
+    "안즌뱅이": "앉은뱅이",
+    "안은뱅이": "앉은뱅이",
+    "안즌뱅": "앉은뱅이",
 
     # 선교 약어
     "알이에이": "REA",
@@ -613,6 +615,11 @@ EN_COMMON_CORRECTIONS = {
     "rps": "RPS",
     "rls": "RLS",
     "rgs": "RGS",
+    # Church name normalization
+    "droa church": "Troas Church",
+    "droah church": "Troas Church",
+    "drowa church": "Troas Church",
+    "droas church": "Troas Church",
 }
 
 # ===== 영어 의료 용어 STT 오류 교정 =====
@@ -724,6 +731,7 @@ def get_gemini_prompt():
 [필수 용어]
 237, 5000, 237나라, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+앉은뱅이
 (이삼칠→237, 칠칠칠→777, 오천종족→5000종족 등 숫자/영어 표기 유지)
 
 [가장 중요한 규칙 - 완전 녹취]
@@ -741,11 +749,16 @@ def get_gemini_prompt():
    - 추임새/감탄사: '아', '음', '자', '어', '예', '응', '네', '에', '그'
    - 문장 시작의 '예,', '자,', '네,' 등 습관적 추임새만 삭제하라.
    - 주의: 추임새를 제거한다고 해서 문장 자체를 생략하면 안 된다.
-5. 성경 구절 번호는 "23/" 형식으로 표기하라.
+5. 성경 구절은 반드시 "책약어장:절" 형식으로 표기하라. (예: 행1:8, 시23:1, 롬8:28)
 6. 발음이 부정확하거나 음성인식이 이상해도, 반드시 문맥에 맞는 올바른 단어로 교정하여 기록하라.
    - 예: '이승했습니다' → '이상했습니다' (문맥상 올바른 표현)
    - 예: '낳을라고' → '나으라고' (병을 낫게 하려는 문맥)
    - 예: '할라고' → '하려고' (구어체를 자연스러운 문어체로)
+   - 예: '올해'와 '오래'는 반드시 문맥으로 구분하여 기록하라. (연도/시점이면 '올해', 기간/오랜 시간이면 '오래')
+   - 혼동어는 기계적으로 치환하지 말고 문맥으로 구분하라:
+     결재/결제(승인 vs 지불), 낫다/낳다/낮다(회복 vs 출산 vs 높이 반대), 안/않(부정 부사 vs 용언 부정), 되/돼(되어의 축약), 웬/왠(어찌 된 vs 왜인지)
+   - '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하라.
+   - '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 절대 교회명으로 바꾸지 마라.
    - 발음이 비슷한 단어 중 문맥에 맞는 것을 선택하라.
 7. 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 8. 비속어/속어: '인마', '야' 등 거친 표현만 생략하라."""
@@ -773,7 +786,7 @@ def get_gemini_content_prompt():
 - 설교에 서론/본론/결론/기도 구분이 명확하지 않더라도, 흐름상 가장 적절한 위치에 삽입하라.
 
 [출력 예시]
-성경말씀 로마서 16장 23절이다. 같이 합독하시겠다. 23/ 나와 온 교회를 돌보아 주는 가이오도 너희에게 문안하고 이 성의 재무관 에라스도와 형제 구아도도 너희에게 문안하느니라. 오늘 이 말씀을 함께 나누겠다.
+성경말씀 롬16:23이다. 같이 합독하시겠다. 롬16:23 나와 온 교회를 돌보아 주는 가이오도 너희에게 문안하고 이 성의 재무관 에라스도와 형제 구아도도 너희에게 문안하느니라. 오늘 이 말씀을 함께 나누겠다.
 
 복음문화 산업인 선교사이다. 복음 가지고 사람을 살리는 문화 산업 선교사라는 것이다. 지금 우리 산업인들이 모였다. 중요한 언약을 찾는 메시지만 받지 말고 중요한 실천할 것을 찾는 시간이 되길 바란다. 우리는 복잡하면 안 된다. 단순해야 한다.
 
@@ -798,7 +811,10 @@ def get_gemini_content_prompt():
 
 [추가 규칙]
 1. 발음이 불명확하거나 음성인식이 부정확한 부분은 반드시 문맥을 고려하여 올바른 단어로 교정하라.
-2. 추임새('예,', '자,', '아,', '어,', '응,', '네,')만 삭제하되, 실제 내용 문장은 절대 삭제하지 마라."""
+2. 추임새('예,', '자,', '아,', '어,', '응,', '네,')만 삭제하되, 실제 내용 문장은 절대 삭제하지 마라.
+3. '올해/오래', '결재/결제', '낫다/낳다/낮다', '안/않', '되/돼', '웬/왠(특히 왠지)'은 반드시 문맥으로 구분하라.
+4. '앉은뱅이'는 유사 발음(안즌뱅이/안은뱅이/앉은 뱅이)으로 들어와도 문맥상 동일하면 '앉은뱅이'로 교정하라.
+5. '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라."""
 
 def get_gemini_correction_prompt():
     """
@@ -829,15 +845,19 @@ def get_gemini_correction_prompt():
 
 [용어 교정]
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
-  237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중
+  237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중, 앉은뱅이
   Heavenly, Thronely, Eternally, TCK, CCK, NCK, REA, RRTS
   드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
   이삼칠→237, 칠칠칠→777, 오천종족→5000종족 (숫자/영어 표기 유지)
 - 음성인식 오류를 문맥에 맞게 교정하라:
-  드로우게/드로에게→드로아교회, 하베스터 선교 교회→하베스터선교교회, 미션 홈→미션홈, 태중미션홈→태중 미션홈, 기도 수첩→기도수첩, 아수르→앗수르, 유락민/노량민→유랑민
+  드로우게 교회/드로에게 교회→드로아교회, 하베스터 선교 교회→하베스터선교교회, 미션 홈→미션홈, 태중미션홈→태중 미션홈, 기도 수첩→기도수첩, 아수르→앗수르, 유락민/노량민→유랑민
   할라고→하려고, 갈라고→가려고, 배심→뱃심
+  안즌뱅이/안은뱅이/앉은 뱅이→앉은뱅이
+  '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 유지하고 교회명으로 치환하지 마라.
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)는 기계적으로 치환하지 말고 문맥으로 구분
+  (연도/시점=올해, 기간/오랜 시간=오래 / 승인=결재, 지불=결제 / 회복=낫다, 출산=낳다, 높이 반대=낮다)
 - 인명 교정: 김근이→김건희, 김소현→김소영, 이지훈/이지호→이주현, 장현승→장한샘
-- 성경 구절 번호는 "23/" 형식으로 표기하라.
+- 성경 구절은 반드시 "책약어장:절" 형식으로 표기하라. (예: 행1:8, 시23:1, 롬8:28)
 
 [추임새 제거]
 - 문장 시작의 습관적 추임새만 삭제: '예,', '자,', '아,', '어,', '응,', '네,'
@@ -860,7 +880,7 @@ def get_gemini_correction_prompt():
 - 구어체는 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 
 [출력 예시]
-성경말씀 로마서 16장 23절이다. 같이 합독하시겠다. 23/ 나와 온 교회를 돌보아 주는 가이오도 너희에게 문안하고 이 성의 재무관 에라스도와 형제 구아도도 너희에게 문안하느니라.
+성경말씀 롬16:23이다. 같이 합독하시겠다. 롬16:23 나와 온 교회를 돌보아 주는 가이오도 너희에게 문안하고 이 성의 재무관 에라스도와 형제 구아도도 너희에게 문안하느니라.
 
 서론
 우리는 렘넌트가 걸어가야할 길이 있음을 확신한다.
@@ -947,15 +967,19 @@ def get_phonecall_correction_prompt():
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
+- 혼동어는 반드시 문맥으로 구분하라:
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 인명, 지명, 회사명 등 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
   드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+- '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 - 전화번호, 주소, 날짜, 시간, 금액은 정확하게 기록하라.
 - 의료 관련 통화인 경우 의료 용어를 정확히 표기하라:
   약물명 (타이레놀, 메트포르민, 아목시실린 등)
   질병명 (고혈압, 당뇨병, 위염 등)
   검사명 (CT, MRI, 혈액검사 등)
+- 교회/성경 맥락에서 '앉은뱅이' 관련 표현이 나오면 유사 발음(안즌뱅이/안은뱅이/앉은 뱅이)도 '앉은뱅이'로 복원하라.
 
 [추임새 제거]
 - 문장 시작의 습관적 추임새만 삭제: '예,', '자,', '아,', '어,', '음,', '응?', '네,'
@@ -1061,15 +1085,19 @@ def get_conversation_correction_prompt():
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
+- 혼동어는 반드시 문맥으로 구분하라:
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 전문 용어, 프로젝트명, 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
   드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+- '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 - 숫자, 금액, 날짜, 퍼센트 등은 아라비아 숫자로 통일하라 (예: 삼십 퍼센트 → 30%)
 - 의료 관련 회의인 경우 의료 용어를 정확히 표기하라:
   약물명, 질병명, 검사명, 의료 절차 등
 - 기술 회의인 경우 IT/기술 용어를 정확히 표기하라:
   API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes 등
+- 교회/성경 맥락에서 '앉은뱅이' 관련 표현이 나오면 유사 발음(안즌뱅이/안은뱅이/앉은 뱅이)도 '앉은뱅이'로 복원하라.
 
 [추임새 제거]
 - 문장 시작의 습관적 추임새만 삭제: '어,', '음,', '응?', '예,', '네,', '자,'
@@ -1158,7 +1186,9 @@ Correct and structure this text following the rules below.
 - Fix STT errors based on context.
 - Correct grammar, spelling, and punctuation while preserving the speaker's meaning.
 - Proper nouns (names, places, book titles) should be accurately spelled.
-- Bible verse references should use standard format: "John 3:16", "Romans 8:28"
+- Bible verse references should use standard format: "John 3:16", "Romans 8:28", "Acts 1:8", "Psalm 23:1".
+- Use canonical English Bible book names for all 66 books (Genesis ... Revelation). If uncertain or misspelled, normalize to canonical names.
+- If church name appears, normalize "Droa Church" (and similar misspellings) to "Troas Church".
 - Medical terminology must be accurately spelled if mentioned:
   Drug names (acetaminophen, metformin, amoxicillin, etc.)
   Disease names (hypertension, diabetes, epilepsy, seizure, etc.)
@@ -1242,7 +1272,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Proper nouns (names, companies, locations) should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Droa Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - Phone numbers, addresses, dates, times, amounts should be recorded accurately.
 - Medical terminology must be accurately spelled:
   Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
@@ -1332,7 +1362,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Technical terms, project names, proper nouns should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Droa Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
 - Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
 - Medical terminology if applicable: drug names, disease names, procedure names
 - Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
@@ -1367,6 +1397,369 @@ Action Items
 2. Owner: Name - Task (Deadline)
 
 Correct the [Original Text] following this format. Do NOT shorten the content."""
+
+
+KO_BIBLE_BOOK_ABBREVIATIONS = {
+    "창세기": "창",
+    "출애굽기": "출",
+    "레위기": "레",
+    "민수기": "민",
+    "신명기": "신",
+    "여호수아": "수",
+    "사사기": "삿",
+    "룻기": "룻",
+    "사무엘상": "삼상",
+    "사무엘 상": "삼상",
+    "사무엘하": "삼하",
+    "사무엘 하": "삼하",
+    "열왕기상": "왕상",
+    "열왕기 상": "왕상",
+    "열왕기하": "왕하",
+    "열왕기 하": "왕하",
+    "역대상": "대상",
+    "역대 상": "대상",
+    "역대하": "대하",
+    "역대 하": "대하",
+    "에스라": "스",
+    "느헤미야": "느",
+    "에스더": "에",
+    "욥기": "욥",
+    "시편": "시",
+    "잠언": "잠",
+    "전도서": "전",
+    "아가": "아",
+    "이사야": "사",
+    "예레미야": "렘",
+    "예레미야애가": "애",
+    "에스겔": "겔",
+    "다니엘": "단",
+    "호세아": "호",
+    "요엘": "욜",
+    "아모스": "암",
+    "오바댜": "옵",
+    "요나": "욘",
+    "미가": "미",
+    "나훔": "나",
+    "하박국": "합",
+    "스바냐": "습",
+    "학개": "학",
+    "스가랴": "슥",
+    "말라기": "말",
+    "마태복음": "마",
+    "마가복음": "막",
+    "누가복음": "눅",
+    "요한복음": "요",
+    "사도행전": "행",
+    "로마서": "롬",
+    "고린도전서": "고전",
+    "고린도 전서": "고전",
+    "고린도후서": "고후",
+    "고린도 후서": "고후",
+    "갈라디아서": "갈",
+    "에베소서": "엡",
+    "빌립보서": "빌",
+    "골로새서": "골",
+    "데살로니가전서": "살전",
+    "데살로니가 전서": "살전",
+    "데살로니가후서": "살후",
+    "데살로니가 후서": "살후",
+    "디모데전서": "딤전",
+    "디모데 전서": "딤전",
+    "디모데후서": "딤후",
+    "디모데 후서": "딤후",
+    "디도서": "딛",
+    "빌레몬서": "몬",
+    "히브리서": "히",
+    "야고보서": "약",
+    "베드로전서": "벧전",
+    "베드로 전서": "벧전",
+    "베드로후서": "벧후",
+    "베드로 후서": "벧후",
+    "요한일서": "요일",
+    "요한 일서": "요일",
+    "요한이서": "요이",
+    "요한 이서": "요이",
+    "요한삼서": "요삼",
+    "요한 삼서": "요삼",
+    "유다서": "유",
+    "요한계시록": "계",
+    # Already-abbreviated inputs
+    "창": "창",
+    "출": "출",
+    "레": "레",
+    "민": "민",
+    "신": "신",
+    "수": "수",
+    "삿": "삿",
+    "룻": "룻",
+    "삼상": "삼상",
+    "삼하": "삼하",
+    "왕상": "왕상",
+    "왕하": "왕하",
+    "대상": "대상",
+    "대하": "대하",
+    "스": "스",
+    "느": "느",
+    "에": "에",
+    "욥": "욥",
+    "시": "시",
+    "잠": "잠",
+    "전": "전",
+    "아": "아",
+    "사": "사",
+    "렘": "렘",
+    "애": "애",
+    "겔": "겔",
+    "단": "단",
+    "호": "호",
+    "욜": "욜",
+    "암": "암",
+    "옵": "옵",
+    "욘": "욘",
+    "미": "미",
+    "나": "나",
+    "합": "합",
+    "습": "습",
+    "학": "학",
+    "슥": "슥",
+    "말": "말",
+    "마": "마",
+    "막": "막",
+    "눅": "눅",
+    "요": "요",
+    "행": "행",
+    "롬": "롬",
+    "고전": "고전",
+    "고후": "고후",
+    "갈": "갈",
+    "엡": "엡",
+    "빌": "빌",
+    "골": "골",
+    "살전": "살전",
+    "살후": "살후",
+    "딤전": "딤전",
+    "딤후": "딤후",
+    "딛": "딛",
+    "몬": "몬",
+    "히": "히",
+    "약": "약",
+    "벧전": "벧전",
+    "벧후": "벧후",
+    "요일": "요일",
+    "요이": "요이",
+    "요삼": "요삼",
+    "유": "유",
+    "계": "계",
+}
+
+EN_BIBLE_BOOK_ALIASES = {
+    "genesis": "Genesis",
+    "exodus": "Exodus",
+    "leviticus": "Leviticus",
+    "numbers": "Numbers",
+    "deuteronomy": "Deuteronomy",
+    "joshua": "Joshua",
+    "judges": "Judges",
+    "ruth": "Ruth",
+    "1 samuel": "1 Samuel",
+    "first samuel": "1 Samuel",
+    "i samuel": "1 Samuel",
+    "2 samuel": "2 Samuel",
+    "second samuel": "2 Samuel",
+    "ii samuel": "2 Samuel",
+    "1 kings": "1 Kings",
+    "first kings": "1 Kings",
+    "i kings": "1 Kings",
+    "2 kings": "2 Kings",
+    "second kings": "2 Kings",
+    "ii kings": "2 Kings",
+    "1 chronicles": "1 Chronicles",
+    "first chronicles": "1 Chronicles",
+    "i chronicles": "1 Chronicles",
+    "2 chronicles": "2 Chronicles",
+    "second chronicles": "2 Chronicles",
+    "ii chronicles": "2 Chronicles",
+    "ezra": "Ezra",
+    "nehemiah": "Nehemiah",
+    "esther": "Esther",
+    "job": "Job",
+    "psalm": "Psalm",
+    "psalms": "Psalms",
+    "proverbs": "Proverbs",
+    "ecclesiastes": "Ecclesiastes",
+    "song of songs": "Song of Songs",
+    "song of solomon": "Song of Solomon",
+    "canticles": "Song of Songs",
+    "isaiah": "Isaiah",
+    "jeremiah": "Jeremiah",
+    "lamentations": "Lamentations",
+    "ezekiel": "Ezekiel",
+    "daniel": "Daniel",
+    "hosea": "Hosea",
+    "joel": "Joel",
+    "amos": "Amos",
+    "obadiah": "Obadiah",
+    "jonah": "Jonah",
+    "micah": "Micah",
+    "nahum": "Nahum",
+    "habakkuk": "Habakkuk",
+    "zephaniah": "Zephaniah",
+    "haggai": "Haggai",
+    "zechariah": "Zechariah",
+    "malachi": "Malachi",
+    "matthew": "Matthew",
+    "mark": "Mark",
+    "luke": "Luke",
+    "john": "John",
+    "acts": "Acts",
+    "romans": "Romans",
+    "1 corinthians": "1 Corinthians",
+    "first corinthians": "1 Corinthians",
+    "i corinthians": "1 Corinthians",
+    "2 corinthians": "2 Corinthians",
+    "second corinthians": "2 Corinthians",
+    "ii corinthians": "2 Corinthians",
+    "galatians": "Galatians",
+    "ephesians": "Ephesians",
+    "philippians": "Philippians",
+    "colossians": "Colossians",
+    "1 thessalonians": "1 Thessalonians",
+    "first thessalonians": "1 Thessalonians",
+    "i thessalonians": "1 Thessalonians",
+    "2 thessalonians": "2 Thessalonians",
+    "second thessalonians": "2 Thessalonians",
+    "ii thessalonians": "2 Thessalonians",
+    "1 timothy": "1 Timothy",
+    "first timothy": "1 Timothy",
+    "i timothy": "1 Timothy",
+    "2 timothy": "2 Timothy",
+    "second timothy": "2 Timothy",
+    "ii timothy": "2 Timothy",
+    "titus": "Titus",
+    "philemon": "Philemon",
+    "hebrews": "Hebrews",
+    "james": "James",
+    "1 peter": "1 Peter",
+    "first peter": "1 Peter",
+    "i peter": "1 Peter",
+    "2 peter": "2 Peter",
+    "second peter": "2 Peter",
+    "ii peter": "2 Peter",
+    "1 john": "1 John",
+    "first john": "1 John",
+    "i john": "1 John",
+    "2 john": "2 John",
+    "second john": "2 John",
+    "ii john": "2 John",
+    "3 john": "3 John",
+    "third john": "3 John",
+    "iii john": "3 John",
+    "jude": "Jude",
+    "revelation": "Revelation",
+}
+
+
+def _normalize_korean_bible_references(text: str) -> str:
+    import re
+
+    if not text:
+        return text
+
+    alias_lookup = {re.sub(r"\s+", "", k): v for k, v in KO_BIBLE_BOOK_ABBREVIATIONS.items()}
+    sorted_keys = sorted(KO_BIBLE_BOOK_ABBREVIATIONS.keys(), key=lambda x: len(re.sub(r"\s+", "", x)), reverse=True)
+    book_pattern = "|".join(re.escape(key).replace(r"\ ", r"\s*") for key in sorted_keys)
+
+    def to_abbr(raw_book: str) -> str:
+        normalized = re.sub(r"\s+", "", raw_book or "")
+        return alias_lookup.get(normalized, raw_book.strip())
+
+    def repl_kor_ref(match):
+        book = to_abbr(match.group(1))
+        chapter = match.group(2)
+        verse_start = match.group(3)
+        verse_end = match.group(4) if match.lastindex and match.lastindex >= 4 else None
+        if verse_end:
+            return f"{book}{chapter}:{verse_start}-{verse_end}"
+        return f"{book}{chapter}:{verse_start}"
+
+    corrected = text
+    corrected = re.sub(
+        rf"({book_pattern})\s*(\d+)\s*(?:장|편)\s*(\d+)\s*(?:절)?\s*(?:-|~|–)\s*(\d+)\s*절",
+        repl_kor_ref,
+        corrected,
+    )
+    corrected = re.sub(
+        rf"({book_pattern})\s*(\d+)\s*(?:장|편)\s*(\d+)\s*절",
+        repl_kor_ref,
+        corrected,
+    )
+    corrected = re.sub(
+        rf"({book_pattern})\s*(\d+)\s*[:：]\s*(\d+)(?:\s*(?:-|~|–)\s*(\d+))?",
+        repl_kor_ref,
+        corrected,
+    )
+    return corrected
+
+
+def _normalize_english_bible_references(text: str) -> str:
+    import re
+
+    if not text:
+        return text
+
+    sorted_keys = sorted(EN_BIBLE_BOOK_ALIASES.keys(), key=len, reverse=True)
+    book_pattern = "|".join(re.escape(key) for key in sorted_keys)
+
+    def to_canonical(raw_book: str) -> str:
+        normalized = re.sub(r"\s+", " ", (raw_book or "").strip().lower())
+        return EN_BIBLE_BOOK_ALIASES.get(normalized, raw_book.strip())
+
+    def repl_en_ref(match):
+        book = to_canonical(match.group(1))
+        chapter = match.group(2)
+        verse_start = match.group(3)
+        verse_end = match.group(4) if match.lastindex and match.lastindex >= 4 else None
+        if verse_end:
+            return f"{book} {chapter}:{verse_start}-{verse_end}"
+        return f"{book} {chapter}:{verse_start}"
+
+    corrected = text
+    corrected = re.sub(
+        rf"\b({book_pattern})\s+chapter\s+(\d+)\s+verse\s+(\d+)(?:\s*(?:to|-|~|–)\s*(\d+))?\b",
+        repl_en_ref,
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(
+        rf"\b({book_pattern})\s+(\d+)\s+verse\s+(\d+)(?:\s*(?:to|-|~|–)\s*(\d+))?\b",
+        repl_en_ref,
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(
+        rf"\b({book_pattern})\s+(\d+)\s*[:\.,]\s*(\d+)(?:\s*(?:-|~|–)\s*(\d+))?\b",
+        repl_en_ref,
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    return corrected
+
+
+def _normalize_droa_church_mentions(text: str) -> str:
+    """
+    '드로우게/드로에게'는 교회 맥락에서만 드로아교회로 교정한다.
+    조사 용법(예: 베드로에게는)은 그대로 유지한다.
+    """
+    import re
+
+    if not text:
+        return text
+
+    corrected = text
+    corrected = re.sub(r"드로우게\s*교회", "드로아교회", corrected)
+    corrected = re.sub(r"드로에게\s*교회", "드로아교회", corrected)
+    corrected = re.sub(r"드로아\s*교회", "드로아교회", corrected)
+    return corrected
 
 
 def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko") -> str:
@@ -1406,6 +1799,9 @@ def correct_text(text: str, transcription_type: str = "sermon", language: str = 
         for wrong, right in EN_MEDICAL_CORRECTIONS.items():
             corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
 
+        # 영어 성경 구절/책명 형식 정규화
+        corrected = _normalize_english_bible_references(corrected)
+
         # 영어 추임새 제거
         corrected = re.sub(r'(?m)^(Um|Uh|So|Like|You know|I mean)[,.\s~?!]+', '', corrected, flags=re.IGNORECASE)
         corrected = re.sub(
@@ -1430,17 +1826,15 @@ def correct_text(text: str, transcription_type: str = "sermon", language: str = 
             corrected = re.sub(r'칠\s*여정', '7여정', corrected)
             corrected = re.sub(r'칠\s*이정표', '7이정표', corrected)
             corrected = re.sub(r'칠\s*칠\s*칠', '777', corrected)
-
-            # 성경 구절 형식 통일
-            corrected = re.sub(
-                r'([가-힣]+)\s*(\d+)\s*장\s*(\d+)\s*절',
-                r'\1 \2장 \3절',
-                corrected
-            )
+            # 성경 구절 형식 통일 (예: 사도행전 1장 8절 -> 행1:8)
+            corrected = _normalize_korean_bible_references(corrected)
         else:
             # 통화/대화: 일반 한국어 교정만
             for wrong, right in GENERAL_CORRECTIONS.items():
                 corrected = corrected.replace(wrong, right)
+
+        # 교회명 보정은 '교회' 문맥에서만 수행 (예: 드로에게 교회 → 드로아교회)
+        corrected = _normalize_droa_church_mentions(corrected)
 
         # 의료 용어 교정 (한국어 공통)
         for wrong, right in MEDICAL_CORRECTIONS.items():
@@ -1507,7 +1901,7 @@ def get_claude_context():
 2. 숫자는 아라비아 숫자 유지 (237, 5000, 7)
 3. 영문은 영문 그대로 (Heavenly, TCK 등)
 4. 하나님, 예수님, 성령님 존칭 유지
-5. 성경 구절: "책명 X장 Y절" 형식
+5. 성경 구절: "책약어장:절" 형식 (예: 행1:8, 시23:1)
 6. 문장은 자연스럽게, 의미는 변경 금지
 
 === 주의 사항 ===
@@ -1527,19 +1921,19 @@ def get_summary_prompt(summary_type: str = "short"):
 주보에 들어갈 내용입니다.
 
 포함 사항:
-- 본문 말씀 (성경 구절)
+- 본문 말씀 (성경 구절, 책약어장:절 형식. 예: 행1:8, 시23:1)
 - 핵심 메시지
 - 다락방 용어는 그대로 유지 (렘넌트, 237, 7망대 등)
 
 형식:
-본문: (성경 구절)
+본문: (성경 구절, 예: 행1:8)
 메시지: (핵심 내용 2-3문장)"""
     
     else:
         return """다음 설교를 상세히 요약해주세요.
 
 【형식】
-1. 본문 말씀: (성경 구절)
+1. 본문 말씀: (성경 구절, 책약어장:절 형식. 예: 시23:1)
 
 2. 핵심 메시지:
    (한 줄 요약)

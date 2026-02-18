@@ -866,7 +866,7 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "Infer unclear words from context. "
                 "Bible, Scripture, Gospel, salvation, grace, faith, prayer, blessing, congregation, "
                 "sermon, worship, fellowship, testimony, discipleship, ministry, mission, "
-                "Droa Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, "
+                "Troas Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, "
                 "Mission Home, Prenatal Mission Home, Prayer Journal"
             )
         elif transcription_type == "phonecall":
@@ -893,25 +893,27 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     else:
         # ===== 한국어 프롬프트 =====
         if transcription_type == "sermon":
-            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 뉴에이지, 프리메이슨, REA, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터"
+            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 앉은뱅이, 뉴에이지, 프리메이슨, REA, TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터, 올해(연도), 오래(기간), 결재(승인), 결제(지불), 낫다(회복), 낳다(출산), 낮다(높이 반대), 안/않, 되/돼, 웬/왠지, 드로에게 교회/드로우게 교회=드로아교회, 베드로에게는(조사)=유지"
         elif transcription_type == "phonecall":
             whisper_prompt = (
                 "전화 통화 녹음입니다. 두 명의 화자가 대화합니다. "
                 "음질이 낮거나 불명확한 부분은 문맥에 맞게 추정하세요. "
+                "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)'는 문맥으로 구분하세요. "
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
                 "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
-                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, "
+                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, 앉은뱅이, "
                 f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
         else:
             whisper_prompt = (
                 "회의 또는 대화 녹음입니다. 여러 참석자가 있습니다. "
                 "음질이 낮거나 겹치는 목소리가 있을 수 있으며, 문맥에 맞게 추정하세요. "
+                "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)'는 문맥으로 구분하세요. "
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
                 "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
-                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, "
+                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, 앉은뱅이, "
                 "KPI, ROI, OKR, 프로젝트, 마일스톤, 스프린트, 데드라인, 예산, 매출, 영업이익, "
                 f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
