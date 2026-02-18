@@ -66,6 +66,7 @@ uvicorn main:app --reload
    - `SUPABASE_KEY`
    - `CORS_ALLOW_ORIGINS`
    - `OAUTH_REDIRECT_ALLOW_HOSTS`
+   - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
 
@@ -99,6 +100,7 @@ uvicorn main:app --reload
 
 - `CORS_ALLOW_ORIGINS`: 프론트엔드 도메인만 허용 (와일드카드 금지)
 - `OAUTH_REDIRECT_ALLOW_HOSTS`: OAuth 리다이렉트 도메인 화이트리스트 설정
+- `OAUTH_REDIRECT_ALLOW_SCHEMES`: OAuth 리다이렉트 스킴 화이트리스트 설정 (`mallog24`, `exp` 등 모바일 딥링크 포함)
 - `RATE_LIMIT_*`: 인증/변환 API 과도 호출 제한
 - `MAX_UPLOAD_BYTES`, `MAX_TEXT_INPUT_CHARS`: 대용량 요청 제한
 - `EXPOSE_TERMS_ENDPOINT=false`: 디버깅용 `/api/terms` 외부 비활성화

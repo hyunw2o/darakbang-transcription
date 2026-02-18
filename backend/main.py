@@ -62,11 +62,20 @@ DEFAULT_OAUTH_REDIRECT_HOSTS = [
     "mallog24.vercel.app",
     "www.mallog24.vercel.app",
 ]
+DEFAULT_OAUTH_REDIRECT_SCHEMES = [
+    "http",
+    "https",
+    "mallog24",
+    "exp",
+]
 
 CORS_ALLOW_ORIGINS = _parse_csv_env("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ORIGINS)
 CORS_ALLOW_ORIGIN_REGEX = (os.getenv("CORS_ALLOW_ORIGIN_REGEX") or "").strip() or None
 ALLOWED_OAUTH_REDIRECT_HOSTS = {
     host.lower() for host in _parse_csv_env("OAUTH_REDIRECT_ALLOW_HOSTS", DEFAULT_OAUTH_REDIRECT_HOSTS)
+}
+ALLOWED_OAUTH_REDIRECT_SCHEMES = {
+    scheme.lower() for scheme in _parse_csv_env("OAUTH_REDIRECT_ALLOW_SCHEMES", DEFAULT_OAUTH_REDIRECT_SCHEMES)
 }
 
 RATE_LIMIT_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60")))
@@ -498,10 +507,19 @@ def _validate_redirect_url(redirect_to: str) -> str:
         raise HTTPException(status_code=400, detail="redirect_to 값이 필요합니다.")
 
     parsed = urllib.parse.urlparse(normalized)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="redirect_to URL 형식이 올바르지 않습니다.")
-    if not _is_allowed_redirect_host(parsed.hostname):
-        raise HTTPException(status_code=400, detail="허용되지 않은 redirect_to 도메인입니다.")
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ALLOWED_OAUTH_REDIRECT_SCHEMES:
+        raise HTTPException(status_code=400, detail="허용되지 않은 redirect_to 스킴입니다.")
+
+    if scheme in ("http", "https"):
+        if not parsed.netloc:
+            raise HTTPException(status_code=400, detail="redirect_to URL 형식이 올바르지 않습니다.")
+        if not _is_allowed_redirect_host(parsed.hostname):
+            raise HTTPException(status_code=400, detail="허용되지 않은 redirect_to 도메인입니다.")
+    else:
+        if not parsed.netloc:
+            raise HTTPException(status_code=400, detail="redirect_to 딥링크 형식이 올바르지 않습니다.")
+
     return normalized
 
 

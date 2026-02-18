@@ -100,6 +100,15 @@ npm run dev
 4. 환경변수 설정 (`NEXT_PUBLIC_API_URL` = Render 백엔드 URL)
 5. 배포 완료
 
+### 모바일 앱 (Expo)
+1. `cd mobile`
+2. `npm install`
+3. `npm run start`
+4. Expo에서 iOS/Android 실행
+5. 스토어 빌드 시 `eas build -p android` / `eas build -p ios`
+
+모바일은 React Native 네이티브 화면으로 로그인/업로드/변환/히스토리/기록본 기능을 직접 제공합니다.
+
 ## 📘 출시 준비 문서
 
 - 다글로 대비 차별화/지재권/법적 리스크 점검: `docs/launch_strategy_vs_daglo.md`

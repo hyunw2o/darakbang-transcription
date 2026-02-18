@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "mallog24",
+    "slug": "mallog24-mobile-shell",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "mallog24",
+    "userInterfaceStyle": "automatic",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mallog24.app"
+    },
+    "android": {
+      "package": "com.mallog24.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
