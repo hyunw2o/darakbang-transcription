@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -18,25 +19,72 @@ import FadeInView from "./components/FadeInView";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://darakbang-transcription-backend.onrender.com";
 const AUTH_TOKEN_KEY = "mallog24_access_token";
+const UI_THEME_KEY = "mallog24_mobile_ui_theme";
+const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
-const NM = {
-  bg: "#e0e5ec",
-  light: "#ffffff",
-  dark: "#a3b1c6",
-  accent: "#3b7dd8",
-  accentSoft: "#5a9ae6",
-  textPrimary: "#2d3748",
-  textSecondary: "#64748b",
-  inputBg: "#d6dbe4",
-  inputBorder: "#c8ced8",
-  errorBg: "#e8d5d5",
-  errorText: "#b91c1c",
-  noticeBg: "#d5dfe8",
-  noticeText: "#1d4ed8",
-  radius: 18,
-  radiusSm: 14,
+const MOBILE_THEME_OPTIONS = [
+  { key: "auto", label: "Auto" },
+  { key: "aurora", label: "Aurora" },
+  { key: "noir", label: "Noir" },
+  { key: "sunset", label: "Sunset" },
+];
+
+const MOBILE_THEMES = {
+  aurora: {
+    bg: "#e8eefb",
+    light: "#ffffff",
+    dark: "#a3b1c6",
+    accent: "#3b7dd8",
+    accentSoft: "#5a9ae6",
+    textPrimary: "#2d3748",
+    textSecondary: "#64748b",
+    inputBg: "#d6dbe4",
+    inputBorder: "#c8ced8",
+    errorBg: "#e8d5d5",
+    errorText: "#b91c1c",
+    noticeBg: "#d5dfe8",
+    noticeText: "#1d4ed8",
+    radius: 18,
+    radiusSm: 14,
+  },
+  noir: {
+    bg: "#e6e9ef",
+    light: "#f9fbff",
+    dark: "#a8b0c0",
+    accent: "#35445f",
+    accentSoft: "#4e6287",
+    textPrimary: "#202636",
+    textSecondary: "#606a80",
+    inputBg: "#d7dce6",
+    inputBorder: "#bec7d6",
+    errorBg: "#e7d8d8",
+    errorText: "#9b2634",
+    noticeBg: "#dce2ea",
+    noticeText: "#364b73",
+    radius: 18,
+    radiusSm: 14,
+  },
+  sunset: {
+    bg: "#f8eee4",
+    light: "#fff9f2",
+    dark: "#d2bca6",
+    accent: "#cf6e30",
+    accentSoft: "#e08546",
+    textPrimary: "#3b2d24",
+    textSecondary: "#7a6050",
+    inputBg: "#eadccf",
+    inputBorder: "#dcc8b4",
+    errorBg: "#f0d5cf",
+    errorText: "#a7392f",
+    noticeBg: "#f2e2d2",
+    noticeText: "#a15b26",
+    radius: 18,
+    radiusSm: 14,
+  },
 };
+
+const NM = MOBILE_THEMES.aurora;
 
 const MIME_BY_EXT = {
   mp3: "audio/mpeg",
@@ -178,14 +226,28 @@ function formatDate(value) {
   }
 }
 
-function SegmentButton({ label, active, onPress }) {
+function SegmentButton({ label, active, onPress, theme }) {
   return (
     <NmPressable
       onPress={onPress}
-      style={[styles.segmentButton, active ? styles.segmentButtonActive : null]}
+      style={[
+        styles.segmentButton,
+        { borderColor: theme.inputBorder },
+        active
+          ? [styles.segmentButtonActive, { backgroundColor: theme.bg, shadowColor: theme.dark }]
+          : { backgroundColor: "transparent" },
+      ]}
       scaleDown={0.95}
     >
-      <Text style={[styles.segmentButtonText, active ? styles.segmentButtonTextActive : null]}>{label}</Text>
+      <Text
+        style={[
+          styles.segmentButtonText,
+          { color: theme.textSecondary },
+          active ? [styles.segmentButtonTextActive, { color: theme.accent }] : null,
+        ]}
+      >
+        {label}
+      </Text>
     </NmPressable>
   );
 }
@@ -205,8 +267,11 @@ function Banner({ type = "notice", text }) {
 
 function App() {
   const pollRef = useRef(null);
+  const colorScheme = useColorScheme();
 
   const [bootLoading, setBootLoading] = useState(true);
+  const [themeMode, setThemeMode] = useState("auto");
+  const [themeKey, setThemeKey] = useState("aurora");
 
   const [authMode, setAuthMode] = useState("login");
   const [authName, setAuthName] = useState("");
@@ -243,6 +308,9 @@ function App() {
   const [error, setError] = useState("");
 
   const isLoggedIn = !!authToken && !!authUser;
+  const resolvedThemeKey =
+    themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
+  const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
 
   const warmUpBackend = () => {
     requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
@@ -371,6 +439,15 @@ function App() {
 
     (async () => {
       try {
+        const savedTheme = await AsyncStorage.getItem(UI_THEME_KEY);
+        const savedThemeMode = await AsyncStorage.getItem(UI_THEME_MODE_KEY);
+        if (savedThemeMode === "manual" || savedThemeMode === "auto") {
+          setThemeMode(savedThemeMode);
+        }
+        if (savedTheme && MOBILE_THEMES[savedTheme]) {
+          setThemeKey(savedTheme);
+        }
+
         const initialUrl = await Linking.getInitialURL();
         const initialAuth = parseAuthParamsFromUrl(initialUrl || "");
         let consumedOauthToken = false;
@@ -399,6 +476,11 @@ function App() {
       stopPolling();
     };
   }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(UI_THEME_KEY, themeKey).catch(() => { });
+    AsyncStorage.setItem(UI_THEME_MODE_KEY, themeMode).catch(() => { });
+  }, [themeKey, themeMode]);
 
   const handleAuthSubmit = async () => {
     clearMessages();
@@ -755,18 +837,61 @@ function App() {
     return "회의 안건/결정/후속 조치를 분리해 정리합니다.";
   }, [transcriptionType]);
 
+  const renderThemeSelector = () => (
+    <View style={[styles.themeCard, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+      <Text style={[styles.themeLabel, { color: activeTheme.textSecondary }]}>테마 (Auto 추천)</Text>
+      <View style={styles.themeRow}>
+        {MOBILE_THEME_OPTIONS.map((themeOption) => {
+          const active =
+            themeOption.key === "auto"
+              ? themeMode === "auto"
+              : themeMode === "manual" && themeOption.key === themeKey;
+          return (
+            <NmPressable
+              key={themeOption.key}
+              style={[
+                styles.themeOption,
+                {
+                  backgroundColor: active ? activeTheme.accent : activeTheme.inputBg,
+                  borderColor: active ? activeTheme.accentSoft : activeTheme.inputBorder,
+                },
+              ]}
+              onPress={() => {
+                if (themeOption.key === "auto") {
+                  setThemeMode("auto");
+                  return;
+                }
+                setThemeMode("manual");
+                setThemeKey(themeOption.key);
+              }}
+            >
+              <Text
+                style={[
+                  styles.themeOptionText,
+                  { color: active ? "#ffffff" : activeTheme.textPrimary },
+                ]}
+              >
+                {themeOption.label}
+              </Text>
+            </NmPressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   if (bootLoading) {
     return (
-      <SafeAreaView style={styles.centerScreen}>
+      <SafeAreaView style={[styles.centerScreen, { backgroundColor: activeTheme.bg }]}>
         <StatusBar style="dark" />
-        <ActivityIndicator size="large" color={NM.accent} />
-        <Text style={styles.loadingText}>앱 초기화 중...</Text>
+        <ActivityIndicator size="large" color={activeTheme.accent} />
+        <Text style={[styles.loadingText, { color: activeTheme.textPrimary }]}>앱 초기화 중...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={[styles.root, { backgroundColor: activeTheme.bg }]}>
       <StatusBar style="dark" />
 
       <Banner type="error" text={error} />
@@ -774,46 +899,55 @@ function App() {
 
       {!isLoggedIn ? (
         <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
+          {renderThemeSelector()}
           <FadeInView duration={420}>
-            <View style={[styles.card, styles.authCard]}>
-              <Text style={styles.authLabel}>회원 인증</Text>
+            <View style={[styles.card, styles.authCard, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+              <Text style={[styles.authLabel, { color: activeTheme.textPrimary }]}>회원 인증</Text>
 
               <View style={styles.segmentRow}>
-                <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} />
-                <SegmentButton label="회원가입" active={authMode === "signup"} onPress={() => setAuthMode("signup")} />
+                <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} theme={activeTheme} />
+                <SegmentButton label="회원가입" active={authMode === "signup"} onPress={() => setAuthMode("signup")} theme={activeTheme} />
               </View>
 
               {authMode === "signup" ? (
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                   value={authName}
                   onChangeText={setAuthName}
                   placeholder="이름"
-                  placeholderTextColor={NM.textSecondary}
+                  placeholderTextColor={activeTheme.textSecondary}
                   autoCapitalize="none"
                 />
               ) : null}
 
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                 value={authEmail}
                 onChangeText={setAuthEmail}
                 placeholder="이메일"
-                placeholderTextColor={NM.textSecondary}
+                placeholderTextColor={activeTheme.textSecondary}
                 autoCapitalize="none"
                 keyboardType="email-address"
               />
 
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                 value={authPassword}
                 onChangeText={setAuthPassword}
                 placeholder="비밀번호"
-                placeholderTextColor={NM.textSecondary}
+                placeholderTextColor={activeTheme.textSecondary}
                 secureTextEntry
               />
 
-              <NmPressable style={[styles.primaryButton, authLoading ? styles.buttonDisabled : null]} onPress={handleAuthSubmit} disabled={authLoading}>
+              <NmPressable
+                style={[
+                  styles.primaryButton,
+                  { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                  authLoading ? styles.buttonDisabled : null,
+                ]}
+                onPress={handleAuthSubmit}
+                disabled={authLoading}
+              >
                 <Text style={styles.primaryButtonText}>
                   {authLoading
                     ? "처리 중..."
@@ -823,49 +957,61 @@ function App() {
                 </Text>
               </NmPressable>
 
-              <Text style={styles.orText}>또는 소셜 로그인</Text>
+              <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>또는 소셜 로그인</Text>
 
               <View style={styles.socialRow}>
                 <NmPressable
-                  style={[styles.socialButton, socialLoading ? styles.buttonDisabled : null]}
+                  style={[
+                    styles.socialButton,
+                    { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder },
+                    socialLoading ? styles.buttonDisabled : null,
+                  ]}
                   onPress={() => handleSocialLogin("google")}
                   disabled={!!socialLoading}
                 >
-                  <Text style={styles.socialButtonText}>{socialLoading === "google" ? "연결 중..." : "Google"}</Text>
+                  <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>{socialLoading === "google" ? "연결 중..." : "Google"}</Text>
                 </NmPressable>
 
                 <NmPressable
-                  style={[styles.socialButton, socialLoading ? styles.buttonDisabled : null]}
+                  style={[
+                    styles.socialButton,
+                    { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder },
+                    socialLoading ? styles.buttonDisabled : null,
+                  ]}
                   onPress={() => handleSocialLogin("kakao")}
                   disabled={!!socialLoading}
                 >
-                  <Text style={styles.socialButtonText}>{socialLoading === "kakao" ? "연결 중..." : "Kakao"}</Text>
+                  <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>{socialLoading === "kakao" ? "연결 중..." : "Kakao"}</Text>
                 </NmPressable>
               </View>
 
-              <Text style={styles.helpText}>
+              <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
                 소셜 로그인은 앱 리다이렉트 URL/공급자 설정이 맞아야 동작합니다.
               </Text>
-              <Text style={styles.authSubLabel}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
+              <Text style={[styles.authSubLabel, { color: activeTheme.textSecondary }]}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
             </View>
           </FadeInView>
         </ScrollView>
       ) : (
         <View style={styles.workspaceContainer}>
           <FadeInView>
-            <View style={styles.userBar}>
+            {renderThemeSelector()}
+          </FadeInView>
+
+          <FadeInView>
+            <View style={[styles.userBar, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.userInfo}>
-                <Text style={styles.userEmail}>{authUser?.email || "로그인 사용자"}</Text>
-                <Text style={styles.userName}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
+                <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>{authUser?.email || "로그인 사용자"}</Text>
+                <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
               </View>
-              <NmPressable style={styles.logoutButton} onPress={handleLogout}>
-                <Text style={styles.logoutButtonText}>로그아웃</Text>
+              <NmPressable style={[styles.logoutButton, { borderColor: activeTheme.inputBorder }]} onPress={handleLogout}>
+                <Text style={[styles.logoutButtonText, { color: activeTheme.errorText }]}>로그아웃</Text>
               </NmPressable>
             </View>
           </FadeInView>
 
           <FadeInView delay={70} duration={360}>
-            <View style={styles.tabsWrap}>
+            <View style={[styles.tabsWrap, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.segmentRow}>
                 {APP_TABS.map((tab) => (
                   <SegmentButton
@@ -873,6 +1019,7 @@ function App() {
                     label={tab.label}
                     active={activeTab === tab.key}
                     onPress={() => setActiveTab(tab.key)}
+                    theme={activeTheme}
                   />
                 ))}
               </View>
@@ -882,11 +1029,11 @@ function App() {
           {activeTab === "transcribe" ? (
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
               <FadeInView key="transcribe-settings">
-                <View style={styles.card}>
-                  <Text style={styles.cardTitle}>변환 설정</Text>
+                <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 설정</Text>
                   <View style={styles.segmentRow}>
-                    <SegmentButton label="한국어" active={language === "ko"} onPress={() => setLanguage("ko")} />
-                    <SegmentButton label="English" active={language === "en"} onPress={() => setLanguage("en")} />
+                    <SegmentButton label="한국어" active={language === "ko"} onPress={() => setLanguage("ko")} theme={activeTheme} />
+                    <SegmentButton label="English" active={language === "en"} onPress={() => setLanguage("en")} theme={activeTheme} />
                   </View>
 
                   <View style={styles.segmentRow}>
@@ -896,60 +1043,69 @@ function App() {
                         label={item.label}
                         active={transcriptionType === item.key}
                         onPress={() => setTranscriptionType(item.key)}
+                        theme={activeTheme}
                       />
                     ))}
                   </View>
 
-                  <NmPressable style={styles.secondaryButton} onPress={pickAudioFile}>
-                    <Text style={styles.secondaryButtonText}>파일 선택</Text>
+                  <NmPressable style={[styles.secondaryButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={pickAudioFile}>
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>파일 선택</Text>
                   </NmPressable>
 
-                  <Text style={styles.fileInfo}>
+                  <Text style={[styles.fileInfo, { color: activeTheme.textPrimary }]}>
                     {pickedFile
                       ? `${pickedFile.name} (${Math.max(1, Math.round((pickedFile.size || 0) / 1024))} KB · ${pickedFile.mimeType})`
                       : "선택된 파일 없음"}
                   </Text>
 
                   <NmPressable
-                    style={[styles.primaryButton, submitting ? styles.buttonDisabled : null]}
+                    style={[
+                      styles.primaryButton,
+                      { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                      submitting ? styles.buttonDisabled : null,
+                    ]}
                     onPress={handleTranscribe}
                     disabled={submitting}
                   >
                     <Text style={styles.primaryButtonText}>{submitting ? "변환 중..." : "변환 시작"}</Text>
                   </NmPressable>
 
-                  <Text style={styles.helpText}>{selectedTypeHint}</Text>
-                  {taskStateText ? <Text style={styles.taskStateText}>{taskStateText}</Text> : null}
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{selectedTypeHint}</Text>
+                  {taskStateText ? <Text style={[styles.taskStateText, { color: activeTheme.accent }]}>{taskStateText}</Text> : null}
                 </View>
               </FadeInView>
 
               {result ? (
                 <FadeInView key="transcribe-result" delay={100}>
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>변환 결과</Text>
-                    <Text style={styles.metaText}>작업 ID: {result.task_id}</Text>
-                    <Text style={styles.metaText}>유형: {result.transcription_type || transcriptionType}</Text>
-                    <Text style={styles.metaText}>문자 수: {result.characters || 0}</Text>
+                  <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 결과</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>작업 ID: {result.task_id}</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>유형: {result.transcription_type || transcriptionType}</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>문자 수: {result.characters || 0}</Text>
 
                     <Text style={styles.sectionTitle}>교정 텍스트</Text>
-                    <View style={styles.resultBox}>
-                      <Text selectable style={styles.resultText}>
+                    <View style={[styles.resultBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                      <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>
                         {result.corrected_text || result.raw_text || ""}
                       </Text>
                     </View>
 
                     <NmPressable
-                      style={[styles.secondaryButton, summaryLoading ? styles.buttonDisabled : null]}
+                      style={[
+                        styles.secondaryButton,
+                        { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder },
+                        summaryLoading ? styles.buttonDisabled : null,
+                      ]}
                       onPress={handleSummarize}
                       disabled={summaryLoading}
                     >
-                      <Text style={styles.secondaryButtonText}>{summaryLoading ? "요약 생성 중..." : "설교 요약 생성"}</Text>
+                      <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{summaryLoading ? "요약 생성 중..." : "설교 요약 생성"}</Text>
                     </NmPressable>
 
                     {result.summary ? (
-                      <View style={styles.summaryBox}>
-                        <Text style={styles.sectionTitle}>요약</Text>
-                        <Text selectable style={styles.resultText}>{result.summary}</Text>
+                      <View style={[styles.summaryBox, { backgroundColor: activeTheme.noticeBg }]}>
+                        <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>요약</Text>
+                        <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>{result.summary}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -958,29 +1114,29 @@ function App() {
 
               {result ? (
                 <FadeInView key="transcribe-records" delay={200}>
-                  <View style={styles.card}>
-                    <Text style={styles.cardTitle}>기록본 생성 및 저장</Text>
+                  <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>기록본 생성 및 저장</Text>
 
                     {RECORD_CATEGORIES.map((category) => (
-                      <View key={category.key} style={styles.recordBlock}>
+                      <View key={category.key} style={[styles.recordBlock, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
                         <View style={styles.recordHeader}>
-                          <Text style={styles.sectionTitle}>{category.label}</Text>
+                          <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{category.label}</Text>
                           <View style={styles.recordActionRow}>
                             <NmPressable
-                              style={styles.tinyButton}
+                              style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}
                               onPress={() => handleGenerateRecordDraft(category.key)}
                               disabled={!!draftLoadingCategory || !!savingCategory}
                             >
-                              <Text style={styles.tinyButtonText}>
+                              <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
                                 {draftLoadingCategory === category.key ? "생성 중" : "초안"}
                               </Text>
                             </NmPressable>
                             <NmPressable
-                              style={styles.tinyButton}
+                              style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}
                               onPress={() => handleSaveRecord(category.key)}
                               disabled={!!draftLoadingCategory || !!savingCategory}
                             >
-                              <Text style={styles.tinyButtonText}>
+                              <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
                                 {savingCategory === category.key ? "저장 중" : "저장"}
                               </Text>
                             </NmPressable>
@@ -988,14 +1144,14 @@ function App() {
                         </View>
 
                         <TextInput
-                          style={styles.recordEditor}
+                          style={[styles.recordEditor, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                           multiline
                           value={recordDrafts[category.key] || ""}
                           onChangeText={(text) =>
                             setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
                           }
                           placeholder={`${category.label} 내용을 여기에 편집하세요`}
-                          placeholderTextColor={NM.textSecondary}
+                          placeholderTextColor={activeTheme.textSecondary}
                         />
                       </View>
                     ))}
@@ -1008,24 +1164,24 @@ function App() {
           {activeTab === "history" ? (
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <FadeInView key="history">
-                <View style={styles.card}>
+                <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
-                    <Text style={styles.cardTitle}>최근 변환 기록</Text>
-                    <NmPressable style={styles.tinyButton} onPress={() => fetchHistory(authToken)}>
-                      <Text style={styles.tinyButtonText}>{historyLoading ? "로딩..." : "새로고침"}</Text>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>최근 변환 기록</Text>
+                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? "로딩..." : "새로고침"}</Text>
                     </NmPressable>
                   </View>
 
                   {history.length === 0 ? (
-                    <Text style={styles.emptyText}>변환 기록이 없습니다.</Text>
+                    <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>변환 기록이 없습니다.</Text>
                   ) : (
                     history.map((item) => (
-                      <View key={item.task_id} style={styles.listItem}>
-                        <Text style={styles.listTitle}>{item.transcription_type || "sermon"} · {item.status}</Text>
-                        <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
-                        <Text numberOfLines={2} style={styles.previewText}>{item.summary_preview || ""}</Text>
-                        <NmPressable style={styles.tinyButton} onPress={() => handleLoadHistoryItem(item.task_id)}>
-                          <Text style={styles.tinyButtonText}>불러오기</Text>
+                      <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                        <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.transcription_type || "sermon"} · {item.status}</Text>
+                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
+                        <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.summary_preview || ""}</Text>
+                        <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={() => handleLoadHistoryItem(item.task_id)}>
+                          <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>불러오기</Text>
                         </NmPressable>
                       </View>
                     ))
@@ -1038,22 +1194,22 @@ function App() {
           {activeTab === "records" ? (
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <FadeInView key="records">
-                <View style={styles.card}>
+                <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
-                    <Text style={styles.cardTitle}>저장 기록본</Text>
-                    <NmPressable style={styles.tinyButton} onPress={() => fetchRecords(authToken)}>
-                      <Text style={styles.tinyButtonText}>{recordsLoading ? "로딩..." : "새로고침"}</Text>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>저장 기록본</Text>
+                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={() => fetchRecords(authToken)}>
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{recordsLoading ? "로딩..." : "새로고침"}</Text>
                     </NmPressable>
                   </View>
 
                   {records.length === 0 ? (
-                    <Text style={styles.emptyText}>저장된 기록본이 없습니다.</Text>
+                    <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>저장된 기록본이 없습니다.</Text>
                   ) : (
                     records.map((item) => (
-                      <View key={item.id || `${item.category}-${item.created_at}`} style={styles.listItem}>
-                        <Text style={styles.listTitle}>{item.title || item.category}</Text>
-                        <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
-                        <Text selectable style={styles.previewText}>{item.content || ""}</Text>
+                      <View key={item.id || `${item.category}-${item.created_at}`} style={[styles.listItem, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                        <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.title || item.category}</Text>
+                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
+                        <Text selectable style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.content || ""}</Text>
                       </View>
                     ))
                   )}
@@ -1101,6 +1257,34 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 28,
     justifyContent: "flex-start",
+  },
+  themeCard: {
+    marginBottom: 10,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  themeLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  themeRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  themeOption: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  themeOptionText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   authCard: {
     width: "100%",
@@ -1180,6 +1364,7 @@ const styles = StyleSheet.create({
   segmentButton: {
     flex: 1,
     borderRadius: 10,
+    borderWidth: 1,
     paddingVertical: 10,
     alignItems: "center",
     backgroundColor: "transparent",

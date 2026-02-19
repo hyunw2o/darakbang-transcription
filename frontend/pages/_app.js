@@ -1,15 +1,31 @@
 import { useState, useEffect } from 'react'
 import '../styles/globals.css'
 
+const THEME_KEY = 'mallog24-ui-theme'
+const THEME_MODE_KEY = 'mallog24-ui-theme-mode'
+
 export default function App({ Component, pageProps }) {
   const [darkMode, setDarkMode] = useState(false)
+  const [uiThemeMode, setUiThemeMode] = useState('auto')
+  const [uiTheme, setUiTheme] = useState('aurora')
 
   useEffect(() => {
     const saved = localStorage.getItem('darkMode')
-    if (saved !== null) {
-      setDarkMode(JSON.parse(saved))
+    const savedTheme = localStorage.getItem(THEME_KEY)
+    const savedThemeMode = localStorage.getItem(THEME_MODE_KEY)
+    const initialDarkMode =
+      saved !== null ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches
+
+    setDarkMode(initialDarkMode)
+
+    if (savedThemeMode === 'manual' || savedThemeMode === 'auto') {
+      setUiThemeMode(savedThemeMode)
+    }
+
+    if (savedTheme) {
+      setUiTheme(savedTheme)
     } else {
-      setDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
+      setUiTheme(initialDarkMode ? 'noir' : 'aurora')
     }
   }, [])
 
@@ -22,5 +38,27 @@ export default function App({ Component, pageProps }) {
     localStorage.setItem('darkMode', JSON.stringify(darkMode))
   }, [darkMode])
 
-  return <Component {...pageProps} darkMode={darkMode} setDarkMode={setDarkMode} />
+  useEffect(() => {
+    if (uiThemeMode === 'auto') {
+      setUiTheme(darkMode ? 'noir' : 'aurora')
+    }
+  }, [darkMode, uiThemeMode])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-ui-theme', uiTheme)
+    localStorage.setItem(THEME_KEY, uiTheme)
+    localStorage.setItem(THEME_MODE_KEY, uiThemeMode)
+  }, [uiTheme, uiThemeMode])
+
+  return (
+    <Component
+      {...pageProps}
+      darkMode={darkMode}
+      setDarkMode={setDarkMode}
+      uiThemeMode={uiThemeMode}
+      setUiThemeMode={setUiThemeMode}
+      uiTheme={uiTheme}
+      setUiTheme={setUiTheme}
+    />
+  )
 }

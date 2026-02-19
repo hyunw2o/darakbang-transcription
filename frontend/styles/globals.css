@@ -14,31 +14,109 @@ html {
 
 /* ========== Neumorphism CSS Variables ========== */
 :root {
-  --nm-bg: #e0e5ec;
+  --nm-bg: #edf2ff;
   --nm-shadow-light: #ffffff;
-  --nm-shadow-dark: #a3b1c6;
+  --nm-shadow-dark: #b8c4de;
   --nm-shadow-distance: 6px;
   --nm-shadow-blur: 12px;
   --nm-radius: 16px;
   --nm-radius-sm: 12px;
-  --nm-accent: #3b7dd8;
-  --nm-accent-soft: #5a9ae6;
-  --nm-text-primary: #2d3748;
-  --nm-text-secondary: #64748b;
+  --nm-accent: #4d74ff;
+  --nm-accent-soft: #6f90ff;
+  --nm-text-primary: #1f2a44;
+  --nm-text-secondary: #64728d;
+  --nm-glow-1: rgba(114, 145, 255, 0.28);
+  --nm-glow-2: rgba(148, 189, 255, 0.2);
   --nm-transition: 250ms;
   --nm-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mallog24-logo-text: #1E2A44;
 }
 
 html.dark {
-  --nm-bg: #2d3748;
-  --nm-shadow-light: #384457;
-  --nm-shadow-dark: #1a202c;
-  --nm-accent: #5a9ae6;
-  --nm-accent-soft: #7bb3f0;
-  --nm-text-primary: #e2e8f0;
-  --nm-text-secondary: #94a3b8;
+  --nm-bg: #1c2438;
+  --nm-shadow-light: #29334a;
+  --nm-shadow-dark: #11192b;
+  --nm-accent: #86a2ff;
+  --nm-accent-soft: #9cb3ff;
+  --nm-text-primary: #e8eefc;
+  --nm-text-secondary: #a6b2cf;
+  --nm-glow-1: rgba(98, 130, 236, 0.32);
+  --nm-glow-2: rgba(57, 78, 145, 0.28);
   --mallog24-logo-text: #E4ECFF;
+}
+
+html[data-ui-theme='aurora'] {
+  --nm-bg: #edf2ff;
+  --nm-shadow-light: #ffffff;
+  --nm-shadow-dark: #b8c4de;
+  --nm-accent: #4d74ff;
+  --nm-accent-soft: #6f90ff;
+  --nm-text-primary: #1f2a44;
+  --nm-text-secondary: #64728d;
+  --nm-glow-1: rgba(114, 145, 255, 0.28);
+  --nm-glow-2: rgba(148, 189, 255, 0.2);
+}
+
+html.dark[data-ui-theme='aurora'] {
+  --nm-bg: #1c2438;
+  --nm-shadow-light: #29334a;
+  --nm-shadow-dark: #11192b;
+  --nm-accent: #86a2ff;
+  --nm-accent-soft: #9cb3ff;
+  --nm-text-primary: #e8eefc;
+  --nm-text-secondary: #a6b2cf;
+  --nm-glow-1: rgba(98, 130, 236, 0.32);
+  --nm-glow-2: rgba(57, 78, 145, 0.28);
+}
+
+html[data-ui-theme='noir'] {
+  --nm-bg: #e5e8ee;
+  --nm-shadow-light: #f7f9ff;
+  --nm-shadow-dark: #b6becd;
+  --nm-accent: #2f3d57;
+  --nm-accent-soft: #445575;
+  --nm-text-primary: #1f2533;
+  --nm-text-secondary: #687289;
+  --nm-glow-1: rgba(85, 103, 136, 0.2);
+  --nm-glow-2: rgba(161, 170, 193, 0.18);
+}
+
+html.dark[data-ui-theme='noir'] {
+  --nm-bg: #171b23;
+  --nm-shadow-light: #222936;
+  --nm-shadow-dark: #0c1018;
+  --nm-accent: #aab6cc;
+  --nm-accent-soft: #c5cee0;
+  --nm-text-primary: #e6ebf8;
+  --nm-text-secondary: #9aa7c2;
+  --nm-glow-1: rgba(84, 97, 125, 0.24);
+  --nm-glow-2: rgba(36, 42, 59, 0.3);
+}
+
+html[data-ui-theme='sunset'] {
+  --nm-bg: #f7efe6;
+  --nm-shadow-light: #fff9f2;
+  --nm-shadow-dark: #d8c3ab;
+  --nm-accent: #d06b2d;
+  --nm-accent-soft: #e48644;
+  --nm-text-primary: #3b2a1f;
+  --nm-text-secondary: #886957;
+  --nm-glow-1: rgba(255, 170, 101, 0.24);
+  --nm-glow-2: rgba(255, 213, 174, 0.2);
+  --mallog24-logo-text: #3c2b20;
+}
+
+html.dark[data-ui-theme='sunset'] {
+  --nm-bg: #2b221d;
+  --nm-shadow-light: #3b2f29;
+  --nm-shadow-dark: #17110f;
+  --nm-accent: #ffad6f;
+  --nm-accent-soft: #ffc18f;
+  --nm-text-primary: #fff2e7;
+  --nm-text-secondary: #d3b79e;
+  --nm-glow-1: rgba(255, 149, 82, 0.26);
+  --nm-glow-2: rgba(120, 78, 52, 0.22);
+  --mallog24-logo-text: #ffe9d6;
 }
 
 html,
@@ -54,8 +132,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background:
-    radial-gradient(1200px 500px at 10% -10%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(900px 450px at 110% 10%, rgba(163, 177, 198, 0.22), transparent 62%),
+    radial-gradient(1200px 500px at 10% -10%, var(--nm-glow-1), transparent 60%),
+    radial-gradient(900px 450px at 110% 10%, var(--nm-glow-2), transparent 62%),
     var(--nm-bg);
   color: var(--nm-text-primary);
   transition: background 0.3s ease, color 0.3s ease;

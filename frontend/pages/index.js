@@ -3,6 +3,13 @@ import Head from 'next/head'
 import Link from 'next/link'
 import Mallog24Logo from '../components/Mallog24Logo'
 
+const UI_THEME_OPTIONS = [
+  { key: 'auto', label: 'Auto' },
+  { key: 'aurora', label: 'Aurora' },
+  { key: 'noir', label: 'Noir' },
+  { key: 'sunset', label: 'Sunset' },
+]
+
 function ThemeToggle({ darkMode, setDarkMode }) {
   return (
     <button
@@ -20,6 +27,32 @@ function ThemeToggle({ darkMode, setDarkMode }) {
         </svg>
       )}
     </button>
+  )
+}
+
+function ThemePresetSwitch({ uiTheme, setUiTheme, uiThemeMode, setUiThemeMode }) {
+  return (
+    <div className="nm-segment-group">
+      {UI_THEME_OPTIONS.map((theme) => (
+        <button
+          key={theme.key}
+          type="button"
+          onClick={() => {
+            if (theme.key === 'auto') {
+              setUiThemeMode('auto')
+            } else {
+              setUiThemeMode('manual')
+              setUiTheme(theme.key)
+            }
+          }}
+          className={`nm-segment-item px-2.5 py-1 text-[11px] font-semibold ${theme.key === 'auto'
+            ? uiThemeMode === 'auto' ? 'active' : ''
+            : uiThemeMode === 'manual' && uiTheme === theme.key ? 'active' : ''}`}
+        >
+          {theme.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -69,7 +102,7 @@ function StepIndicator({ currentStep }) {
   )
 }
 
-export default function Home({ darkMode, setDarkMode }) {
+export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode }) {
   const [file, setFile] = useState(null)
   const [language, setLanguage] = useState('ko')
   const [transcriptionType, setTranscriptionType] = useState('sermon')
@@ -700,6 +733,10 @@ export default function Home({ darkMode, setDarkMode }) {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pt-6">
+        <div className="nm-raised p-2.5 mb-4 animate-nm-card-in flex items-center justify-between gap-3">
+          <p className="text-[11px] font-medium text-nm-text-secondary">Auto: 라이트 Aurora / 다크 Noir</p>
+          <ThemePresetSwitch uiTheme={uiTheme} setUiTheme={setUiTheme} uiThemeMode={uiThemeMode} setUiThemeMode={setUiThemeMode} />
+        </div>
 
         {/* 인증 카드 */}
         <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
