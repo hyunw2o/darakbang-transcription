@@ -13,14 +13,20 @@ export default function App({ Component, pageProps }) {
     const saved = localStorage.getItem('darkMode')
     const savedTheme = localStorage.getItem(THEME_KEY)
     const savedThemeMode = localStorage.getItem(THEME_MODE_KEY)
-    const initialDarkMode =
-      saved !== null ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches
+    const systemDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const initialThemeMode = savedThemeMode === 'manual' || savedThemeMode === 'auto'
+      ? savedThemeMode
+      : 'auto'
+
+    const initialDarkMode = initialThemeMode === 'auto'
+      ? systemDarkMode
+      : saved !== null
+        ? JSON.parse(saved)
+        : systemDarkMode
 
     setDarkMode(initialDarkMode)
 
-    if (savedThemeMode === 'manual' || savedThemeMode === 'auto') {
-      setUiThemeMode(savedThemeMode)
-    }
+    setUiThemeMode(initialThemeMode)
 
     if (savedTheme) {
       setUiTheme(savedTheme)
@@ -43,6 +49,26 @@ export default function App({ Component, pageProps }) {
       setUiTheme(darkMode ? 'noir' : 'aurora')
     }
   }, [darkMode, uiThemeMode])
+
+  useEffect(() => {
+    if (uiThemeMode !== 'auto') return undefined
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const syncWithSystem = (isDark) => setDarkMode(isDark)
+    syncWithSystem(media.matches)
+
+    const handleChange = (event) => {
+      syncWithSystem(event.matches)
+    }
+
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handleChange)
+      return () => media.removeEventListener('change', handleChange)
+    }
+
+    media.addListener(handleChange)
+    return () => media.removeListener(handleChange)
+  }, [uiThemeMode])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-ui-theme', uiTheme)
