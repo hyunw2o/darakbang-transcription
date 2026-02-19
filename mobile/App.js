@@ -272,6 +272,7 @@ function App() {
   const [bootLoading, setBootLoading] = useState(true);
   const [themeMode, setThemeMode] = useState("auto");
   const [themeKey, setThemeKey] = useState("aurora");
+  const [openSettingsMenu, setOpenSettingsMenu] = useState("");
 
   const [authMode, setAuthMode] = useState("login");
   const [authName, setAuthName] = useState("");
@@ -311,6 +312,10 @@ function App() {
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
+
+  useEffect(() => {
+    setOpenSettingsMenu("");
+  }, [isLoggedIn]);
 
   const warmUpBackend = () => {
     requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
@@ -837,46 +842,77 @@ function App() {
     return "회의 안건/결정/후속 조치를 분리해 정리합니다.";
   }, [transcriptionType]);
 
-  const renderThemeSelector = () => (
-    <View style={[styles.themeCard, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
-      <Text style={[styles.themeLabel, { color: activeTheme.textSecondary }]}>테마 (Auto 추천)</Text>
-      <View style={styles.themeRow}>
-        {MOBILE_THEME_OPTIONS.map((themeOption) => {
-          const active =
-            themeOption.key === "auto"
-              ? themeMode === "auto"
-              : themeMode === "manual" && themeOption.key === themeKey;
-          return (
-            <NmPressable
-              key={themeOption.key}
-              style={[
-                styles.themeOption,
-                {
-                  backgroundColor: active ? activeTheme.accent : activeTheme.inputBg,
-                  borderColor: active ? activeTheme.accentSoft : activeTheme.inputBorder,
-                },
-              ]}
-              onPress={() => {
-                if (themeOption.key === "auto") {
-                  setThemeMode("auto");
-                  return;
-                }
-                setThemeMode("manual");
-                setThemeKey(themeOption.key);
-              }}
-            >
-              <Text
-                style={[
-                  styles.themeOptionText,
-                  { color: active ? "#ffffff" : activeTheme.textPrimary },
-                ]}
-              >
-                {themeOption.label}
-              </Text>
-            </NmPressable>
-          );
-        })}
+  const applyThemeOption = (optionKey) => {
+    if (optionKey === "auto") {
+      setThemeMode("auto");
+    } else {
+      setThemeMode("manual");
+      setThemeKey(optionKey);
+    }
+    setOpenSettingsMenu("");
+  };
+
+  const renderQuickControls = () => (
+    <View style={styles.quickControlsWrap}>
+      <View style={[styles.quickControlsRow, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+        <NmPressable
+          style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
+          onPress={() => setOpenSettingsMenu((prev) => (prev === "language" ? "" : "language"))}
+        >
+          <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>🌐</Text>
+        </NmPressable>
+        <NmPressable
+          style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
+          onPress={() => setOpenSettingsMenu((prev) => (prev === "theme" ? "" : "theme"))}
+        >
+          <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>◐</Text>
+        </NmPressable>
       </View>
+
+      {openSettingsMenu === "language" ? (
+        <View style={[styles.quickMenu, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+          <NmPressable
+            style={[styles.quickMenuItem, language === "ko" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
+            onPress={() => {
+              setLanguage("ko");
+              setOpenSettingsMenu("");
+            }}
+          >
+            <Text style={[styles.quickMenuText, { color: language === "ko" ? activeTheme.accent : activeTheme.textPrimary }]}>한국어</Text>
+          </NmPressable>
+          <NmPressable
+            style={[styles.quickMenuItem, language === "en" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
+            onPress={() => {
+              setLanguage("en");
+              setOpenSettingsMenu("");
+            }}
+          >
+            <Text style={[styles.quickMenuText, { color: language === "en" ? activeTheme.accent : activeTheme.textPrimary }]}>English</Text>
+          </NmPressable>
+        </View>
+      ) : null}
+
+      {openSettingsMenu === "theme" ? (
+        <View style={[styles.quickMenu, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+          {MOBILE_THEME_OPTIONS.map((themeOption) => {
+            const active =
+              themeOption.key === "auto"
+                ? themeMode === "auto"
+                : themeMode === "manual" && themeOption.key === themeKey;
+            return (
+              <NmPressable
+                key={themeOption.key}
+                style={[styles.quickMenuItem, active ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
+                onPress={() => applyThemeOption(themeOption.key)}
+              >
+                <Text style={[styles.quickMenuText, { color: active ? activeTheme.accent : activeTheme.textPrimary }]}>
+                  {themeOption.label}
+                </Text>
+              </NmPressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -896,13 +932,15 @@ function App() {
 
       <Banner type="error" text={error} />
       <Banner type="notice" text={notice} />
+      {renderQuickControls()}
 
       {!isLoggedIn ? (
         <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
-          {renderThemeSelector()}
           <FadeInView duration={420}>
             <View style={[styles.card, styles.authCard, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
-              <Text style={[styles.authLabel, { color: activeTheme.textPrimary }]}>회원 인증</Text>
+              <Text style={[styles.authIntro, { color: activeTheme.textPrimary }]}>
+                음성을 텍스트로 변환하려면 로그인해 주세요.
+              </Text>
 
               <View style={styles.segmentRow}>
                 <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} theme={activeTheme} />
@@ -984,20 +1022,11 @@ function App() {
                   <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>{socialLoading === "kakao" ? "연결 중..." : "Kakao"}</Text>
                 </NmPressable>
               </View>
-
-              <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
-                소셜 로그인은 앱 리다이렉트 URL/공급자 설정이 맞아야 동작합니다.
-              </Text>
-              <Text style={[styles.authSubLabel, { color: activeTheme.textSecondary }]}>로그인 후 파일 변환과 기록본 저장 기능을 사용할 수 있습니다.</Text>
             </View>
           </FadeInView>
         </ScrollView>
       ) : (
         <View style={styles.workspaceContainer}>
-          <FadeInView>
-            {renderThemeSelector()}
-          </FadeInView>
-
           <FadeInView>
             <View style={[styles.userBar, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.userInfo}>
@@ -1031,10 +1060,6 @@ function App() {
               <FadeInView key="transcribe-settings">
                 <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 설정</Text>
-                  <View style={styles.segmentRow}>
-                    <SegmentButton label="한국어" active={language === "ko"} onPress={() => setLanguage("ko")} theme={activeTheme} />
-                    <SegmentButton label="English" active={language === "en"} onPress={() => setLanguage("en")} theme={activeTheme} />
-                  </View>
 
                   <View style={styles.segmentRow}>
                     {TRANSCRIPTION_TYPES.map((item) => (
@@ -1258,32 +1283,50 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     justifyContent: "flex-start",
   },
-  themeCard: {
-    marginBottom: 10,
+  quickControlsWrap: {
+    marginTop: 8,
     marginHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  themeLabel: {
-    fontSize: 11,
-    fontWeight: "700",
     marginBottom: 8,
   },
-  themeRow: {
+  quickControlsRow: {
     flexDirection: "row",
+    justifyContent: "flex-end",
     gap: 8,
-  },
-  themeOption: {
-    flex: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  quickIconButton: {
+    minWidth: 68,
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     alignItems: "center",
   },
-  themeOptionText: {
-    fontSize: 11,
+  quickIconText: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  quickMenu: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 8,
+    gap: 6,
+  },
+  quickMenuItem: {
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+  },
+  quickMenuItemActive: {
+    backgroundColor: "rgba(59, 125, 216, 0.08)",
+  },
+  quickMenuText: {
+    fontSize: 12,
     fontWeight: "700",
   },
   authCard: {
@@ -1291,17 +1334,11 @@ const styles = StyleSheet.create({
     maxWidth: 620,
     alignSelf: "center",
   },
-  authLabel: {
+  authIntro: {
     color: NM.textPrimary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
-    marginBottom: 4,
-  },
-  authSubLabel: {
-    color: NM.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
+    marginBottom: 2,
   },
   banner: {
     marginHorizontal: 16,

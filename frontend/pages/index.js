@@ -10,48 +10,107 @@ const UI_THEME_OPTIONS = [
   { key: 'sunset', label: 'Sunset' },
 ]
 
-function ThemeToggle({ darkMode, setDarkMode }) {
-  return (
-    <button
-      onClick={() => setDarkMode(!darkMode)}
-      className="p-2.5 nm-btn rounded-xl"
-      aria-label="다크 모드 전환"
-    >
-      {darkMode ? (
-        <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-        </svg>
-      ) : (
-        <svg className="w-4 h-4 text-nm-text-secondary" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-        </svg>
-      )}
-    </button>
-  )
-}
+function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode, locale = 'kr' }) {
+  const menuRef = useRef(null)
+  const [openMenu, setOpenMenu] = useState('')
 
-function ThemePresetSwitch({ uiTheme, setUiTheme, uiThemeMode, setUiThemeMode }) {
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenu('')
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleThemeSelect = (themeKey) => {
+    if (themeKey === 'auto') {
+      setUiThemeMode('auto')
+    } else {
+      setUiThemeMode('manual')
+      setUiTheme(themeKey)
+    }
+    setOpenMenu('')
+  }
+
   return (
-    <div className="nm-segment-group">
-      {UI_THEME_OPTIONS.map((theme) => (
+    <div ref={menuRef} className="relative flex items-center gap-2">
+      <div className="relative">
         <button
-          key={theme.key}
           type="button"
-          onClick={() => {
-            if (theme.key === 'auto') {
-              setUiThemeMode('auto')
-            } else {
-              setUiThemeMode('manual')
-              setUiTheme(theme.key)
-            }
-          }}
-          className={`nm-segment-item px-2.5 py-1 text-[11px] font-semibold ${theme.key === 'auto'
-            ? uiThemeMode === 'auto' ? 'active' : ''
-            : uiThemeMode === 'manual' && uiTheme === theme.key ? 'active' : ''}`}
+          className="nm-icon-btn"
+          aria-label="언어 선택"
+          onClick={() => setOpenMenu(openMenu === 'lang' ? '' : 'lang')}
         >
-          {theme.label}
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10" />
+          </svg>
         </button>
-      ))}
+        {openMenu === 'lang' && (
+          <div className="nm-menu left-0 w-24">
+            <Link
+              href="/"
+              onClick={() => setOpenMenu('')}
+              className={`nm-menu-item ${locale === 'kr' ? 'active' : ''}`}
+            >
+              KR
+            </Link>
+            <Link
+              href="/en"
+              onClick={() => setOpenMenu('')}
+              className={`nm-menu-item ${locale === 'en' ? 'active' : ''}`}
+            >
+              EN
+            </Link>
+          </div>
+        )}
+      </div>
+
+      <div className="relative">
+        <button
+          type="button"
+          className="nm-icon-btn"
+          aria-label="테마 선택"
+          onClick={() => setOpenMenu(openMenu === 'theme' ? '' : 'theme')}
+        >
+          {darkMode ? (
+            <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-nm-text-secondary" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8 8 0 1010.586 10.586z" />
+            </svg>
+          )}
+        </button>
+        {openMenu === 'theme' && (
+          <div className="nm-menu right-0 w-40">
+            {UI_THEME_OPTIONS.map((theme) => (
+              <button
+                key={theme.key}
+                type="button"
+                onClick={() => handleThemeSelect(theme.key)}
+                className={`nm-menu-item ${theme.key === 'auto'
+                  ? uiThemeMode === 'auto' ? 'active' : ''
+                  : uiThemeMode === 'manual' && uiTheme === theme.key ? 'active' : ''}`}
+              >
+                {theme.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setDarkMode(!darkMode)
+                setOpenMenu('')
+              }}
+              className="nm-menu-item"
+            >
+              {darkMode ? '라이트 모드' : '다크 모드'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -712,39 +771,26 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             <span className="text-nm-text-secondary">/</span>
             <Mallog24Logo className="h-[18px] w-auto shrink-0" />
           </div>
-          <div className="flex items-center gap-2">
-            <nav className="nm-segment-group">
-              <Link
-                href="/"
-                className="nm-segment-item active"
-              >
-                KR
-              </Link>
-              <Link
-                href="/en"
-                className="nm-segment-item"
-              >
-                EN
-              </Link>
-            </nav>
-            <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
-          </div>
+          <HeaderMenuControls
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            uiTheme={uiTheme}
+            setUiTheme={setUiTheme}
+            uiThemeMode={uiThemeMode}
+            setUiThemeMode={setUiThemeMode}
+            locale="kr"
+          />
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pt-6">
-        <div className="nm-raised p-2.5 mb-4 animate-nm-card-in flex items-center justify-between gap-3">
-          <p className="text-[11px] font-medium text-nm-text-secondary">Auto: 라이트 Aurora / 다크 Noir</p>
-          <ThemePresetSwitch uiTheme={uiTheme} setUiTheme={setUiTheme} uiThemeMode={uiThemeMode} setUiThemeMode={setUiThemeMode} />
-        </div>
-
         {/* 인증 카드 */}
         <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
           {!authToken ? (
             <>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-bold text-nm-text-primary">회원 인증</h2>
-                <div className="nm-segment-group">
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-nm-text-primary">음성을 텍스트로 변환하려면 로그인해 주세요.</p>
+                <div className="nm-segment-group mt-3">
                   <button
                     type="button"
                     onClick={() => setAuthMode('login')}
@@ -823,9 +869,6 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-nm-text-secondary">
-                  소셜 로그인은 Supabase에 각 공급자 설정이 완료되어야 동작합니다.
-                </p>
               </div>
               {error && (
                 <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-red-500 animate-slide-up">
@@ -856,15 +899,6 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             </div>
           )}
         </div>
-
-        {!authToken && (
-          <div className="nm-raised p-5 mb-5 text-center animate-nm-card-in">
-            <h3 className="text-sm font-semibold text-nm-text-primary">로그인이 필요합니다</h3>
-            <p className="mt-2 text-xs text-nm-text-secondary">
-              로그인 또는 회원가입 후 파일 업로드 및 변환 화면이 표시됩니다.
-            </p>
-          </div>
-        )}
 
         {authToken && (
           <>

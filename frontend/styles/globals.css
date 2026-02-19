@@ -302,6 +302,75 @@ body {
     -3px -3px 6px var(--nm-shadow-light);
 }
 
+.nm-icon-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nm-text-secondary);
+  border-radius: var(--nm-radius-sm);
+  border: none;
+  background: var(--nm-bg);
+  box-shadow:
+    3px 3px 6px var(--nm-shadow-dark),
+    -3px -3px 6px var(--nm-shadow-light);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform 150ms var(--nm-ease), color 150ms var(--nm-ease);
+}
+
+.nm-icon-btn:hover {
+  color: var(--nm-text-primary);
+  box-shadow:
+    5px 5px 10px var(--nm-shadow-dark),
+    -5px -5px 10px var(--nm-shadow-light);
+}
+
+.nm-icon-btn:active {
+  transform: scale(0.96);
+}
+
+.nm-menu {
+  position: absolute;
+  top: 40px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--nm-bg);
+  border: 1px solid color-mix(in oklab, var(--nm-shadow-dark) 45%, transparent);
+  box-shadow:
+    10px 10px 24px color-mix(in oklab, var(--nm-shadow-dark) 65%, transparent),
+    -6px -6px 16px color-mix(in oklab, var(--nm-shadow-light) 75%, transparent);
+}
+
+.nm-menu-item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nm-text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.nm-menu-item:hover {
+  background: color-mix(in oklab, var(--nm-shadow-light) 60%, transparent);
+  color: var(--nm-text-primary);
+}
+
+.nm-menu-item.active {
+  background: color-mix(in oklab, var(--nm-accent) 16%, var(--nm-bg));
+  color: var(--nm-accent);
+}
+
 /* ========== Override existing component classes ========== */
 
 /* Action button */
