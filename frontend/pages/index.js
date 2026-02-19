@@ -1063,7 +1063,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
             <div className="nm-flat p-4 mb-5 animate-nm-card-in">
               <p className="text-xs sm:text-sm text-nm-accent font-medium">
-                mallog24 특화: 설교, 통화, 회의 기록을 목적에 맞게 구조화합니다.
+                mallog24는 공식적으로 배포된 음성 파일의 사용을 권장 합니다. 부정적인 방법으로 사용 중 외부에 적발시 법적인 책임이 없음을 알립니다.
               </p>
             </div>
             {/* 업로드 카드 */}
@@ -1074,9 +1074,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                 <div
                   className={`relative p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
                 ${uploadBlockedByQuota ? 'opacity-60 cursor-not-allowed nm-concave' :
-                    dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
-                      file ? 'nm-raised' :
-                        'nm-concave'}`}
+                      dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
+                        file ? 'nm-raised' :
+                          'nm-concave'}`}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
