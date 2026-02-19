@@ -2,18 +2,19 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as ExpoLinking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import NmPressable from "./components/NmPressable";
 import FadeInView from "./components/FadeInView";
 
@@ -117,23 +118,292 @@ const MIME_BY_EXT = {
   webm: "audio/webm",
 };
 
-const TRANSCRIPTION_TYPES = [
-  { key: "sermon", label: "설교" },
-  { key: "phonecall", label: "통화" },
-  { key: "conversation", label: "회의" },
-];
+const TRANSCRIPTION_TYPES = ["sermon", "phonecall", "conversation"];
+const RECORD_CATEGORIES = ["meeting_keywords", "clinical_notes", "sermon_core_summary"];
+const APP_TABS = ["transcribe", "history", "records"];
 
-const RECORD_CATEGORIES = [
-  { key: "meeting_keywords", label: "회의 중요 키워드" },
-  { key: "clinical_notes", label: "진료 도움 기록" },
-  { key: "sermon_core_summary", label: "설교 핵심 요약" },
-];
-
-const APP_TABS = [
-  { key: "transcribe", label: "변환" },
-  { key: "history", label: "히스토리" },
-  { key: "records", label: "기록본" },
-];
+const I18N = {
+  ko: {
+    languageOptionKo: "한국어",
+    languageOptionEn: "English",
+    loadingApp: "앱 초기화 중...",
+    authIntro: "AI 음성 기록, 지금 시작하세요.",
+    authSubcopy: "로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.",
+    login: "로그인",
+    signup: "회원가입",
+    namePlaceholder: "이름",
+    emailPlaceholder: "이메일",
+    passwordPlaceholder: "비밀번호",
+    processing: "처리 중...",
+    orSocial: "또는 소셜 로그인",
+    connecting: "연결 중...",
+    continueGoogle: "Google로 계속하기",
+    continueKakao: "Kakao로 계속하기",
+    defaultUser: "로그인 사용자",
+    logout: "로그아웃",
+    tabs: {
+      transcribe: "변환",
+      history: "히스토리",
+      records: "기록본",
+    },
+    transcriptionTypes: {
+      sermon: "설교",
+      phonecall: "통화",
+      conversation: "회의",
+    },
+    recordCategories: {
+      meeting_keywords: "회의 중요 키워드",
+      clinical_notes: "진료 도움 기록",
+      sermon_core_summary: "설교 핵심 요약",
+    },
+    transcribeSettings: "변환 설정",
+    pickFile: "파일 선택",
+    noFile: "선택된 파일 없음",
+    transcribeStart: "변환 시작",
+    transcribing: "변환 중...",
+    transcribeResult: "변환 결과",
+    taskId: "작업 ID",
+    itemType: "유형",
+    charCount: "문자 수",
+    correctedText: "교정 텍스트",
+    generateSummary: "설교 요약 생성",
+    generatingSummary: "요약 생성 중...",
+    summary: "요약",
+    recordGenerateSave: "기록본 생성 및 저장",
+    draft: "초안",
+    drafting: "생성 중",
+    save: "저장",
+    saving: "저장 중",
+    recordEditorPlaceholder: "{label} 내용을 여기에 편집하세요",
+    historyTitle: "최근 변환 기록",
+    recordsTitle: "저장 기록본",
+    refresh: "새로고침",
+    loading: "로딩...",
+    noHistory: "변환 기록이 없습니다.",
+    noRecords: "저장된 기록본이 없습니다.",
+    load: "불러오기",
+    selectedTypeHints: {
+      sermon: "설교 흐름(본론/결론/기도) 중심으로 구조화합니다.",
+      phonecall: "통화 화자 분리와 핵심 문장 중심으로 정리합니다.",
+      conversation: "회의 안건/결정/후속 조치를 분리해 정리합니다.",
+    },
+    privacy: {
+      title: "개인정보처리방침 동의",
+      body: "mallog24 이용 전 개인정보 처리 내용을 확인해주세요. 동의 후 로그인 및 음성 변환 기능을 사용할 수 있습니다.",
+      summaryFile: "• 원본 음성 파일: 변환 처리 후 임시 저장소에서 지체 없이 삭제",
+      summaryText: "• 변환 텍스트/기록본: 히스토리 및 기록 기능 제공 목적 범위 내 보관",
+      summaryVendors: "• 처리 위탁: Supabase, OpenAI, Google(Gemini)",
+      summarySocial: "• 소셜 로그인: Google/Kakao 계정 정보(이메일, 프로필, UID)",
+      viewPolicy: "개인정보처리방침 전문 보기",
+      check: "개인정보처리방침을 확인했고 동의합니다.",
+      accept: "동의하고 시작하기",
+      saving: "저장 중...",
+    },
+    notices: {
+      socialLoginDone: "소셜 로그인이 완료되었습니다.",
+      authDoneSignup: "회원가입/로그인이 완료되었습니다.",
+      authDoneLogin: "로그인되었습니다.",
+      signupDone: "회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.",
+      loggedOut: "로그아웃되었습니다.",
+      fileSelected: "파일이 선택되었습니다.",
+      transcribeDone: "변환이 완료되었습니다.",
+      requestAccepted: "요청이 접수되었습니다.",
+      historyLoaded: "히스토리 결과를 불러왔습니다.",
+      summaryDone: "요약을 생성했습니다.",
+      draftDone: "{label} 초안을 생성했습니다.",
+      recordSaved: "기록본을 저장했습니다.",
+      privacyAccepted: "개인정보처리방침 동의가 완료되었습니다.",
+    },
+    errors: {
+      authRequired: "로그인 후 파일 변환을 사용할 수 있습니다.",
+      authInputRequired: "이메일/비밀번호를 입력해주세요.",
+      passwordMin: "비밀번호는 8자 이상이어야 합니다.",
+      oauthUrlCreate: "OAuth URL 생성 실패",
+      openLoginUrl: "로그인 URL을 열 수 없습니다.",
+      socialStartFailed: "소셜 로그인 시작 실패",
+      socialSessionFailed: "소셜 로그인 세션 처리 실패",
+      socialFailedPrefix: "소셜 로그인 실패",
+      fileTooLarge: "파일 크기는 100MB 이하여야 합니다.",
+      filePickFailed: "파일 선택 실패",
+      fileNotSelected: "먼저 파일을 선택해주세요.",
+      transcribeFailed: "변환 요청 실패",
+      taskNotFound: "작업 상태를 찾을 수 없습니다.",
+      transcribeError: "변환 중 오류가 발생했습니다.",
+      statusFailed: "상태 조회 실패",
+      historyReadFailed: "히스토리 조회 실패",
+      recordsReadFailed: "기록본 조회 실패",
+      historyLoadFailed: "히스토리 불러오기 실패",
+      historyLoadOnlyCompleted: "완료된 작업만 불러올 수 있습니다.",
+      summaryFailed: "요약 실패",
+      summaryNoText: "요약할 텍스트가 없습니다.",
+      draftNeedLogin: "로그인 후 기록본 초안을 생성할 수 있습니다.",
+      draftNoSource: "기록본 초안 생성에 필요한 변환 결과가 없습니다.",
+      draftFailed: "기록본 초안 생성 실패",
+      saveNeedLogin: "로그인 후 기록본 저장이 가능합니다.",
+      saveNoContent: "저장할 기록본 내용이 없습니다.",
+      saveFailed: "기록본 저장 실패",
+      openPrivacyFailed: "개인정보처리방침 페이지를 열 수 없습니다.",
+      openPrivacyLinkFailed: "개인정보처리방침 링크를 열 수 없습니다.",
+      privacySaveFailed: "동의 상태 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      requestFailedPrefix: "요청 실패",
+      timeout: "요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.",
+    },
+    taskState: {
+      waiting: "변환 작업 대기 중...",
+      queued: "변환 대기 중...",
+      processing: "음성 인식/교정 처리 중...",
+      done: "완료",
+      uploading: "업로드 중...",
+      historyLoading: "히스토리 불러오는 중...",
+    },
+    authErrors: {
+      invalidCredentials: "이메일/비밀번호가 일치하지 않습니다. 기존 계정이 Google/Kakao로 가입된 계정이면 소셜 로그인 버튼을 사용하세요.",
+      emailNotConfirmed: "이메일 인증이 완료되지 않았습니다. 인증 메일 확인 후 다시 로그인해주세요.",
+      timeout: "인증 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.",
+      default: "인증 처리 실패",
+    },
+  },
+  en: {
+    languageOptionKo: "Korean",
+    languageOptionEn: "English",
+    loadingApp: "Initializing app...",
+    authIntro: "Start AI speech records now.",
+    authSubcopy: "Sign in to upload files and start transcription.",
+    login: "Log In",
+    signup: "Sign Up",
+    namePlaceholder: "Name",
+    emailPlaceholder: "Email",
+    passwordPlaceholder: "Password",
+    processing: "Processing...",
+    orSocial: "or continue with social login",
+    connecting: "Connecting...",
+    continueGoogle: "Continue with Google",
+    continueKakao: "Continue with Kakao",
+    defaultUser: "Signed-in user",
+    logout: "Log out",
+    tabs: {
+      transcribe: "Transcribe",
+      history: "History",
+      records: "Records",
+    },
+    transcriptionTypes: {
+      sermon: "Sermon",
+      phonecall: "Call",
+      conversation: "Meeting",
+    },
+    recordCategories: {
+      meeting_keywords: "Meeting Keywords",
+      clinical_notes: "Clinical Notes",
+      sermon_core_summary: "Sermon Core Summary",
+    },
+    transcribeSettings: "Transcription Settings",
+    pickFile: "Choose File",
+    noFile: "No file selected",
+    transcribeStart: "Start Transcription",
+    transcribing: "Transcribing...",
+    transcribeResult: "Transcription Result",
+    taskId: "Task ID",
+    itemType: "Type",
+    charCount: "Characters",
+    correctedText: "Corrected Text",
+    generateSummary: "Generate Summary",
+    generatingSummary: "Generating summary...",
+    summary: "Summary",
+    recordGenerateSave: "Generate & Save Records",
+    draft: "Draft",
+    drafting: "Drafting",
+    save: "Save",
+    saving: "Saving",
+    recordEditorPlaceholder: "Edit {label} content here",
+    historyTitle: "Recent History",
+    recordsTitle: "Saved Records",
+    refresh: "Refresh",
+    loading: "Loading...",
+    noHistory: "No transcription history.",
+    noRecords: "No saved records.",
+    load: "Load",
+    selectedTypeHints: {
+      sermon: "Structures content by sermon flow (message/application/prayer).",
+      phonecall: "Focuses on speaker separation and core call statements.",
+      conversation: "Separates agenda, decisions, and action items for meetings.",
+    },
+    privacy: {
+      title: "Privacy Policy Consent",
+      body: "Please review our privacy handling details before using mallog24. You can use login and transcription after consent.",
+      summaryFile: "• Source audio files: removed from temporary storage after processing",
+      summaryText: "• Transcribed text/records: retained only for history and record features",
+      summaryVendors: "• Processors: Supabase, OpenAI, Google (Gemini)",
+      summarySocial: "• Social login: Google/Kakao account data (email, profile, UID)",
+      viewPolicy: "View full privacy policy",
+      check: "I have reviewed and agree to the Privacy Policy.",
+      accept: "Agree and Continue",
+      saving: "Saving...",
+    },
+    notices: {
+      socialLoginDone: "Social login completed.",
+      authDoneSignup: "Sign-up and login completed.",
+      authDoneLogin: "Logged in successfully.",
+      signupDone: "Sign-up completed. Please verify your email before login.",
+      loggedOut: "You have been logged out.",
+      fileSelected: "File selected.",
+      transcribeDone: "Transcription completed.",
+      requestAccepted: "Request accepted.",
+      historyLoaded: "Loaded selected history result.",
+      summaryDone: "Summary generated.",
+      draftDone: "{label} draft generated.",
+      recordSaved: "Record saved.",
+      privacyAccepted: "Privacy consent saved.",
+    },
+    errors: {
+      authRequired: "Please log in to use transcription.",
+      authInputRequired: "Please enter email and password.",
+      passwordMin: "Password must be at least 8 characters.",
+      oauthUrlCreate: "Failed to create OAuth URL.",
+      openLoginUrl: "Unable to open login URL.",
+      socialStartFailed: "Failed to start social login",
+      socialSessionFailed: "Failed to process social login session",
+      socialFailedPrefix: "Social login failed",
+      fileTooLarge: "File size must be 100MB or less.",
+      filePickFailed: "Failed to select file",
+      fileNotSelected: "Please select a file first.",
+      transcribeFailed: "Failed to request transcription",
+      taskNotFound: "Task status not found.",
+      transcribeError: "An error occurred during transcription.",
+      statusFailed: "Failed to check task status",
+      historyReadFailed: "Failed to fetch history",
+      recordsReadFailed: "Failed to fetch records",
+      historyLoadFailed: "Failed to load history item",
+      historyLoadOnlyCompleted: "Only completed tasks can be loaded.",
+      summaryFailed: "Failed to generate summary",
+      summaryNoText: "No text available to summarize.",
+      draftNeedLogin: "Log in to generate record drafts.",
+      draftNoSource: "No source text available for draft generation.",
+      draftFailed: "Failed to generate record draft",
+      saveNeedLogin: "Log in to save records.",
+      saveNoContent: "No record content to save.",
+      saveFailed: "Failed to save record",
+      openPrivacyFailed: "Unable to open the privacy policy page.",
+      openPrivacyLinkFailed: "Unable to open privacy policy link.",
+      privacySaveFailed: "Failed to save consent state. Please try again.",
+      requestFailedPrefix: "Request failed",
+      timeout: "Request timed out. Please check server status.",
+    },
+    taskState: {
+      waiting: "Waiting for transcription task...",
+      queued: "Queued...",
+      processing: "Running speech recognition/correction...",
+      done: "Done",
+      uploading: "Uploading...",
+      historyLoading: "Loading history item...",
+    },
+    authErrors: {
+      invalidCredentials: "Email/password is incorrect. If this account was created with Google/Kakao, use social login.",
+      emailNotConfirmed: "Email verification is not complete. Please verify your email first.",
+      timeout: "Auth server response is delayed. Please try again shortly.",
+      default: "Authentication failed",
+    },
+  },
+};
 
 function parseResponseText(raw) {
   if (!raw) return {};
@@ -144,20 +414,21 @@ function parseResponseText(raw) {
   }
 }
 
-function getFriendlyAuthError(message) {
+function getFriendlyAuthError(message, copy) {
   const raw = (message || "").trim();
   const normalized = raw.toLowerCase();
+  const authErrors = copy?.authErrors || I18N.ko.authErrors;
 
   if (normalized.includes("invalid login credentials")) {
-    return "이메일/비밀번호가 일치하지 않습니다. 기존 계정이 Google/Kakao로 가입된 계정이면 소셜 로그인 버튼을 사용하세요.";
+    return authErrors.invalidCredentials;
   }
   if (normalized.includes("email not confirmed")) {
-    return "이메일 인증이 완료되지 않았습니다. 인증 메일 확인 후 다시 로그인해주세요.";
+    return authErrors.emailNotConfirmed;
   }
   if (normalized.includes("timeout")) {
-    return "인증 서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.";
+    return authErrors.timeout;
   }
-  return raw || "인증 처리 실패";
+  return raw || authErrors.default;
 }
 
 async function requestApi(path, { method = "GET", token = "", body = undefined, timeoutMs = 20000 } = {}) {
@@ -179,13 +450,13 @@ async function requestApi(path, { method = "GET", token = "", body = undefined, 
     const data = parseResponseText(rawText);
 
     if (!response.ok) {
-      throw new Error(data?.detail || data?.message || `요청 실패 (${response.status})`);
+      throw new Error(data?.detail || data?.message || `Request failed (${response.status})`);
     }
 
     return data;
   } catch (e) {
     if (e?.name === "AbortError") {
-      throw new Error("요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.");
+      throw new Error("Request timed out. Please check server status.");
     }
     throw e;
   } finally {
@@ -289,6 +560,7 @@ function Banner({ type = "notice", text }) {
 function App() {
   const pollRef = useRef(null);
   const colorScheme = useColorScheme();
+  const { height: screenHeight } = useWindowDimensions();
 
   const [bootLoading, setBootLoading] = useState(true);
   const [themeMode, setThemeMode] = useState("auto");
@@ -333,9 +605,23 @@ function App() {
   const [privacyConsentSaving, setPrivacyConsentSaving] = useState(false);
 
   const isLoggedIn = !!authToken && !!authUser;
+  const copy = I18N[language] || I18N.ko;
+  const compactLayout = screenHeight < 760;
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
+  const transcriptionTypeOptions = useMemo(
+    () => TRANSCRIPTION_TYPES.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
+    [copy]
+  );
+  const recordCategoryOptions = useMemo(
+    () => RECORD_CATEGORIES.map((key) => ({ key, label: copy.recordCategories[key] || key })),
+    [copy]
+  );
+  const tabOptions = useMemo(
+    () => APP_TABS.map((key) => ({ key, label: copy.tabs[key] || key })),
+    [copy]
+  );
 
   useEffect(() => {
     setOpenSettingsMenu("");
@@ -381,7 +667,7 @@ function App() {
       const data = await requestApi("/api/history", { token });
       setHistory(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e.message || "히스토리 조회 실패");
+      setError(e.message || copy.errors.historyReadFailed);
     } finally {
       setHistoryLoading(false);
     }
@@ -397,7 +683,7 @@ function App() {
       const data = await requestApi("/api/records", { token });
       setRecords(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e.message || "기록본 조회 실패");
+      setError(e.message || copy.errors.recordsReadFailed);
     } finally {
       setRecordsLoading(false);
     }
@@ -438,7 +724,7 @@ function App() {
     const { accessToken, oauthError } = parseAuthParamsFromUrl(url);
 
     if (oauthError) {
-      setError(`소셜 로그인 실패: ${oauthError}`);
+      setError(`${copy.errors.socialFailedPrefix}: ${oauthError}`);
       setSocialLoading("");
       return;
     }
@@ -447,11 +733,11 @@ function App() {
 
     try {
       await hydrateWithToken(accessToken, {
-        successMessage: "소셜 로그인이 완료되었습니다.",
+        successMessage: copy.notices.socialLoginDone,
         verifyUser: true,
       });
     } catch (e) {
-      setError(e.message || "소셜 로그인 세션 처리 실패");
+      setError(e.message || copy.errors.socialSessionFailed);
     } finally {
       setSocialLoading("");
     }
@@ -519,12 +805,12 @@ function App() {
     clearMessages();
 
     if (!authEmail.trim() || !authPassword) {
-      setError("이메일/비밀번호를 입력해주세요.");
+      setError(copy.errors.authInputRequired);
       return;
     }
 
     if (authMode === "signup" && authPassword.length < 8) {
-      setError("비밀번호는 8자 이상이어야 합니다.");
+      setError(copy.errors.passwordMin);
       return;
     }
 
@@ -543,19 +829,19 @@ function App() {
 
       if (data?.access_token) {
         await hydrateWithToken(data.access_token, {
-          successMessage: authMode === "signup" ? "회원가입/로그인이 완료되었습니다." : "로그인되었습니다.",
+          successMessage: authMode === "signup" ? copy.notices.authDoneSignup : copy.notices.authDoneLogin,
           userHint: data?.user || null,
           verifyUser: false,
           loadWorkspace: true,
         });
       } else {
-        setNotice(data?.message || "회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.");
+        setNotice(data?.message || copy.notices.signupDone);
       }
 
       setAuthPassword("");
       if (authMode === "signup") setAuthMode("login");
     } catch (e) {
-      setError(getFriendlyAuthError(e.message));
+      setError(getFriendlyAuthError(e.message, copy));
     } finally {
       setAuthLoading(false);
     }
@@ -571,16 +857,16 @@ function App() {
       const redirectTo = ExpoLinking.createURL("auth-callback");
       const path = `/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
       const data = await requestApi(path);
-      if (!data?.auth_url) throw new Error("OAuth URL 생성 실패");
+      if (!data?.auth_url) throw new Error(copy.errors.oauthUrlCreate);
 
       const supported = await Linking.canOpenURL(data.auth_url);
-      if (!supported) throw new Error("로그인 URL을 열 수 없습니다.");
+      if (!supported) throw new Error(copy.errors.openLoginUrl);
 
       await Linking.openURL(data.auth_url);
       setSocialLoading("");
     } catch (e) {
       setError(
-        `${e.message || "소셜 로그인 시작 실패"}\n(백엔드 OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL 설정 확인 필요)`
+        `${e.message || copy.errors.socialStartFailed}\n(backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL check required)`
       );
       setSocialLoading("");
     }
@@ -588,7 +874,7 @@ function App() {
 
   const handleLogout = async () => {
     clearMessages();
-    await clearAuthState("로그아웃되었습니다.");
+    await clearAuthState(copy.notices.loggedOut);
   };
 
   const pickAudioFile = async () => {
@@ -606,7 +892,7 @@ function App() {
 
       const asset = resultDoc.assets[0];
       if ((asset.size || 0) > MAX_UPLOAD_BYTES) {
-        setError("파일 크기는 100MB 이하여야 합니다.");
+        setError(copy.errors.fileTooLarge);
         return;
       }
 
@@ -619,36 +905,36 @@ function App() {
         size: asset.size || 0,
         mimeType,
       });
-      setNotice("파일이 선택되었습니다.");
+      setNotice(copy.notices.fileSelected);
     } catch (e) {
-      setError(e.message || "파일 선택 실패");
+      setError(e.message || copy.errors.filePickFailed);
     }
   };
 
   const startPollingTask = (taskId) => {
     stopPolling();
-    setTaskStateText("변환 작업 대기 중...");
+    setTaskStateText(copy.taskState.waiting);
 
     pollRef.current = setInterval(async () => {
       try {
         const data = await requestApi(`/api/status/${taskId}`, { token: authToken });
 
         if (data.status === "queued") {
-          setTaskStateText("변환 대기 중...");
+          setTaskStateText(copy.taskState.queued);
           return;
         }
 
         if (data.status === "processing") {
-          setTaskStateText("음성 인식/교정 처리 중...");
+          setTaskStateText(copy.taskState.processing);
           return;
         }
 
         if (data.status === "completed") {
           stopPolling();
           setSubmitting(false);
-          setTaskStateText("완료");
+          setTaskStateText(copy.taskState.done);
           setResult(data);
-          setNotice("변환이 완료되었습니다.");
+          setNotice(copy.notices.transcribeDone);
           fetchHistory(authToken);
           return;
         }
@@ -657,7 +943,7 @@ function App() {
           stopPolling();
           setSubmitting(false);
           setTaskStateText("");
-          setError(data.error || "변환 중 오류가 발생했습니다.");
+          setError(data.error || copy.errors.transcribeError);
           return;
         }
 
@@ -665,13 +951,13 @@ function App() {
           stopPolling();
           setSubmitting(false);
           setTaskStateText("");
-          setError("작업 상태를 찾을 수 없습니다.");
+          setError(copy.errors.taskNotFound);
         }
       } catch (e) {
         stopPolling();
         setSubmitting(false);
         setTaskStateText("");
-        setError(e.message || "상태 조회 실패");
+        setError(e.message || copy.errors.statusFailed);
       }
     }, 2000);
   };
@@ -680,17 +966,17 @@ function App() {
     clearMessages();
 
     if (!isLoggedIn) {
-      setError("로그인 후 파일 변환을 사용할 수 있습니다.");
+      setError(copy.errors.authRequired);
       return;
     }
 
     if (!pickedFile) {
-      setError("먼저 파일을 선택해주세요.");
+      setError(copy.errors.fileNotSelected);
       return;
     }
 
     setSubmitting(true);
-    setTaskStateText("업로드 중...");
+    setTaskStateText(copy.taskState.uploading);
     setResult(null);
     setRecordDrafts({});
 
@@ -715,36 +1001,36 @@ function App() {
         startPollingTask(data.task_id);
       } else if (data.status === "completed") {
         setSubmitting(false);
-        setTaskStateText("완료");
+        setTaskStateText(copy.taskState.done);
         setResult(data);
         fetchHistory(authToken);
       } else {
         setSubmitting(false);
         setTaskStateText("");
-        setNotice(data.message || "요청이 접수되었습니다.");
+        setNotice(data.message || copy.notices.requestAccepted);
       }
     } catch (e) {
       setSubmitting(false);
       setTaskStateText("");
-      setError(e.message || "변환 요청 실패");
+      setError(e.message || copy.errors.transcribeFailed);
     }
   };
 
   const handleLoadHistoryItem = async (taskId) => {
     clearMessages();
     setSubmitting(true);
-    setTaskStateText("히스토리 불러오는 중...");
+    setTaskStateText(copy.taskState.historyLoading);
 
     try {
       const data = await requestApi(`/api/status/${taskId}`, { token: authToken });
       if (data.status !== "completed") {
-        throw new Error("완료된 작업만 불러올 수 있습니다.");
+        throw new Error(copy.errors.historyLoadOnlyCompleted);
       }
       setResult(data);
       setActiveTab("transcribe");
-      setNotice("히스토리 결과를 불러왔습니다.");
+      setNotice(copy.notices.historyLoaded);
     } catch (e) {
-      setError(e.message || "히스토리 불러오기 실패");
+      setError(e.message || copy.errors.historyLoadFailed);
     } finally {
       setSubmitting(false);
       setTaskStateText("");
@@ -755,13 +1041,13 @@ function App() {
     clearMessages();
 
     if (!isLoggedIn) {
-      setError("로그인 후 요약을 사용할 수 있습니다.");
+      setError(copy.errors.authRequired);
       return;
     }
 
     const sourceText = result?.corrected_text || result?.raw_text || "";
     if (!sourceText.trim()) {
-      setError("요약할 텍스트가 없습니다.");
+      setError(copy.errors.summaryNoText);
       return;
     }
 
@@ -779,9 +1065,9 @@ function App() {
       });
 
       setResult((prev) => ({ ...prev, summary: data.summary || "" }));
-      setNotice("요약을 생성했습니다.");
+      setNotice(copy.notices.summaryDone);
     } catch (e) {
-      setError(e.message || "요약 실패");
+      setError(e.message || copy.errors.summaryFailed);
     } finally {
       setSummaryLoading(false);
     }
@@ -791,13 +1077,13 @@ function App() {
     clearMessages();
 
     if (!isLoggedIn) {
-      setError("로그인 후 기록본 초안을 생성할 수 있습니다.");
+      setError(copy.errors.draftNeedLogin);
       return;
     }
 
     const sourceText = result?.corrected_text || result?.raw_text || "";
     if (!sourceText.trim()) {
-      setError("기록본 초안 생성에 필요한 변환 결과가 없습니다.");
+      setError(copy.errors.draftNoSource);
       return;
     }
 
@@ -816,9 +1102,10 @@ function App() {
       });
 
       setRecordDrafts((prev) => ({ ...prev, [category]: data?.content || "" }));
-      setNotice(`${data?.category_label || "기록본"} 초안을 생성했습니다.`);
+      const label = data?.category_label || copy.recordCategories[category] || category;
+      setNotice(copy.notices.draftDone.replace("{label}", label));
     } catch (e) {
-      setError(e.message || "기록본 초안 생성 실패");
+      setError(e.message || copy.errors.draftFailed);
     } finally {
       setDraftLoadingCategory("");
     }
@@ -828,13 +1115,13 @@ function App() {
     clearMessages();
 
     if (!isLoggedIn) {
-      setError("로그인 후 기록본 저장이 가능합니다.");
+      setError(copy.errors.saveNeedLogin);
       return;
     }
 
     const content = (recordDrafts[category] || "").trim();
     if (!content) {
-      setError("저장할 기록본 내용이 없습니다.");
+      setError(copy.errors.saveNoContent);
       return;
     }
 
@@ -843,7 +1130,7 @@ function App() {
     try {
       const body = new FormData();
       body.append("category", category);
-      body.append("title", RECORD_CATEGORIES.find((item) => item.key === category)?.label || category);
+      body.append("title", copy.recordCategories[category] || category);
       body.append("content", content);
       body.append("task_id", result?.task_id || "");
       body.append("source_type", result?.transcription_type || transcriptionType);
@@ -855,20 +1142,18 @@ function App() {
       });
 
       await fetchRecords(authToken);
-      setNotice("기록본을 저장했습니다.");
+      setNotice(copy.notices.recordSaved);
       setActiveTab("records");
     } catch (e) {
-      setError(e.message || "기록본 저장 실패");
+      setError(e.message || copy.errors.saveFailed);
     } finally {
       setSavingCategory("");
     }
   };
 
   const selectedTypeHint = useMemo(() => {
-    if (transcriptionType === "sermon") return "설교 흐름(본론/결론/기도) 중심으로 구조화합니다.";
-    if (transcriptionType === "phonecall") return "통화 화자 분리와 핵심 문장 중심으로 정리합니다.";
-    return "회의 안건/결정/후속 조치를 분리해 정리합니다.";
-  }, [transcriptionType]);
+    return copy.selectedTypeHints[transcriptionType] || "";
+  }, [copy, transcriptionType]);
 
   const applyThemeOption = (optionKey) => {
     if (optionKey === "auto") {
@@ -887,10 +1172,10 @@ function App() {
     const targetUrl = language === "en" ? PRIVACY_POLICY_URL_EN : PRIVACY_POLICY_URL_KO;
     try {
       const supported = await Linking.canOpenURL(targetUrl);
-      if (!supported) throw new Error("개인정보처리방침 링크를 열 수 없습니다.");
+      if (!supported) throw new Error(copy.errors.openPrivacyLinkFailed);
       await Linking.openURL(targetUrl);
     } catch (e) {
-      setError(e.message || "개인정보처리방침 페이지를 열 수 없습니다.");
+      setError(e.message || copy.errors.openPrivacyFailed);
     }
   };
 
@@ -901,10 +1186,10 @@ function App() {
     try {
       await AsyncStorage.setItem(PRIVACY_CONSENT_KEY, PRIVACY_POLICY_VERSION);
       setPrivacyAccepted(true);
-      setNotice("개인정보처리방침 동의가 완료되었습니다.");
+      setNotice(copy.notices.privacyAccepted);
       setError("");
     } catch {
-      setError("동의 상태 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setError(copy.errors.privacySaveFailed);
     } finally {
       setPrivacyConsentSaving(false);
     }
@@ -936,7 +1221,9 @@ function App() {
               setOpenSettingsMenu("");
             }}
           >
-            <Text style={[styles.quickMenuText, { color: language === "ko" ? activeTheme.accent : activeTheme.textPrimary }]}>한국어</Text>
+            <Text style={[styles.quickMenuText, { color: language === "ko" ? activeTheme.accent : activeTheme.textPrimary }]}>
+              {copy.languageOptionKo}
+            </Text>
           </NmPressable>
           <NmPressable
             style={[styles.quickMenuItem, language === "en" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
@@ -945,7 +1232,9 @@ function App() {
               setOpenSettingsMenu("");
             }}
           >
-            <Text style={[styles.quickMenuText, { color: language === "en" ? activeTheme.accent : activeTheme.textPrimary }]}>English</Text>
+            <Text style={[styles.quickMenuText, { color: language === "en" ? activeTheme.accent : activeTheme.textPrimary }]}>
+              {copy.languageOptionEn}
+            </Text>
           </NmPressable>
         </View>
       ) : null}
@@ -976,21 +1265,24 @@ function App() {
 
   if (bootLoading) {
     return (
-      <SafeAreaView style={[styles.centerScreen, { backgroundColor: activeTheme.bg }]}>
-        <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
-        <View pointerEvents="none" style={styles.softBackground}>
-          <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
-          <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
-        </View>
-        <ActivityIndicator size="large" color={activeTheme.accent} />
-        <Text style={[styles.loadingText, { color: activeTheme.textPrimary }]}>앱 초기화 중...</Text>
-      </SafeAreaView>
+      <SafeAreaProvider>
+        <SafeAreaView edges={["top", "right", "bottom", "left"]} style={[styles.centerScreen, { backgroundColor: activeTheme.bg }]}>
+          <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
+          <View pointerEvents="none" style={styles.softBackground}>
+            <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
+            <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
+          </View>
+          <ActivityIndicator size="large" color={activeTheme.accent} />
+          <Text style={[styles.loadingText, { color: activeTheme.textPrimary }]}>{copy.loadingApp}</Text>
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: activeTheme.bg }]}>
-      <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
+    <SafeAreaProvider>
+      <SafeAreaView edges={["top", "right", "bottom", "left"]} style={[styles.root, { backgroundColor: activeTheme.bg }]}>
+        <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
 
       <View pointerEvents="none" style={styles.softBackground}>
         <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
@@ -1003,19 +1295,31 @@ function App() {
       {renderQuickControls()}
 
       {!isLoggedIn ? (
-        <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={[styles.authScrollContent, compactLayout ? styles.authScrollContentCompact : null]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <FadeInView duration={420}>
-            <View style={[styles.card, styles.authCard, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-              <Text style={[styles.authIntro, { color: activeTheme.textPrimary }]}>
-                AI 음성 기록, 지금 시작하세요.
+            <View
+              style={[
+                styles.card,
+                styles.authCard,
+                compactLayout ? styles.authCardCompact : null,
+                compactLayout ? styles.cardCompact : null,
+                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+              ]}
+            >
+              <Text style={[styles.authIntro, compactLayout ? styles.authIntroCompact : null, { color: activeTheme.textPrimary }]}>
+                {copy.authIntro}
               </Text>
               <Text style={[styles.authSubcopy, { color: activeTheme.textSecondary }]}>
-                로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.
+                {copy.authSubcopy}
               </Text>
 
               <View style={styles.segmentRow}>
-                <SegmentButton label="로그인" active={authMode === "login"} onPress={() => setAuthMode("login")} theme={activeTheme} />
-                <SegmentButton label="회원가입" active={authMode === "signup"} onPress={() => setAuthMode("signup")} theme={activeTheme} />
+                <SegmentButton label={copy.login} active={authMode === "login"} onPress={() => setAuthMode("login")} theme={activeTheme} />
+                <SegmentButton label={copy.signup} active={authMode === "signup"} onPress={() => setAuthMode("signup")} theme={activeTheme} />
               </View>
 
               {authMode === "signup" ? (
@@ -1023,7 +1327,7 @@ function App() {
                   style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                   value={authName}
                   onChangeText={setAuthName}
-                  placeholder="이름"
+                  placeholder={copy.namePlaceholder}
                   placeholderTextColor={activeTheme.textSecondary}
                   autoCapitalize="none"
                 />
@@ -1033,7 +1337,7 @@ function App() {
                 style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                 value={authEmail}
                 onChangeText={setAuthEmail}
-                placeholder="이메일"
+                placeholder={copy.emailPlaceholder}
                 placeholderTextColor={activeTheme.textSecondary}
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -1043,7 +1347,7 @@ function App() {
                 style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                 value={authPassword}
                 onChangeText={setAuthPassword}
-                placeholder="비밀번호"
+                placeholder={copy.passwordPlaceholder}
                 placeholderTextColor={activeTheme.textSecondary}
                 secureTextEntry
               />
@@ -1059,14 +1363,14 @@ function App() {
               >
                 <Text style={styles.primaryButtonText}>
                   {authLoading
-                    ? "처리 중..."
+                    ? copy.processing
                     : authMode === "signup"
-                      ? "회원가입"
-                      : "로그인"}
+                      ? copy.signup
+                      : copy.login}
                 </Text>
               </NmPressable>
 
-              <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>또는 소셜 로그인</Text>
+              <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>{copy.orSocial}</Text>
 
               <View style={styles.socialRow}>
                 <NmPressable
@@ -1083,7 +1387,7 @@ function App() {
                       <Text style={styles.socialIconText}>G</Text>
                     </View>
                     <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>
-                      {socialLoading === "google" ? "연결 중..." : "Google로 계속하기"}
+                      {socialLoading === "google" ? copy.connecting : copy.continueGoogle}
                     </Text>
                   </View>
                 </NmPressable>
@@ -1102,7 +1406,7 @@ function App() {
                       <Text style={styles.socialIconText}>K</Text>
                     </View>
                     <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>
-                      {socialLoading === "kakao" ? "연결 중..." : "Kakao로 계속하기"}
+                      {socialLoading === "kakao" ? copy.connecting : copy.continueKakao}
                     </Text>
                   </View>
                 </NmPressable>
@@ -1115,11 +1419,11 @@ function App() {
           <FadeInView>
             <View style={[styles.userBar, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.userInfo}>
-                <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>{authUser?.email || "로그인 사용자"}</Text>
+                <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>{authUser?.email || copy.defaultUser}</Text>
                 <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
               </View>
               <NmPressable style={[styles.logoutButton, { borderColor: activeTheme.inputBorder }]} onPress={handleLogout}>
-                <Text style={[styles.logoutButtonText, { color: activeTheme.errorText }]}>로그아웃</Text>
+                <Text style={[styles.logoutButtonText, { color: activeTheme.errorText }]}>{copy.logout}</Text>
               </NmPressable>
             </View>
           </FadeInView>
@@ -1127,7 +1431,7 @@ function App() {
           <FadeInView delay={70} duration={360}>
             <View style={[styles.tabsWrap, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.segmentRow}>
-                {APP_TABS.map((tab) => (
+                {tabOptions.map((tab) => (
                   <SegmentButton
                     key={tab.key}
                     label={tab.label}
@@ -1144,10 +1448,10 @@ function App() {
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
               <FadeInView key="transcribe-settings">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 설정</Text>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
 
                   <View style={styles.segmentRow}>
-                    {TRANSCRIPTION_TYPES.map((item) => (
+                    {transcriptionTypeOptions.map((item) => (
                       <SegmentButton
                         key={item.key}
                         label={item.label}
@@ -1159,13 +1463,13 @@ function App() {
                   </View>
 
                   <NmPressable style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={pickAudioFile}>
-                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>파일 선택</Text>
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.pickFile}</Text>
                   </NmPressable>
 
                   <Text style={[styles.fileInfo, { color: activeTheme.textPrimary }]}>
                     {pickedFile
                       ? `${pickedFile.name} (${Math.max(1, Math.round((pickedFile.size || 0) / 1024))} KB · ${pickedFile.mimeType})`
-                      : "선택된 파일 없음"}
+                      : copy.noFile}
                   </Text>
 
                   <NmPressable
@@ -1177,7 +1481,7 @@ function App() {
                     onPress={handleTranscribe}
                     disabled={submitting}
                   >
-                    <Text style={styles.primaryButtonText}>{submitting ? "변환 중..." : "변환 시작"}</Text>
+                    <Text style={styles.primaryButtonText}>{submitting ? copy.transcribing : copy.transcribeStart}</Text>
                   </NmPressable>
 
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{selectedTypeHint}</Text>
@@ -1188,12 +1492,12 @@ function App() {
               {result ? (
                 <FadeInView key="transcribe-result" delay={100}>
                   <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 결과</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>작업 ID: {result.task_id}</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>유형: {result.transcription_type || transcriptionType}</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>문자 수: {result.characters || 0}</Text>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeResult}</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.taskId}: {result.task_id}</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.itemType}: {result.transcription_type || transcriptionType}</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.charCount}: {result.characters || 0}</Text>
 
-                    <Text style={styles.sectionTitle}>교정 텍스트</Text>
+                    <Text style={styles.sectionTitle}>{copy.correctedText}</Text>
                     <View style={[styles.resultBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
                       <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>
                         {result.corrected_text || result.raw_text || ""}
@@ -1209,12 +1513,12 @@ function App() {
                       onPress={handleSummarize}
                       disabled={summaryLoading}
                     >
-                      <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{summaryLoading ? "요약 생성 중..." : "설교 요약 생성"}</Text>
+                      <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{summaryLoading ? copy.generatingSummary : copy.generateSummary}</Text>
                     </NmPressable>
 
                     {result.summary ? (
                       <View style={[styles.summaryBox, { backgroundColor: activeTheme.noticeBg }]}>
-                        <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>요약</Text>
+                        <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.summary}</Text>
                         <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>{result.summary}</Text>
                       </View>
                     ) : null}
@@ -1225,9 +1529,9 @@ function App() {
               {result ? (
                 <FadeInView key="transcribe-records" delay={200}>
                   <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>기록본 생성 및 저장</Text>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.recordGenerateSave}</Text>
 
-                    {RECORD_CATEGORIES.map((category) => (
+                    {recordCategoryOptions.map((category) => (
                       <View key={category.key} style={[styles.recordBlock, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                         <View style={styles.recordHeader}>
                           <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{category.label}</Text>
@@ -1238,7 +1542,7 @@ function App() {
                               disabled={!!draftLoadingCategory || !!savingCategory}
                             >
                               <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                                {draftLoadingCategory === category.key ? "생성 중" : "초안"}
+                                {draftLoadingCategory === category.key ? copy.drafting : copy.draft}
                               </Text>
                             </NmPressable>
                             <NmPressable
@@ -1247,7 +1551,7 @@ function App() {
                               disabled={!!draftLoadingCategory || !!savingCategory}
                             >
                               <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                                {savingCategory === category.key ? "저장 중" : "저장"}
+                                {savingCategory === category.key ? copy.saving : copy.save}
                               </Text>
                             </NmPressable>
                           </View>
@@ -1260,7 +1564,7 @@ function App() {
                           onChangeText={(text) =>
                             setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
                           }
-                          placeholder={`${category.label} 내용을 여기에 편집하세요`}
+                          placeholder={copy.recordEditorPlaceholder.replace("{label}", category.label)}
                           placeholderTextColor={activeTheme.textSecondary}
                         />
                       </View>
@@ -1276,14 +1580,14 @@ function App() {
               <FadeInView key="history">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
-                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>최근 변환 기록</Text>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.historyTitle}</Text>
                     <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? "로딩..." : "새로고침"}</Text>
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? copy.loading : copy.refresh}</Text>
                     </NmPressable>
                   </View>
 
                   {history.length === 0 ? (
-                    <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>변환 기록이 없습니다.</Text>
+                    <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>{copy.noHistory}</Text>
                   ) : (
                     history.map((item) => (
                       <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
@@ -1291,7 +1595,7 @@ function App() {
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.summary_preview || ""}</Text>
                         <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => handleLoadHistoryItem(item.task_id)}>
-                          <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>불러오기</Text>
+                          <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.load}</Text>
                         </NmPressable>
                       </View>
                     ))
@@ -1306,14 +1610,14 @@ function App() {
               <FadeInView key="records">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
-                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>저장 기록본</Text>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.recordsTitle}</Text>
                     <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchRecords(authToken)}>
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{recordsLoading ? "로딩..." : "새로고침"}</Text>
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{recordsLoading ? copy.loading : copy.refresh}</Text>
                     </NmPressable>
                   </View>
 
                   {records.length === 0 ? (
-                    <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>저장된 기록본이 없습니다.</Text>
+                    <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>{copy.noRecords}</Text>
                   ) : (
                     records.map((item) => (
                       <View key={item.id || `${item.category}-${item.created_at}`} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
@@ -1333,69 +1637,72 @@ function App() {
       {!privacyAccepted ? (
         <View style={[styles.privacyOverlay, { backgroundColor: "rgba(5, 12, 24, 0.58)" }]}>
           <FadeInView duration={260}>
-            <View style={[styles.privacyModal, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-              <Text style={[styles.privacyTitle, { color: activeTheme.textPrimary }]}>개인정보처리방침 동의</Text>
-              <Text style={[styles.privacyBody, { color: activeTheme.textSecondary }]}>
-                mallog24 이용 전 개인정보 처리 내용을 확인해주세요. 동의 후 로그인 및 음성 변환 기능을 사용할 수 있습니다.
-              </Text>
+            <View style={[styles.privacyModal, compactLayout ? styles.privacyModalCompact : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+              <ScrollView style={styles.privacyModalScroll} contentContainerStyle={styles.privacyModalContent} showsVerticalScrollIndicator={false}>
+                <Text style={[styles.privacyTitle, { color: activeTheme.textPrimary }]}>{copy.privacy.title}</Text>
+                <Text style={[styles.privacyBody, { color: activeTheme.textSecondary }]}>
+                  {copy.privacy.body}
+                </Text>
 
-              <View style={[styles.privacySummaryBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
-                  • 원본 음성 파일: 변환 처리 후 임시 저장소에서 지체 없이 삭제
-                </Text>
-                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
-                  • 변환 텍스트/기록본: 히스토리 및 기록 기능 제공 목적 범위 내 보관
-                </Text>
-                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
-                  • 처리 위탁: Supabase, OpenAI, Google(Gemini)
-                </Text>
-                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
-                  • 소셜 로그인: Google/Kakao 계정 정보(이메일, 프로필, UID)
-                </Text>
-              </View>
-
-              <NmPressable
-                style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                onPress={openPrivacyPolicy}
-              >
-                <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>개인정보처리방침 전문 보기</Text>
-              </NmPressable>
-
-              <NmPressable
-                style={[styles.privacyCheckRow, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
-                onPress={() => setPrivacyConsentChecked((prev) => !prev)}
-              >
-                <View
-                  style={[
-                    styles.privacyCheckBox,
-                    { borderColor: activeTheme.inputBorder, backgroundColor: privacyConsentChecked ? activeTheme.accent : "transparent" },
-                  ]}
-                >
-                  {privacyConsentChecked ? <Text style={styles.privacyCheckMark}>✓</Text> : null}
+                <View style={[styles.privacySummaryBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                    {copy.privacy.summaryFile}
+                  </Text>
+                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                    {copy.privacy.summaryText}
+                  </Text>
+                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                    {copy.privacy.summaryVendors}
+                  </Text>
+                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                    {copy.privacy.summarySocial}
+                  </Text>
                 </View>
-                <Text style={[styles.privacyCheckText, { color: activeTheme.textPrimary }]}>
-                  개인정보처리방침을 확인했고 동의합니다.
-                </Text>
-              </NmPressable>
 
-              <NmPressable
-                style={[
-                  styles.privacyAcceptButton,
-                  { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
-                  !privacyConsentChecked || privacyConsentSaving ? styles.buttonDisabled : null,
-                ]}
-                onPress={handleAcceptPrivacyPolicy}
-                disabled={!privacyConsentChecked || privacyConsentSaving}
-              >
-                <Text style={styles.privacyAcceptButtonText}>
-                  {privacyConsentSaving ? "저장 중..." : "동의하고 시작하기"}
-                </Text>
-              </NmPressable>
+                <NmPressable
+                  style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  onPress={openPrivacyPolicy}
+                >
+                  <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewPolicy}</Text>
+                </NmPressable>
+
+                <NmPressable
+                  style={[styles.privacyCheckRow, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
+                  onPress={() => setPrivacyConsentChecked((prev) => !prev)}
+                >
+                  <View
+                    style={[
+                      styles.privacyCheckBox,
+                      { borderColor: activeTheme.inputBorder, backgroundColor: privacyConsentChecked ? activeTheme.accent : "transparent" },
+                    ]}
+                  >
+                    {privacyConsentChecked ? <Text style={styles.privacyCheckMark}>✓</Text> : null}
+                  </View>
+                  <Text style={[styles.privacyCheckText, { color: activeTheme.textPrimary }]}>
+                    {copy.privacy.check}
+                  </Text>
+                </NmPressable>
+
+                <NmPressable
+                  style={[
+                    styles.privacyAcceptButton,
+                    { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                    !privacyConsentChecked || privacyConsentSaving ? styles.buttonDisabled : null,
+                  ]}
+                  onPress={handleAcceptPrivacyPolicy}
+                  disabled={!privacyConsentChecked || privacyConsentSaving}
+                >
+                  <Text style={styles.privacyAcceptButtonText}>
+                    {privacyConsentSaving ? copy.privacy.saving : copy.privacy.accept}
+                  </Text>
+                </NmPressable>
+              </ScrollView>
             </View>
           </FadeInView>
         </View>
       ) : null}
-    </SafeAreaView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
@@ -1406,7 +1713,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: NM.bg,
     position: "relative",
-    overflow: "hidden",
   },
   centerScreen: {
     flex: 1,
@@ -1464,8 +1770,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 28,
+    paddingBottom: 34,
     justifyContent: "flex-start",
+  },
+  authScrollContentCompact: {
+    paddingTop: 6,
+    paddingBottom: 26,
   },
   quickControlsWrap: {
     marginTop: 8,
@@ -1482,11 +1792,11 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   quickIconButton: {
-    minWidth: 68,
+    minWidth: 56,
     borderRadius: 9,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
     alignItems: "center",
   },
   quickIconText: {
@@ -1523,12 +1833,23 @@ const styles = StyleSheet.create({
     maxWidth: 620,
     alignSelf: "center",
   },
+  authCardCompact: {
+    maxWidth: 560,
+  },
+  cardCompact: {
+    padding: 14,
+    gap: 10,
+  },
   authIntro: {
     color: NM.textPrimary,
     fontSize: 19,
     fontWeight: "900",
     letterSpacing: -0.2,
     marginBottom: 4,
+  },
+  authIntroCompact: {
+    fontSize: 17,
+    lineHeight: 22,
   },
   authSubcopy: {
     color: NM.textSecondary,
@@ -1921,19 +2242,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   privacyModal: {
     width: "100%",
     maxWidth: 640,
+    maxHeight: "86%",
     borderRadius: 20,
     borderWidth: 1,
     padding: 18,
-    gap: 11,
     shadowColor: NM.shadowTint,
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.24,
     shadowRadius: 26,
     elevation: 8,
+  },
+  privacyModalCompact: {
+    maxHeight: "90%",
+    padding: 14,
+  },
+  privacyModalScroll: {
+    flexGrow: 0,
+  },
+  privacyModalContent: {
+    gap: 11,
+    paddingBottom: 2,
   },
   privacyTitle: {
     fontSize: 18,
