@@ -31,54 +31,72 @@ const MOBILE_THEME_OPTIONS = [
 
 const MOBILE_THEMES = {
   aurora: {
-    bg: "#e8eefb",
+    bg: "#eef3ff",
+    surface: "#ffffff",
+    surfaceSoft: "#f6f8ff",
     light: "#ffffff",
-    dark: "#a3b1c6",
-    accent: "#3b7dd8",
-    accentSoft: "#5a9ae6",
-    textPrimary: "#2d3748",
-    textSecondary: "#64748b",
-    inputBg: "#d6dbe4",
-    inputBorder: "#c8ced8",
-    errorBg: "#e8d5d5",
-    errorText: "#b91c1c",
-    noticeBg: "#d5dfe8",
-    noticeText: "#1d4ed8",
-    radius: 18,
+    dark: "#8aa1d0",
+    shadowTint: "#6f8ec8",
+    accent: "#3f63f4",
+    accentSoft: "#5b79fa",
+    textPrimary: "#1f2b47",
+    textSecondary: "#607093",
+    inputBg: "#f6f8ff",
+    inputBorder: "#d7e0f3",
+    errorBg: "#fce8ea",
+    errorText: "#b4233a",
+    noticeBg: "#e8efff",
+    noticeText: "#2458d3",
+    glowA: "rgba(120, 151, 255, 0.24)",
+    glowB: "rgba(198, 169, 255, 0.2)",
+    glowC: "rgba(132, 198, 255, 0.18)",
+    radius: 22,
     radiusSm: 14,
   },
   noir: {
-    bg: "#e6e9ef",
-    light: "#f9fbff",
-    dark: "#a8b0c0",
-    accent: "#35445f",
-    accentSoft: "#4e6287",
-    textPrimary: "#202636",
-    textSecondary: "#606a80",
-    inputBg: "#d7dce6",
-    inputBorder: "#bec7d6",
-    errorBg: "#e7d8d8",
-    errorText: "#9b2634",
-    noticeBg: "#dce2ea",
-    noticeText: "#364b73",
-    radius: 18,
+    bg: "#0f1728",
+    surface: "#172238",
+    surfaceSoft: "#1b2943",
+    light: "#223252",
+    dark: "#050b17",
+    shadowTint: "#040916",
+    accent: "#8dacff",
+    accentSoft: "#a8c0ff",
+    textPrimary: "#e6edff",
+    textSecondary: "#9aabce",
+    inputBg: "#1a2842",
+    inputBorder: "#2d3f65",
+    errorBg: "#3a2028",
+    errorText: "#ff98a7",
+    noticeBg: "#1d2f57",
+    noticeText: "#a6c2ff",
+    glowA: "rgba(111, 147, 247, 0.22)",
+    glowB: "rgba(76, 110, 191, 0.24)",
+    glowC: "rgba(56, 84, 148, 0.2)",
+    radius: 22,
     radiusSm: 14,
   },
   sunset: {
     bg: "#f8eee4",
+    surface: "#fff9f2",
+    surfaceSoft: "#fbf3ea",
     light: "#fff9f2",
-    dark: "#d2bca6",
+    dark: "#caa987",
+    shadowTint: "#b8845f",
     accent: "#cf6e30",
     accentSoft: "#e08546",
     textPrimary: "#3b2d24",
     textSecondary: "#7a6050",
-    inputBg: "#eadccf",
-    inputBorder: "#dcc8b4",
-    errorBg: "#f0d5cf",
-    errorText: "#a7392f",
-    noticeBg: "#f2e2d2",
+    inputBg: "#fbf3ea",
+    inputBorder: "#e0cfbd",
+    errorBg: "#f6e0db",
+    errorText: "#b1453a",
+    noticeBg: "#f3e5d7",
     noticeText: "#a15b26",
-    radius: 18,
+    glowA: "rgba(255, 173, 108, 0.24)",
+    glowB: "rgba(255, 212, 174, 0.2)",
+    glowC: "rgba(255, 189, 142, 0.18)",
+    radius: 22,
     radiusSm: 14,
   },
 };
@@ -856,7 +874,7 @@ function App() {
 
   const renderQuickControls = () => (
     <View style={styles.quickControlsWrap}>
-      <View style={[styles.quickControlsRow, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+      <View style={[styles.quickControlsRow, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
         <NmPressable
           style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
           onPress={() => setOpenSettingsMenu((prev) => (prev === "language" ? "" : "language"))}
@@ -872,7 +890,7 @@ function App() {
       </View>
 
       {openSettingsMenu === "language" ? (
-        <View style={[styles.quickMenu, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+        <View style={[styles.quickMenu, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
           <NmPressable
             style={[styles.quickMenuItem, language === "ko" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
             onPress={() => {
@@ -895,7 +913,7 @@ function App() {
       ) : null}
 
       {openSettingsMenu === "theme" ? (
-        <View style={[styles.quickMenu, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+        <View style={[styles.quickMenu, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
           {MOBILE_THEME_OPTIONS.map((themeOption) => {
             const active =
               themeOption.key === "auto"
@@ -921,7 +939,11 @@ function App() {
   if (bootLoading) {
     return (
       <SafeAreaView style={[styles.centerScreen, { backgroundColor: activeTheme.bg }]}>
-        <StatusBar style="dark" />
+        <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
+        <View pointerEvents="none" style={styles.softBackground}>
+          <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
+          <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
+        </View>
         <ActivityIndicator size="large" color={activeTheme.accent} />
         <Text style={[styles.loadingText, { color: activeTheme.textPrimary }]}>앱 초기화 중...</Text>
       </SafeAreaView>
@@ -930,7 +952,13 @@ function App() {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: activeTheme.bg }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
+
+      <View pointerEvents="none" style={styles.softBackground}>
+        <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
+        <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
+        <View style={[styles.softGlowOrbC, { backgroundColor: activeTheme.glowC }]} />
+      </View>
 
       <Banner type="error" text={error} />
       <Banner type="notice" text={notice} />
@@ -939,7 +967,7 @@ function App() {
       {!isLoggedIn ? (
         <ScrollView contentContainerStyle={styles.authScrollContent} keyboardShouldPersistTaps="handled">
           <FadeInView duration={420}>
-            <View style={[styles.card, styles.authCard, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+            <View style={[styles.card, styles.authCard, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
               <Text style={[styles.authIntro, { color: activeTheme.textPrimary }]}>
                 AI 음성 기록, 지금 시작하세요.
               </Text>
@@ -1006,7 +1034,7 @@ function App() {
                 <NmPressable
                   style={[
                     styles.socialButton,
-                    { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder },
+                    { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
                     socialLoading ? styles.buttonDisabled : null,
                   ]}
                   onPress={() => handleSocialLogin("google")}
@@ -1025,7 +1053,7 @@ function App() {
                 <NmPressable
                   style={[
                     styles.socialButton,
-                    { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder },
+                    { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
                     socialLoading ? styles.buttonDisabled : null,
                   ]}
                   onPress={() => handleSocialLogin("kakao")}
@@ -1047,7 +1075,7 @@ function App() {
       ) : (
         <View style={styles.workspaceContainer}>
           <FadeInView>
-            <View style={[styles.userBar, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+            <View style={[styles.userBar, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.userInfo}>
                 <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>{authUser?.email || "로그인 사용자"}</Text>
                 <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
@@ -1077,7 +1105,7 @@ function App() {
           {activeTab === "transcribe" ? (
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
               <FadeInView key="transcribe-settings">
-                <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 설정</Text>
 
                   <View style={styles.segmentRow}>
@@ -1092,7 +1120,7 @@ function App() {
                     ))}
                   </View>
 
-                  <NmPressable style={[styles.secondaryButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={pickAudioFile}>
+                  <NmPressable style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={pickAudioFile}>
                     <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>파일 선택</Text>
                   </NmPressable>
 
@@ -1121,7 +1149,7 @@ function App() {
 
               {result ? (
                 <FadeInView key="transcribe-result" delay={100}>
-                  <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                  <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>변환 결과</Text>
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>작업 ID: {result.task_id}</Text>
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>유형: {result.transcription_type || transcriptionType}</Text>
@@ -1137,7 +1165,7 @@ function App() {
                     <NmPressable
                       style={[
                         styles.secondaryButton,
-                        { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder },
+                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
                         summaryLoading ? styles.buttonDisabled : null,
                       ]}
                       onPress={handleSummarize}
@@ -1158,16 +1186,16 @@ function App() {
 
               {result ? (
                 <FadeInView key="transcribe-records" delay={200}>
-                  <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                  <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>기록본 생성 및 저장</Text>
 
                     {RECORD_CATEGORIES.map((category) => (
-                      <View key={category.key} style={[styles.recordBlock, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                      <View key={category.key} style={[styles.recordBlock, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                         <View style={styles.recordHeader}>
                           <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{category.label}</Text>
                           <View style={styles.recordActionRow}>
                             <NmPressable
-                              style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}
+                              style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                               onPress={() => handleGenerateRecordDraft(category.key)}
                               disabled={!!draftLoadingCategory || !!savingCategory}
                             >
@@ -1176,7 +1204,7 @@ function App() {
                               </Text>
                             </NmPressable>
                             <NmPressable
-                              style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}
+                              style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                               onPress={() => handleSaveRecord(category.key)}
                               disabled={!!draftLoadingCategory || !!savingCategory}
                             >
@@ -1208,10 +1236,10 @@ function App() {
           {activeTab === "history" ? (
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <FadeInView key="history">
-                <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>최근 변환 기록</Text>
-                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
+                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
                       <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? "로딩..." : "새로고침"}</Text>
                     </NmPressable>
                   </View>
@@ -1220,11 +1248,11 @@ function App() {
                     <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>변환 기록이 없습니다.</Text>
                   ) : (
                     history.map((item) => (
-                      <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                      <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                         <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.transcription_type || "sermon"} · {item.status}</Text>
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.summary_preview || ""}</Text>
-                        <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={() => handleLoadHistoryItem(item.task_id)}>
+                        <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => handleLoadHistoryItem(item.task_id)}>
                           <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>불러오기</Text>
                         </NmPressable>
                       </View>
@@ -1238,10 +1266,10 @@ function App() {
           {activeTab === "records" ? (
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <FadeInView key="records">
-                <View style={[styles.card, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>저장 기록본</Text>
-                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]} onPress={() => fetchRecords(authToken)}>
+                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchRecords(authToken)}>
                       <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{recordsLoading ? "로딩..." : "새로고침"}</Text>
                     </NmPressable>
                   </View>
@@ -1250,7 +1278,7 @@ function App() {
                     <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>저장된 기록본이 없습니다.</Text>
                   ) : (
                     records.map((item) => (
-                      <View key={item.id || `${item.category}-${item.created_at}`} style={[styles.listItem, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
+                      <View key={item.id || `${item.category}-${item.created_at}`} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                         <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.title || item.category}</Text>
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
                         <Text selectable style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.content || ""}</Text>
@@ -1273,6 +1301,8 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: NM.bg,
+    position: "relative",
+    overflow: "hidden",
   },
   centerScreen: {
     flex: 1,
@@ -1286,19 +1316,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  softBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  softGlowOrbA: {
+    position: "absolute",
+    width: 320,
+    height: 320,
+    borderRadius: 999,
+    top: -120,
+    left: -90,
+  },
+  softGlowOrbB: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    top: 90,
+    right: -120,
+  },
+  softGlowOrbC: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    borderRadius: 999,
+    bottom: -110,
+    left: 40,
+  },
   workspaceContainer: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 20,
+    paddingTop: 10,
+    paddingBottom: 22,
     gap: 16,
   },
   authScrollContent: {
     flexGrow: 1,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 10,
     paddingBottom: 28,
     justifyContent: "flex-start",
   },
@@ -1311,10 +1372,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 9,
   },
   quickIconButton: {
     minWidth: 68,
@@ -1330,10 +1391,15 @@ const styles = StyleSheet.create({
   },
   quickMenu: {
     marginTop: 8,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 8,
     gap: 6,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.15,
+    shadowRadius: 22,
+    elevation: 4,
   },
   quickMenuItem: {
     borderRadius: 9,
@@ -1355,15 +1421,16 @@ const styles = StyleSheet.create({
   },
   authIntro: {
     color: NM.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 2,
+    fontSize: 19,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+    marginBottom: 4,
   },
   authSubcopy: {
     color: NM.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   banner: {
     marginHorizontal: 16,
@@ -1393,31 +1460,31 @@ const styles = StyleSheet.create({
     color: NM.noticeText,
   },
   card: {
-    backgroundColor: NM.bg,
+    backgroundColor: NM.surface,
     borderRadius: NM.radius,
-    padding: 16,
+    padding: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: "#edf2f8",
-    shadowColor: NM.dark,
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 0.26,
-    shadowRadius: 9,
-    elevation: 3,
+    borderColor: NM.inputBorder,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 26,
+    elevation: 5,
   },
   cardTitle: {
     color: NM.textPrimary,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "900",
   },
   tabsWrap: {
     marginHorizontal: 16,
     marginBottom: 6,
     borderRadius: NM.radiusSm,
     backgroundColor: NM.inputBg,
-    padding: 5,
+    padding: 6,
     borderWidth: 1,
-    borderColor: "#d0d7e1",
+    borderColor: NM.inputBorder,
   },
   segmentRow: {
     flexDirection: "row",
@@ -1425,19 +1492,19 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     flex: 1,
-    borderRadius: 10,
+    borderRadius: 999,
     borderWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     alignItems: "center",
     backgroundColor: "transparent",
   },
   segmentButtonActive: {
-    backgroundColor: NM.bg,
-    shadowColor: NM.dark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 5,
-    elevation: 2,
+    backgroundColor: NM.surface,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 3,
   },
   segmentButtonText: {
     fontSize: 12,
@@ -1458,17 +1525,17 @@ const styles = StyleSheet.create({
     borderColor: NM.inputBorder,
   },
   primaryButton: {
-    borderRadius: NM.radiusSm,
+    borderRadius: 999,
     backgroundColor: NM.accent,
     paddingVertical: 13,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#4f8ce1",
-    shadowColor: NM.dark,
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 0.24,
-    shadowRadius: 7,
-    elevation: 3,
+    borderColor: NM.accentSoft,
+    shadowColor: NM.accent,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 4,
   },
   primaryButtonText: {
     color: "#ffffff",
@@ -1476,16 +1543,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   secondaryButton: {
-    borderRadius: NM.radiusSm,
-    backgroundColor: NM.bg,
+    borderRadius: 999,
+    backgroundColor: NM.surface,
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#edf2f8",
-    shadowColor: NM.dark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    borderColor: NM.inputBorder,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
     elevation: 2,
   },
   secondaryButtonText: {
@@ -1494,16 +1561,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   tinyButton: {
-    borderRadius: 10,
-    backgroundColor: NM.bg,
+    borderRadius: 999,
+    backgroundColor: NM.surface,
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: "#edf2f8",
-    shadowColor: NM.dark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
+    borderColor: NM.inputBorder,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     elevation: 2,
   },
   tinyButtonText: {
@@ -1522,21 +1589,21 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   socialRow: {
-    flexDirection: "row",
+    flexDirection: "column",
     gap: 10,
   },
   socialButton: {
-    flex: 1,
-    borderRadius: NM.radiusSm,
+    borderRadius: 999,
     paddingVertical: 12,
+    paddingHorizontal: 14,
     alignItems: "center",
-    backgroundColor: NM.bg,
+    backgroundColor: NM.surface,
     borderWidth: 1,
-    borderColor: "#edf2f8",
-    shadowColor: NM.dark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    borderColor: NM.inputBorder,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
     elevation: 2,
   },
   socialButtonInner: {
@@ -1569,7 +1636,7 @@ const styles = StyleSheet.create({
   socialButtonText: {
     color: NM.textPrimary,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   helpText: {
     color: NM.textSecondary,
@@ -1581,20 +1648,20 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 10,
     borderRadius: NM.radius,
-    backgroundColor: NM.bg,
+    backgroundColor: NM.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    shadowColor: NM.dark,
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 4,
     borderWidth: 1,
-    borderColor: "#edf2f8",
+    borderColor: NM.inputBorder,
   },
   userInfo: {
     flex: 1,
@@ -1611,16 +1678,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   logoutButton: {
-    borderRadius: 10,
-    backgroundColor: "#e0cece",
+    borderRadius: 999,
+    backgroundColor: "#f4e5e8",
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: "#ead5d5",
-    shadowColor: "#b0a0a0",
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
+    borderColor: "#f1c7d0",
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     elevation: 2,
   },
   logoutButtonText: {
@@ -1671,13 +1738,13 @@ const styles = StyleSheet.create({
   recordBlock: {
     marginTop: 6,
     borderRadius: NM.radiusSm,
-    backgroundColor: NM.bg,
+    backgroundColor: NM.surface,
     padding: 12,
     gap: 8,
-    shadowColor: NM.dark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     elevation: 2,
     borderWidth: 1,
     borderColor: "#edf2f8",
@@ -1718,13 +1785,13 @@ const styles = StyleSheet.create({
   },
   listItem: {
     borderRadius: NM.radiusSm,
-    backgroundColor: NM.bg,
+    backgroundColor: NM.surface,
     padding: 12,
     gap: 6,
-    shadowColor: NM.dark,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 2,
     marginBottom: 8,
     borderWidth: 1,

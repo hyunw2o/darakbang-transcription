@@ -12,110 +12,134 @@ html {
   scroll-behavior: smooth;
 }
 
-/* ========== Neumorphism CSS Variables ========== */
+/* ========== Soft Tech Theme Variables ========== */
 :root {
-  --nm-bg: #edf2ff;
-  --nm-shadow-light: #ffffff;
-  --nm-shadow-dark: #b8c4de;
-  --nm-shadow-distance: 6px;
-  --nm-shadow-blur: 12px;
-  --nm-radius: 16px;
-  --nm-radius-sm: 12px;
-  --nm-accent: #4d74ff;
-  --nm-accent-soft: #6f90ff;
-  --nm-text-primary: #1f2a44;
-  --nm-text-secondary: #64728d;
-  --nm-glow-1: rgba(114, 145, 255, 0.28);
-  --nm-glow-2: rgba(148, 189, 255, 0.2);
+  --nm-bg: #eef3ff;
+  --nm-surface: #ffffff;
+  --nm-surface-soft: #f6f8ff;
+  --nm-border: rgba(143, 167, 223, 0.35);
+  --nm-shadow-light: rgba(255, 255, 255, 0.7);
+  --nm-shadow-dark: rgba(87, 113, 170, 0.28);
+  --nm-shadow-distance: 0px;
+  --nm-shadow-blur: 0px;
+  --nm-radius: 22px;
+  --nm-radius-sm: 14px;
+  --nm-accent: #3f63f4;
+  --nm-accent-soft: #5b79fa;
+  --nm-text-primary: #1f2b47;
+  --nm-text-secondary: #607093;
+  --nm-glow-1: rgba(116, 150, 255, 0.26);
+  --nm-glow-2: rgba(184, 162, 255, 0.2);
   --nm-transition: 250ms;
   --nm-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mallog24-logo-text: #1E2A44;
 }
 
 html.dark {
-  --nm-bg: #1c2438;
-  --nm-shadow-light: #29334a;
-  --nm-shadow-dark: #11192b;
-  --nm-accent: #86a2ff;
-  --nm-accent-soft: #9cb3ff;
-  --nm-text-primary: #e8eefc;
-  --nm-text-secondary: #a6b2cf;
-  --nm-glow-1: rgba(98, 130, 236, 0.32);
-  --nm-glow-2: rgba(57, 78, 145, 0.28);
+  --nm-bg: #0f1728;
+  --nm-surface: #172238;
+  --nm-surface-soft: #1b2943;
+  --nm-border: rgba(87, 107, 151, 0.38);
+  --nm-shadow-light: rgba(119, 148, 212, 0.14);
+  --nm-shadow-dark: rgba(3, 10, 23, 0.62);
+  --nm-accent: #8dacff;
+  --nm-accent-soft: #a8c0ff;
+  --nm-text-primary: #e6edff;
+  --nm-text-secondary: #99aacd;
+  --nm-glow-1: rgba(103, 139, 235, 0.24);
+  --nm-glow-2: rgba(71, 101, 175, 0.22);
   --mallog24-logo-text: #E4ECFF;
 }
 
 html[data-ui-theme='aurora'] {
-  --nm-bg: #edf2ff;
-  --nm-shadow-light: #ffffff;
-  --nm-shadow-dark: #b8c4de;
-  --nm-accent: #4d74ff;
-  --nm-accent-soft: #6f90ff;
-  --nm-text-primary: #1f2a44;
-  --nm-text-secondary: #64728d;
-  --nm-glow-1: rgba(114, 145, 255, 0.28);
-  --nm-glow-2: rgba(148, 189, 255, 0.2);
+  --nm-bg: #eef3ff;
+  --nm-surface: #ffffff;
+  --nm-surface-soft: #f6f8ff;
+  --nm-border: rgba(143, 167, 223, 0.35);
+  --nm-shadow-light: rgba(255, 255, 255, 0.7);
+  --nm-shadow-dark: rgba(87, 113, 170, 0.28);
+  --nm-accent: #3f63f4;
+  --nm-accent-soft: #5b79fa;
+  --nm-text-primary: #1f2b47;
+  --nm-text-secondary: #607093;
+  --nm-glow-1: rgba(116, 150, 255, 0.26);
+  --nm-glow-2: rgba(184, 162, 255, 0.2);
 }
 
 html.dark[data-ui-theme='aurora'] {
-  --nm-bg: #1c2438;
-  --nm-shadow-light: #29334a;
-  --nm-shadow-dark: #11192b;
-  --nm-accent: #86a2ff;
-  --nm-accent-soft: #9cb3ff;
-  --nm-text-primary: #e8eefc;
-  --nm-text-secondary: #a6b2cf;
-  --nm-glow-1: rgba(98, 130, 236, 0.32);
-  --nm-glow-2: rgba(57, 78, 145, 0.28);
+  --nm-bg: #0f1728;
+  --nm-surface: #172238;
+  --nm-surface-soft: #1b2943;
+  --nm-border: rgba(87, 107, 151, 0.38);
+  --nm-shadow-light: rgba(119, 148, 212, 0.14);
+  --nm-shadow-dark: rgba(3, 10, 23, 0.62);
+  --nm-accent: #8dacff;
+  --nm-accent-soft: #a8c0ff;
+  --nm-text-primary: #e6edff;
+  --nm-text-secondary: #99aacd;
+  --nm-glow-1: rgba(103, 139, 235, 0.24);
+  --nm-glow-2: rgba(71, 101, 175, 0.22);
 }
 
 html[data-ui-theme='noir'] {
-  --nm-bg: #e5e8ee;
-  --nm-shadow-light: #f7f9ff;
-  --nm-shadow-dark: #b6becd;
-  --nm-accent: #2f3d57;
-  --nm-accent-soft: #445575;
-  --nm-text-primary: #1f2533;
-  --nm-text-secondary: #687289;
-  --nm-glow-1: rgba(85, 103, 136, 0.2);
-  --nm-glow-2: rgba(161, 170, 193, 0.18);
+  --nm-bg: #e8edf8;
+  --nm-surface: #f7f9ff;
+  --nm-surface-soft: #eff3fb;
+  --nm-border: rgba(120, 136, 166, 0.35);
+  --nm-shadow-light: rgba(255, 255, 255, 0.74);
+  --nm-shadow-dark: rgba(89, 106, 139, 0.24);
+  --nm-accent: #32466d;
+  --nm-accent-soft: #4c6187;
+  --nm-text-primary: #1f2a3f;
+  --nm-text-secondary: #65748f;
+  --nm-glow-1: rgba(118, 136, 173, 0.2);
+  --nm-glow-2: rgba(176, 186, 215, 0.18);
 }
 
 html.dark[data-ui-theme='noir'] {
-  --nm-bg: #171b23;
-  --nm-shadow-light: #222936;
-  --nm-shadow-dark: #0c1018;
-  --nm-accent: #aab6cc;
-  --nm-accent-soft: #c5cee0;
-  --nm-text-primary: #e6ebf8;
-  --nm-text-secondary: #9aa7c2;
-  --nm-glow-1: rgba(84, 97, 125, 0.24);
-  --nm-glow-2: rgba(36, 42, 59, 0.3);
+  --nm-bg: #0d131f;
+  --nm-surface: #151d2d;
+  --nm-surface-soft: #1a2437;
+  --nm-border: rgba(90, 107, 147, 0.4);
+  --nm-shadow-light: rgba(126, 145, 186, 0.13);
+  --nm-shadow-dark: rgba(2, 7, 17, 0.64);
+  --nm-accent: #adc0de;
+  --nm-accent-soft: #c3d2ea;
+  --nm-text-primary: #e7eefc;
+  --nm-text-secondary: #a1afca;
+  --nm-glow-1: rgba(94, 118, 170, 0.22);
+  --nm-glow-2: rgba(48, 63, 96, 0.24);
 }
 
 html[data-ui-theme='sunset'] {
-  --nm-bg: #f7efe6;
-  --nm-shadow-light: #fff9f2;
-  --nm-shadow-dark: #d8c3ab;
-  --nm-accent: #d06b2d;
-  --nm-accent-soft: #e48644;
-  --nm-text-primary: #3b2a1f;
-  --nm-text-secondary: #886957;
-  --nm-glow-1: rgba(255, 170, 101, 0.24);
-  --nm-glow-2: rgba(255, 213, 174, 0.2);
+  --nm-bg: #f8eee4;
+  --nm-surface: #fff9f2;
+  --nm-surface-soft: #fbf3ea;
+  --nm-border: rgba(205, 169, 136, 0.4);
+  --nm-shadow-light: rgba(255, 248, 234, 0.65);
+  --nm-shadow-dark: rgba(178, 133, 96, 0.24);
+  --nm-accent: #cd6f34;
+  --nm-accent-soft: #e08446;
+  --nm-text-primary: #3a2a20;
+  --nm-text-secondary: #846454;
+  --nm-glow-1: rgba(255, 170, 102, 0.24);
+  --nm-glow-2: rgba(255, 212, 170, 0.2);
   --mallog24-logo-text: #3c2b20;
 }
 
 html.dark[data-ui-theme='sunset'] {
   --nm-bg: #2b221d;
-  --nm-shadow-light: #3b2f29;
-  --nm-shadow-dark: #17110f;
-  --nm-accent: #ffad6f;
-  --nm-accent-soft: #ffc18f;
+  --nm-surface: #362921;
+  --nm-surface-soft: #3b2d24;
+  --nm-border: rgba(146, 108, 82, 0.4);
+  --nm-shadow-light: rgba(214, 163, 120, 0.1);
+  --nm-shadow-dark: rgba(16, 10, 7, 0.62);
+  --nm-accent: #ffb37a;
+  --nm-accent-soft: #ffc795;
   --nm-text-primary: #fff2e7;
-  --nm-text-secondary: #d3b79e;
-  --nm-glow-1: rgba(255, 149, 82, 0.26);
-  --nm-glow-2: rgba(120, 78, 52, 0.22);
+  --nm-text-secondary: #d3b79f;
+  --nm-glow-1: rgba(255, 150, 82, 0.24);
+  --nm-glow-2: rgba(112, 74, 50, 0.24);
   --mallog24-logo-text: #ffe9d6;
 }
 
@@ -126,155 +150,137 @@ body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background:
-    radial-gradient(1200px 500px at 10% -10%, var(--nm-glow-1), transparent 60%),
-    radial-gradient(900px 450px at 110% 10%, var(--nm-glow-2), transparent 62%),
-    var(--nm-bg);
+    radial-gradient(1100px 520px at 10% -12%, var(--nm-glow-1), transparent 62%),
+    radial-gradient(920px 480px at 108% 0%, var(--nm-glow-2), transparent 65%),
+    linear-gradient(180deg, color-mix(in oklab, var(--nm-bg) 92%, #ffffff 8%), var(--nm-bg));
   color: var(--nm-text-primary);
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* ========== Neumorphism Component Classes ========== */
+/* ========== Soft Tech Component Classes ========== */
 
-/* Raised surface (cards, panels) */
 .nm-raised {
-  background: var(--nm-bg);
+  background: var(--nm-surface);
   border-radius: var(--nm-radius);
-  border: none;
+  border: 1px solid var(--nm-border);
   box-shadow:
-    var(--nm-shadow-distance) var(--nm-shadow-distance) var(--nm-shadow-blur) var(--nm-shadow-dark),
-    calc(-1 * var(--nm-shadow-distance)) calc(-1 * var(--nm-shadow-distance)) var(--nm-shadow-blur) var(--nm-shadow-light);
-  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease);
+    0 22px 42px -28px var(--nm-shadow-dark),
+    0 10px 22px -18px color-mix(in oklab, var(--nm-accent) 24%, transparent);
+  backdrop-filter: blur(5px);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease), border-color var(--nm-transition) var(--nm-ease);
 }
 
-/* Concave / pressed surface (inputs, result boxes) */
 .nm-concave {
-  background: var(--nm-bg);
+  background: var(--nm-surface-soft);
   border-radius: var(--nm-radius-sm);
-  border: none;
+  border: 1px solid color-mix(in oklab, var(--nm-border) 82%, transparent);
   box-shadow:
-    inset var(--nm-shadow-distance) var(--nm-shadow-distance) var(--nm-shadow-blur) var(--nm-shadow-dark),
-    inset calc(-1 * var(--nm-shadow-distance)) calc(-1 * var(--nm-shadow-distance)) var(--nm-shadow-blur) var(--nm-shadow-light);
-  transition: box-shadow var(--nm-transition) var(--nm-ease);
+    inset 0 1px 0 color-mix(in oklab, var(--nm-shadow-light) 90%, transparent),
+    inset 0 -1px 0 color-mix(in oklab, var(--nm-shadow-dark) 30%, transparent);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), border-color var(--nm-transition) var(--nm-ease);
 }
 
-/* Flat subtle surface */
 .nm-flat {
-  background: var(--nm-bg);
+  background: var(--nm-surface-soft);
   border-radius: var(--nm-radius-sm);
-  border: none;
-  box-shadow:
-    3px 3px 6px var(--nm-shadow-dark),
-    -3px -3px 6px var(--nm-shadow-light);
+  border: 1px solid color-mix(in oklab, var(--nm-border) 75%, transparent);
+  box-shadow: 0 12px 26px -24px var(--nm-shadow-dark);
   transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease);
 }
 
-/* Interactive button (raised → concave on press) */
 .nm-btn {
-  background: var(--nm-bg);
-  border-radius: var(--nm-radius-sm);
-  border: none;
+  background: var(--nm-surface);
+  border-radius: 999px;
+  border: 1px solid var(--nm-border);
   cursor: pointer;
   box-shadow:
-    4px 4px 8px var(--nm-shadow-dark),
-    -4px -4px 8px var(--nm-shadow-light);
-  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease);
+    0 12px 26px -20px var(--nm-shadow-dark),
+    0 6px 14px -14px color-mix(in oklab, var(--nm-accent) 14%, transparent);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease), border-color var(--nm-transition) var(--nm-ease);
 }
 .nm-btn:hover {
+  border-color: color-mix(in oklab, var(--nm-border) 70%, var(--nm-accent) 30%);
   box-shadow:
-    6px 6px 14px var(--nm-shadow-dark),
-    -6px -6px 14px var(--nm-shadow-light);
-  transform: scale(1.01);
+    0 18px 30px -22px var(--nm-shadow-dark),
+    0 10px 20px -16px color-mix(in oklab, var(--nm-accent) 20%, transparent);
+  transform: translateY(-1px);
 }
 .nm-btn:active {
   box-shadow:
-    inset 4px 4px 8px var(--nm-shadow-dark),
-    inset -4px -4px 8px var(--nm-shadow-light);
-  transform: scale(0.98);
+    inset 0 1px 2px color-mix(in oklab, var(--nm-shadow-dark) 38%, transparent),
+    0 8px 18px -16px var(--nm-shadow-dark);
+  transform: scale(0.99);
 }
 .nm-btn:disabled {
   opacity: 0.5;
-  box-shadow:
-    2px 2px 4px var(--nm-shadow-dark),
-    -2px -2px 4px var(--nm-shadow-light);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
-/* Primary accent button */
 .nm-btn-primary {
   background: var(--nm-accent);
   color: #ffffff;
-  border-radius: var(--nm-radius-sm);
-  border: none;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--nm-accent) 76%, #0b1220 24%);
   cursor: pointer;
   box-shadow:
-    4px 4px 10px var(--nm-shadow-dark),
-    -4px -4px 10px var(--nm-shadow-light),
-    inset 0 1px 0 rgba(255,255,255,0.15);
+    0 18px 30px -20px color-mix(in oklab, var(--nm-accent) 54%, transparent),
+    0 6px 14px -10px color-mix(in oklab, var(--nm-shadow-dark) 70%, transparent);
   transition: box-shadow var(--nm-transition) var(--nm-ease), transform var(--nm-transition) var(--nm-ease), background var(--nm-transition) var(--nm-ease);
 }
 .nm-btn-primary:hover {
   background: var(--nm-accent-soft);
   box-shadow:
-    6px 6px 16px var(--nm-shadow-dark),
-    -6px -6px 16px var(--nm-shadow-light),
-    inset 0 1px 0 rgba(255,255,255,0.2);
-  transform: scale(1.01);
+    0 22px 34px -22px color-mix(in oklab, var(--nm-accent-soft) 58%, transparent),
+    0 8px 16px -12px color-mix(in oklab, var(--nm-shadow-dark) 72%, transparent);
+  transform: translateY(-1px);
 }
 .nm-btn-primary:active {
   box-shadow:
-    inset 3px 3px 8px rgba(0,0,0,0.25),
-    inset -3px -3px 8px rgba(255,255,255,0.1);
-  transform: scale(0.98);
+    inset 0 2px 6px rgba(0, 0, 0, 0.26),
+    0 10px 22px -16px color-mix(in oklab, var(--nm-accent) 40%, transparent);
+  transform: scale(0.99);
 }
 .nm-btn-primary:disabled {
-  opacity: 0.5;
-  background: var(--nm-bg);
+  opacity: 0.55;
+  background: var(--nm-surface-soft);
   color: var(--nm-text-secondary);
-  box-shadow:
-    2px 2px 4px var(--nm-shadow-dark),
-    -2px -2px 4px var(--nm-shadow-light);
+  border-color: var(--nm-border);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
-/* Input fields (concave) */
 .nm-input {
-  background: var(--nm-bg);
-  border: none;
+  background: var(--nm-surface);
+  border: 1px solid var(--nm-border);
   border-radius: var(--nm-radius-sm);
-  box-shadow:
-    inset 3px 3px 6px var(--nm-shadow-dark),
-    inset -3px -3px 6px var(--nm-shadow-light);
+  box-shadow: 0 8px 18px -16px var(--nm-shadow-dark);
   padding: 10px 14px;
   color: var(--nm-text-primary);
   outline: none;
   font-size: 14px;
-  transition: box-shadow var(--nm-transition) var(--nm-ease);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), border-color var(--nm-transition) var(--nm-ease), background var(--nm-transition) var(--nm-ease);
 }
 .nm-input:focus {
+  border-color: color-mix(in oklab, var(--nm-accent) 52%, #ffffff 48%);
   box-shadow:
-    inset 4px 4px 8px var(--nm-shadow-dark),
-    inset -4px -4px 8px var(--nm-shadow-light),
-    0 0 0 2px var(--nm-accent);
+    0 0 0 3px color-mix(in oklab, var(--nm-accent) 18%, transparent),
+    0 14px 22px -18px color-mix(in oklab, var(--nm-accent) 24%, transparent);
 }
 .nm-input::placeholder {
   color: var(--nm-text-secondary);
 }
 
-/* Segment group (concave container) */
 .nm-segment-group {
   display: flex;
   gap: 0;
-  background: var(--nm-bg);
+  background: var(--nm-surface-soft);
   border-radius: var(--nm-radius-sm);
-  box-shadow:
-    inset 3px 3px 6px var(--nm-shadow-dark),
-    inset -3px -3px 6px var(--nm-shadow-light);
+  border: 1px solid color-mix(in oklab, var(--nm-border) 78%, transparent);
   padding: 4px;
 }
 .nm-segment-item {
@@ -294,12 +300,10 @@ body {
   color: var(--nm-text-primary);
 }
 .nm-segment-item.active {
-  background: var(--nm-bg);
+  background: var(--nm-surface);
   color: var(--nm-accent);
   font-weight: 700;
-  box-shadow:
-    3px 3px 6px var(--nm-shadow-dark),
-    -3px -3px 6px var(--nm-shadow-light);
+  box-shadow: 0 10px 20px -16px var(--nm-shadow-dark);
 }
 
 .nm-icon-btn {
@@ -309,20 +313,17 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--nm-text-secondary);
-  border-radius: var(--nm-radius-sm);
-  border: none;
-  background: var(--nm-bg);
-  box-shadow:
-    3px 3px 6px var(--nm-shadow-dark),
-    -3px -3px 6px var(--nm-shadow-light);
-  transition: box-shadow var(--nm-transition) var(--nm-ease), transform 150ms var(--nm-ease), color 150ms var(--nm-ease);
+  border-radius: 12px;
+  border: 1px solid var(--nm-border);
+  background: var(--nm-surface);
+  box-shadow: 0 10px 22px -18px var(--nm-shadow-dark);
+  transition: box-shadow var(--nm-transition) var(--nm-ease), transform 150ms var(--nm-ease), color 150ms var(--nm-ease), border-color 150ms var(--nm-ease);
 }
 
 .nm-icon-btn:hover {
   color: var(--nm-text-primary);
-  box-shadow:
-    5px 5px 10px var(--nm-shadow-dark),
-    -5px -5px 10px var(--nm-shadow-light);
+  border-color: color-mix(in oklab, var(--nm-border) 68%, var(--nm-accent) 32%);
+  box-shadow: 0 14px 24px -18px var(--nm-shadow-dark);
 }
 
 .nm-icon-btn:active {
@@ -338,11 +339,11 @@ body {
   gap: 4px;
   padding: 6px;
   border-radius: 12px;
-  background: var(--nm-bg);
-  border: 1px solid color-mix(in oklab, var(--nm-shadow-dark) 45%, transparent);
+  background: var(--nm-surface);
+  border: 1px solid var(--nm-border);
   box-shadow:
-    10px 10px 24px color-mix(in oklab, var(--nm-shadow-dark) 65%, transparent),
-    -6px -6px 16px color-mix(in oklab, var(--nm-shadow-light) 75%, transparent);
+    0 22px 40px -26px var(--nm-shadow-dark),
+    0 8px 20px -16px color-mix(in oklab, var(--nm-accent) 16%, transparent);
 }
 
 .nm-menu-item {
@@ -362,12 +363,12 @@ body {
 }
 
 .nm-menu-item:hover {
-  background: color-mix(in oklab, var(--nm-shadow-light) 60%, transparent);
+  background: color-mix(in oklab, var(--nm-surface-soft) 88%, transparent);
   color: var(--nm-text-primary);
 }
 
 .nm-menu-item.active {
-  background: color-mix(in oklab, var(--nm-accent) 16%, var(--nm-bg));
+  background: color-mix(in oklab, var(--nm-accent) 15%, var(--nm-surface-soft));
   color: var(--nm-accent);
 }
 
@@ -376,37 +377,32 @@ body {
 /* Action button */
 .action-btn {
   @apply flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium;
-  background: var(--nm-bg);
-  border: none;
-  border-radius: var(--nm-radius-sm);
+  background: var(--nm-surface);
+  border: 1px solid var(--nm-border);
+  border-radius: 999px;
   color: var(--nm-text-primary);
   cursor: pointer;
-  box-shadow:
-    3px 3px 6px var(--nm-shadow-dark),
-    -3px -3px 6px var(--nm-shadow-light);
+  box-shadow: 0 12px 24px -18px var(--nm-shadow-dark);
   transition: box-shadow var(--nm-transition) var(--nm-ease), transform 150ms var(--nm-ease);
 }
 .action-btn:hover {
-  box-shadow:
-    5px 5px 10px var(--nm-shadow-dark),
-    -5px -5px 10px var(--nm-shadow-light);
-  transform: scale(1.02);
+  box-shadow: 0 16px 28px -20px var(--nm-shadow-dark);
+  transform: translateY(-1px);
 }
 .action-btn:active {
   box-shadow:
-    inset 3px 3px 6px var(--nm-shadow-dark),
-    inset -3px -3px 6px var(--nm-shadow-light);
-  transform: scale(0.97);
+    inset 0 1px 3px color-mix(in oklab, var(--nm-shadow-dark) 40%, transparent),
+    0 10px 18px -16px var(--nm-shadow-dark);
+  transform: scale(0.99);
 }
 
 /* Progress bar */
 .progress-bar {
-  background: var(--nm-bg);
+  background: var(--nm-surface-soft);
+  border: 1px solid color-mix(in oklab, var(--nm-border) 72%, transparent);
   border-radius: 9999px;
   height: 4px;
-  box-shadow:
-    inset 2px 2px 4px var(--nm-shadow-dark),
-    inset -2px -2px 4px var(--nm-shadow-light);
+  box-shadow: inset 0 1px 1px color-mix(in oklab, var(--nm-shadow-dark) 28%, transparent);
   overflow: hidden;
 }
 .progress-bar-fill {
