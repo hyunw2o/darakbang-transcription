@@ -24,10 +24,9 @@ const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [
-  { key: "auto", label: "Auto" },
-  { key: "aurora", label: "Aurora" },
-  { key: "noir", label: "Noir" },
-  { key: "sunset", label: "Sunset" },
+  { key: "auto", label: "System", targetTheme: "" },
+  { key: "light", label: "Light", targetTheme: "aurora" },
+  { key: "dark", label: "Dark", targetTheme: "noir" },
 ];
 
 const MOBILE_THEMES = {
@@ -845,9 +844,12 @@ function App() {
   const applyThemeOption = (optionKey) => {
     if (optionKey === "auto") {
       setThemeMode("auto");
+    } else if (optionKey === "light") {
+      setThemeMode("manual");
+      setThemeKey("aurora");
     } else {
       setThemeMode("manual");
-      setThemeKey(optionKey);
+      setThemeKey("noir");
     }
     setOpenSettingsMenu("");
   };
@@ -898,7 +900,7 @@ function App() {
             const active =
               themeOption.key === "auto"
                 ? themeMode === "auto"
-                : themeMode === "manual" && themeOption.key === themeKey;
+                : themeMode === "manual" && themeOption.targetTheme === themeKey;
             return (
               <NmPressable
                 key={themeOption.key}
@@ -939,7 +941,10 @@ function App() {
           <FadeInView duration={420}>
             <View style={[styles.card, styles.authCard, { backgroundColor: activeTheme.bg, borderColor: activeTheme.inputBorder }]}>
               <Text style={[styles.authIntro, { color: activeTheme.textPrimary }]}>
-                음성을 텍스트로 변환하려면 로그인해 주세요.
+                AI 음성 기록, 지금 시작하세요.
+              </Text>
+              <Text style={[styles.authSubcopy, { color: activeTheme.textSecondary }]}>
+                로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.
               </Text>
 
               <View style={styles.segmentRow}>
@@ -1007,7 +1012,14 @@ function App() {
                   onPress={() => handleSocialLogin("google")}
                   disabled={!!socialLoading}
                 >
-                  <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>{socialLoading === "google" ? "연결 중..." : "Google"}</Text>
+                  <View style={styles.socialButtonInner}>
+                    <View style={styles.googleIconBubble}>
+                      <Text style={styles.socialIconText}>G</Text>
+                    </View>
+                    <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>
+                      {socialLoading === "google" ? "연결 중..." : "Google로 계속하기"}
+                    </Text>
+                  </View>
                 </NmPressable>
 
                 <NmPressable
@@ -1019,7 +1031,14 @@ function App() {
                   onPress={() => handleSocialLogin("kakao")}
                   disabled={!!socialLoading}
                 >
-                  <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>{socialLoading === "kakao" ? "연결 중..." : "Kakao"}</Text>
+                  <View style={styles.socialButtonInner}>
+                    <View style={styles.kakaoIconBubble}>
+                      <Text style={styles.socialIconText}>K</Text>
+                    </View>
+                    <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>
+                      {socialLoading === "kakao" ? "연결 중..." : "Kakao로 계속하기"}
+                    </Text>
+                  </View>
                 </NmPressable>
               </View>
             </View>
@@ -1340,6 +1359,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 2,
   },
+  authSubcopy: {
+    color: NM.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 4,
+  },
   banner: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -1514,9 +1539,36 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  socialButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  googleIconBubble: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kakaoIconBubble: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: "#FEE500",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socialIconText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#111827",
+  },
   socialButtonText: {
     color: NM.textPrimary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
   },
   helpText: {

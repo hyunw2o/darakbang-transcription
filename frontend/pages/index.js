@@ -4,10 +4,9 @@ import Link from 'next/link'
 import Mallog24Logo from '../components/Mallog24Logo'
 
 const UI_THEME_OPTIONS = [
-  { key: 'auto', label: 'Auto' },
-  { key: 'aurora', label: 'Aurora' },
-  { key: 'noir', label: 'Noir' },
-  { key: 'sunset', label: 'Sunset' },
+  { key: 'auto', label: 'System' },
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
 ]
 
 function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode, locale = 'kr' }) {
@@ -27,9 +26,14 @@ function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThem
   const handleThemeSelect = (themeKey) => {
     if (themeKey === 'auto') {
       setUiThemeMode('auto')
+    } else if (themeKey === 'light') {
+      setUiThemeMode('manual')
+      setUiTheme('aurora')
+      setDarkMode(false)
     } else {
       setUiThemeMode('manual')
-      setUiTheme(themeKey)
+      setUiTheme('noir')
+      setDarkMode(true)
     }
     setOpenMenu('')
   }
@@ -93,21 +97,13 @@ function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThem
                 onClick={() => handleThemeSelect(theme.key)}
                 className={`nm-menu-item ${theme.key === 'auto'
                   ? uiThemeMode === 'auto' ? 'active' : ''
-                  : uiThemeMode === 'manual' && uiTheme === theme.key ? 'active' : ''}`}
+                  : theme.key === 'light'
+                    ? uiThemeMode === 'manual' && uiTheme === 'aurora' ? 'active' : ''
+                    : uiThemeMode === 'manual' && uiTheme === 'noir' ? 'active' : ''}`}
               >
                 {theme.label}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => {
-                setDarkMode(!darkMode)
-                setOpenMenu('')
-              }}
-              className="nm-menu-item"
-            >
-              {darkMode ? '라이트 모드' : '다크 모드'}
-            </button>
           </div>
         )}
       </div>
@@ -746,8 +742,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     { key: 'sermon_core_summary', label: '설교 핵심 요약' },
   ]
   const socialProviders = [
-    { key: 'google', label: 'Google' },
-    { key: 'kakao', label: 'Kakao' },
+    { key: 'google', label: 'Google로 계속하기', icon: 'G', iconClass: 'bg-white text-slate-700' },
+    { key: 'kakao', label: 'Kakao로 계속하기', icon: 'K', iconClass: 'bg-yellow-300 text-slate-900' },
   ]
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치',
     'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
@@ -789,7 +785,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
           {!authToken ? (
             <>
               <div className="mb-4">
-                <p className="text-sm font-semibold text-nm-text-primary">음성을 텍스트로 변환하려면 로그인해 주세요.</p>
+                <p className="text-base font-bold text-nm-text-primary">AI 음성 기록, 지금 시작하세요.</p>
+                <p className="mt-1 text-xs text-nm-text-secondary">로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.</p>
                 <div className="nm-segment-group mt-3">
                   <button
                     type="button"
@@ -848,23 +845,18 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                 </button>
               </form>
               <div className="mt-4">
-                <div className="relative mb-3">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-nm-dark/20" />
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="px-2 text-[11px] text-nm-text-secondary bg-nm-bg">또는 소셜 로그인</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {socialProviders.map((provider) => (
                     <button
                       key={provider.key}
                       type="button"
                       onClick={() => handleSocialLogin(provider.key)}
                       disabled={authLoading || Boolean(socialLoading)}
-                      className="nm-btn w-full h-11 text-sm font-semibold text-nm-text-primary"
+                      className="nm-btn w-full h-11 px-3 text-sm font-semibold text-nm-text-primary inline-flex items-center justify-center gap-2"
                     >
+                      <span className={`w-5 h-5 rounded-full text-[11px] font-bold inline-flex items-center justify-center ${provider.iconClass}`}>
+                        {provider.icon}
+                      </span>
                       {socialLoading === provider.key ? '이동 중...' : provider.label}
                     </button>
                   ))}
