@@ -53,6 +53,7 @@ uvicorn main:app --reload
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
+   - `backend/sql/billing_subscriptions.sql` (구독 결제 상태 저장 + RLS 정책)
 
 ## 배포 (Render)
 
@@ -70,6 +71,12 @@ uvicorn main:app --reload
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
    - `FREE_MONTHLY_LIMIT_SECONDS` (기본 10800, 무료 3시간)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
+   - `BILLING_PROVIDER` (기본 `stripe`)
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_WEBHOOK_SECRET`
+   - `STRIPE_PRICE_ID_PRO`
+   - `PAID_PLAN_TIER` (기본 `pro`)
+   - `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `BILLING_PORTAL_RETURN_URL` (선택)
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
 
@@ -95,6 +102,10 @@ uvicorn main:app --reload
 - `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=google|kakao`, `redirect_to` 필요)
 - `GET /api/auth/me` : 현재 사용자 조회
 - `GET /api/usage` : 이번 달 사용량 조회 (무료 한도 3시간)
+- `GET /api/billing/status` : 내 구독 상태 조회
+- `POST /api/billing/checkout` : Stripe Checkout 세션 생성
+- `POST /api/billing/portal` : Stripe Billing Portal 세션 생성
+- `POST /api/billing/webhook` : Stripe 웹훅 수신
 - `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
 - `POST /api/records` : 기록본 저장 (인증 필요)
 - `GET /api/records` : 내 기록본 목록 조회 (인증 필요)
@@ -121,3 +132,12 @@ python backend/jobs/reset_monthly_free_usage.py
 ```
 
 Render Cron Job 스케줄 예시: `0 0 1 * *` (UTC 기준)
+
+## Stripe 연결 체크리스트
+
+1. Stripe Dashboard에서 월 구독 상품/Price 생성 후 `STRIPE_PRICE_ID_PRO` 저장
+2. Backend 환경변수에 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` 설정
+3. Stripe Webhook endpoint 등록
+   - URL: `https://<backend-domain>/api/billing/webhook`
+   - 이벤트: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
+4. 웹에서 `/pricing` 또는 `/pricing-en`에서 구독 시작/구독 관리 버튼으로 결제 테스트

@@ -30,6 +30,11 @@ try:
 except Exception:
     MutagenFile = None
 
+try:
+    import stripe
+except Exception:
+    stripe = None
+
 # 다락방 용어 임포트
 from church_terms import (
     get_gemini_prompt,
@@ -103,6 +108,16 @@ FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(3시간)을 모두 �
 USAGE_TABLE_NAME = "user_usage_quotas"
 USAGE_FREE_PLAN = "free"
 USAGE_TIMEZONE = (os.getenv("USAGE_TIMEZONE") or "Asia/Seoul").strip() or "Asia/Seoul"
+BILLING_TABLE_NAME = "billing_subscriptions"
+BILLING_PROVIDER = (os.getenv("BILLING_PROVIDER") or "stripe").strip().lower()
+STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
+STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
+STRIPE_PRICE_ID_PRO = (os.getenv("STRIPE_PRICE_ID_PRO") or "").strip()
+BILLING_SUCCESS_URL = (os.getenv("BILLING_SUCCESS_URL") or "").strip()
+BILLING_CANCEL_URL = (os.getenv("BILLING_CANCEL_URL") or "").strip()
+BILLING_PORTAL_RETURN_URL = (os.getenv("BILLING_PORTAL_RETURN_URL") or "").strip()
+PAID_PLAN_TIER = (os.getenv("PAID_PLAN_TIER") or "pro").strip().lower() or "pro"
+STRIPE_ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
 
 app = FastAPI(title="말로그24 API")
 
@@ -138,6 +153,8 @@ async def startup_event():
         print("OpenAI Whisper: Ready")
     else:
         print("OpenAI Whisper: Not configured (Gemini fallback)")
+    billing_enabled = bool(stripe and BILLING_PROVIDER == "stripe" and STRIPE_SECRET_KEY and STRIPE_PRICE_ID_PRO)
+    print(f"Billing: {'Stripe enabled' if billing_enabled else 'disabled'}")
     try:
         if GEMINI_API_KEY:
             print("Checking available Gemini models...")
@@ -185,6 +202,7 @@ ALLOWED_RECORD_CATEGORIES = {
 ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
 TRANSCRIPTION_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
+BILLING_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -537,6 +555,67 @@ def _validate_redirect_url(redirect_to: str) -> str:
     return normalized
 
 
+def _is_stripe_billing_enabled() -> bool:
+    return bool(
+        stripe is not None
+        and BILLING_PROVIDER == "stripe"
+        and STRIPE_SECRET_KEY
+        and STRIPE_PRICE_ID_PRO
+    )
+
+
+def _require_stripe_billing_enabled() -> None:
+    if stripe is None:
+        raise HTTPException(
+            status_code=500,
+            detail="stripe 패키지가 설치되지 않았습니다. requirements.txt를 확인하세요.",
+        )
+    if BILLING_PROVIDER != "stripe":
+        raise HTTPException(status_code=503, detail="현재 결제 공급자 설정이 비활성화되어 있습니다.")
+    if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID_PRO:
+        raise HTTPException(
+            status_code=503,
+            detail="결제 기능 준비 중입니다. Stripe 키/가격 ID가 아직 설정되지 않았습니다.",
+        )
+    stripe.api_key = STRIPE_SECRET_KEY
+
+
+def _build_redirect_url_from_request(request: Request, path: str) -> str:
+    base = str(request.base_url).rstrip("/")
+    target = "/" + path.lstrip("/")
+    return f"{base}{target}"
+
+
+def _resolve_checkout_redirect_urls(request: Request, payload: dict) -> tuple[str, str]:
+    locale = str((payload or {}).get("locale") or "").strip().lower()
+    is_en_locale = locale == "en"
+    default_success_path = "/pricing-en?checkout=success" if is_en_locale else "/pricing?checkout=success"
+    default_cancel_path = "/pricing-en?checkout=cancel" if is_en_locale else "/pricing?checkout=cancel"
+
+    raw_success = (payload.get("success_url") if isinstance(payload, dict) else "") or BILLING_SUCCESS_URL
+    raw_cancel = (payload.get("cancel_url") if isinstance(payload, dict) else "") or BILLING_CANCEL_URL
+
+    success_url = _validate_redirect_url(raw_success) if raw_success else _build_redirect_url_from_request(request, default_success_path)
+    cancel_url = _validate_redirect_url(raw_cancel) if raw_cancel else _build_redirect_url_from_request(request, default_cancel_path)
+
+    if "{CHECKOUT_SESSION_ID}" not in success_url:
+        separator = "&" if "?" in success_url else "?"
+        success_url = f"{success_url}{separator}checkout_session_id={{CHECKOUT_SESSION_ID}}"
+
+    return success_url, cancel_url
+
+
+def _resolve_portal_return_url(request: Request, payload: dict) -> str:
+    locale = str((payload or {}).get("locale") or "").strip().lower()
+    is_en_locale = locale == "en"
+    default_return_path = "/pricing-en" if is_en_locale else "/pricing"
+
+    raw_return = (payload.get("return_url") if isinstance(payload, dict) else "") or BILLING_PORTAL_RETURN_URL
+    if raw_return:
+        return _validate_redirect_url(raw_return)
+    return _build_redirect_url_from_request(request, default_return_path)
+
+
 def _ensure_transcriptions_user_scope_ready() -> None:
     global TRANSCRIPTION_SCOPE_VALIDATED
     if TRANSCRIPTION_SCOPE_VALIDATED:
@@ -583,6 +662,194 @@ def _ensure_user_usage_scope_ready() -> None:
                 detail="Supabase 설정 필요: backend/sql/user_usage_quota.sql 을 먼저 실행하세요.",
             )
         raise
+
+
+def _ensure_billing_scope_ready() -> None:
+    global BILLING_SCOPE_VALIDATED
+    if BILLING_SCOPE_VALIDATED:
+        return
+
+    try:
+        _get_supabase_client().table(BILLING_TABLE_NAME).select("user_id").limit(1).execute()
+        BILLING_SCOPE_VALIDATED = True
+    except Exception as e:
+        error_text = str(e).lower()
+        if BILLING_TABLE_NAME in error_text and ("does not exist" in error_text or "relation" in error_text):
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase 설정 필요: backend/sql/billing_subscriptions.sql 을 먼저 실행하세요.",
+            )
+        raise
+
+
+def _normalize_billing_row(row: dict, user_id: str | None = None) -> dict:
+    return {
+        "user_id": row.get("user_id") or user_id,
+        "provider": str(row.get("provider") or "stripe"),
+        "customer_id": row.get("customer_id") or "",
+        "subscription_id": row.get("subscription_id") or "",
+        "price_id": row.get("price_id") or "",
+        "status": str(row.get("status") or "inactive"),
+        "plan_tier": str(row.get("plan_tier") or USAGE_FREE_PLAN),
+        "current_period_end": row.get("current_period_end"),
+        "cancel_at_period_end": bool(row.get("cancel_at_period_end") or False),
+        "checkout_completed_at": row.get("checkout_completed_at"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _fetch_billing_row_by_user_id(user_id: str) -> dict | None:
+    response = (
+        _get_supabase_client().table(BILLING_TABLE_NAME)
+        .select(
+            "user_id, provider, customer_id, subscription_id, price_id, status, plan_tier, "
+            "current_period_end, cancel_at_period_end, checkout_completed_at, created_at, updated_at"
+        )
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+    return None
+
+
+def _fetch_billing_row_by_subscription_id(subscription_id: str) -> dict | None:
+    if not subscription_id:
+        return None
+    response = (
+        _get_supabase_client().table(BILLING_TABLE_NAME)
+        .select(
+            "user_id, provider, customer_id, subscription_id, price_id, status, plan_tier, "
+            "current_period_end, cancel_at_period_end, checkout_completed_at, created_at, updated_at"
+        )
+        .eq("subscription_id", subscription_id)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+    return None
+
+
+def _fetch_billing_row_by_customer_id(customer_id: str) -> dict | None:
+    if not customer_id:
+        return None
+    response = (
+        _get_supabase_client().table(BILLING_TABLE_NAME)
+        .select(
+            "user_id, provider, customer_id, subscription_id, price_id, status, plan_tier, "
+            "current_period_end, cancel_at_period_end, checkout_completed_at, created_at, updated_at"
+        )
+        .eq("customer_id", customer_id)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+    return None
+
+
+def _upsert_billing_row(user_id: str, patch: dict) -> dict:
+    _ensure_billing_scope_ready()
+    payload = {
+        "user_id": user_id,
+        "provider": BILLING_PROVIDER,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    payload.update(patch or {})
+
+    response = (
+        _get_supabase_client().table(BILLING_TABLE_NAME)
+        .upsert(payload, on_conflict="user_id")
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+
+    fresh = _fetch_billing_row_by_user_id(user_id)
+    if fresh:
+        return fresh
+    raise HTTPException(status_code=500, detail="결제 구독 상태를 저장하지 못했습니다.")
+
+
+def _to_iso_datetime_from_unix(unix_ts: int | float | None) -> str | None:
+    if not unix_ts:
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(unix_ts)).isoformat()
+    except Exception:
+        return None
+
+
+def _extract_primary_price_id(subscription_obj: dict) -> str:
+    try:
+        items = (subscription_obj or {}).get("items", {}).get("data", [])
+        if not items:
+            return ""
+        return str(items[0].get("price", {}).get("id") or "")
+    except Exception:
+        return ""
+
+
+def _resolve_plan_tier_from_subscription_status(status: str | None) -> str:
+    normalized = (status or "").strip().lower()
+    if normalized in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES:
+        return PAID_PLAN_TIER
+    return USAGE_FREE_PLAN
+
+
+def _set_user_plan_tier(user_id: str, plan_tier: str) -> None:
+    safe_plan = (plan_tier or USAGE_FREE_PLAN).strip().lower() or USAGE_FREE_PLAN
+    row = _get_or_create_usage_row(user_id)
+    if row["plan_tier"] == safe_plan:
+        return
+    _get_supabase_client().table(USAGE_TABLE_NAME).update({
+        "plan_tier": safe_plan,
+        "updated_at": datetime.utcnow().isoformat(),
+    }).eq("user_id", user_id).execute()
+
+
+def _resolve_or_create_stripe_customer(user: dict) -> str:
+    _require_stripe_billing_enabled()
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="사용자 정보가 유효하지 않습니다.")
+
+    billing_row = _fetch_billing_row_by_user_id(user_id)
+    existing_customer_id = (billing_row or {}).get("customer_id")
+    if existing_customer_id:
+        return existing_customer_id
+
+    email = (user.get("email") or "").strip().lower()
+    if email:
+        try:
+            customers = stripe.Customer.list(email=email, limit=1)
+            if customers and customers.data:
+                return customers.data[0].id
+        except Exception:
+            pass
+
+    metadata = {"user_id": user_id, "app": "mallog24"}
+    created = stripe.Customer.create(
+        email=email or None,
+        metadata=metadata,
+    )
+    return created.id
+
+
+def _build_billing_status_payload(user_id: str) -> dict:
+    usage_row = _get_or_create_usage_row(user_id)
+    usage_snapshot = _build_usage_snapshot(usage_row)
+    billing_row = _fetch_billing_row_by_user_id(user_id)
+    normalized_billing = _normalize_billing_row(billing_row or {}, user_id=user_id)
+    normalized_billing["payment_enabled"] = _is_stripe_billing_enabled()
+    normalized_billing["usage"] = usage_snapshot
+    normalized_billing["can_manage_subscription"] = bool(
+        normalized_billing["payment_enabled"] and normalized_billing["customer_id"]
+    )
+    return normalized_billing
 
 
 def _normalize_usage_row(row: dict, user_id: str) -> dict:
@@ -1602,6 +1869,252 @@ async def get_usage(authorization: str | None = Header(default=None)):
     }
 
 
+async def _read_optional_json_payload(request: Request) -> dict:
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return {}
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON 본문 형식이 올바르지 않습니다.")
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON 본문은 객체 형식이어야 합니다.")
+    return payload
+
+
+@app.get("/api/billing/status")
+async def get_billing_status(authorization: str | None = Header(default=None)):
+    """로그인 사용자 구독/결제 상태 조회"""
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    user = _get_current_user(authorization)
+    status = _build_billing_status_payload(user["id"])
+    return {
+        "success": True,
+        **status,
+    }
+
+
+@app.post("/api/billing/checkout")
+async def create_checkout_session(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Stripe Checkout 세션 생성 (월 구독 시작)"""
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    _require_stripe_billing_enabled()
+    user = _get_current_user(authorization)
+    payload = await _read_optional_json_payload(request)
+    success_url, cancel_url = _resolve_checkout_redirect_urls(request, payload)
+
+    usage_row = _get_or_create_usage_row(user["id"])
+    billing_row = _fetch_billing_row_by_user_id(user["id"])
+    billing_status = str((billing_row or {}).get("status") or "").strip().lower()
+    if billing_status in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES:
+        raise HTTPException(status_code=409, detail="이미 활성화된 구독이 있습니다. 구독 관리 페이지를 이용하세요.")
+    if usage_row["plan_tier"] != USAGE_FREE_PLAN:
+        raise HTTPException(status_code=409, detail="이미 유료 요금제를 사용 중입니다.")
+
+    customer_id = _resolve_or_create_stripe_customer(user)
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer_id,
+            line_items=[{"price": STRIPE_PRICE_ID_PRO, "quantity": 1}],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            allow_promotion_codes=True,
+            metadata={
+                "user_id": user["id"],
+                "email": (user.get("email") or ""),
+                "source": "mallog24-web",
+            },
+            subscription_data={
+                "metadata": {
+                    "user_id": user["id"],
+                    "source": "mallog24-web",
+                }
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"결제 세션 생성 실패: {str(e)}")
+
+    _upsert_billing_row(
+        user["id"],
+        {
+            "provider": "stripe",
+            "customer_id": customer_id,
+            "status": "checkout_pending",
+            "price_id": STRIPE_PRICE_ID_PRO,
+            "plan_tier": usage_row["plan_tier"],
+        },
+    )
+
+    return {
+        "success": True,
+        "checkout_url": checkout_session.url,
+        "session_id": checkout_session.id,
+    }
+
+
+@app.post("/api/billing/portal")
+async def create_portal_session(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Stripe Billing Portal 세션 생성"""
+    _ensure_billing_scope_ready()
+    _require_stripe_billing_enabled()
+    user = _get_current_user(authorization)
+    payload = await _read_optional_json_payload(request)
+    return_url = _resolve_portal_return_url(request, payload)
+
+    billing_row = _fetch_billing_row_by_user_id(user["id"])
+    if not billing_row or not billing_row.get("customer_id"):
+        raise HTTPException(status_code=400, detail="구독 관리 가능한 고객 정보가 없습니다.")
+
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=billing_row["customer_id"],
+            return_url=return_url,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"구독 관리 페이지 생성 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "portal_url": portal_session.url,
+    }
+
+
+@app.post("/api/billing/webhook")
+async def stripe_billing_webhook(request: Request):
+    """Stripe webhook 수신 및 구독 상태 반영"""
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    _require_stripe_billing_enabled()
+
+    if not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="STRIPE_WEBHOOK_SECRET 설정이 필요합니다.")
+
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature")
+    if not signature:
+        raise HTTPException(status_code=400, detail="stripe-signature 헤더가 필요합니다.")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, signature, STRIPE_WEBHOOK_SECRET)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Webhook payload가 올바르지 않습니다.")
+    except Exception as e:
+        if "SignatureVerificationError" in e.__class__.__name__:
+            raise HTTPException(status_code=400, detail="Webhook 서명 검증에 실패했습니다.")
+        raise HTTPException(status_code=400, detail=f"Webhook 검증 실패: {str(e)}")
+
+    event_type = str(event.get("type") or "")
+    event_obj = event.get("data", {}).get("object", {})
+
+    try:
+        if event_type == "checkout.session.completed":
+            metadata = event_obj.get("metadata") or {}
+            user_id = (metadata.get("user_id") or "").strip()
+            customer_id = str(event_obj.get("customer") or "")
+            subscription_id = str(event_obj.get("subscription") or "")
+
+            if user_id:
+                subscription_status = "incomplete"
+                current_period_end = None
+                cancel_at_period_end = False
+                price_id = STRIPE_PRICE_ID_PRO
+
+                if subscription_id:
+                    try:
+                        subscription = stripe.Subscription.retrieve(subscription_id)
+                        subscription_status = str(subscription.get("status") or "incomplete")
+                        current_period_end = _to_iso_datetime_from_unix(subscription.get("current_period_end"))
+                        cancel_at_period_end = bool(subscription.get("cancel_at_period_end") or False)
+                        extracted_price_id = _extract_primary_price_id(subscription)
+                        if extracted_price_id:
+                            price_id = extracted_price_id
+                    except Exception as sub_err:
+                        print(f"[billing] failed to fetch subscription on checkout completion: {sub_err}")
+
+                plan_tier = _resolve_plan_tier_from_subscription_status(subscription_status)
+                _upsert_billing_row(
+                    user_id,
+                    {
+                        "provider": "stripe",
+                        "customer_id": customer_id,
+                        "subscription_id": subscription_id,
+                        "price_id": price_id,
+                        "status": subscription_status,
+                        "plan_tier": plan_tier,
+                        "current_period_end": current_period_end,
+                        "cancel_at_period_end": cancel_at_period_end,
+                        "checkout_completed_at": datetime.utcnow().isoformat(),
+                    },
+                )
+                _set_user_plan_tier(user_id, plan_tier)
+
+        elif event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
+            subscription = event_obj or {}
+            subscription_id = str(subscription.get("id") or "")
+            customer_id = str(subscription.get("customer") or "")
+            billing_row = (
+                _fetch_billing_row_by_subscription_id(subscription_id)
+                or _fetch_billing_row_by_customer_id(customer_id)
+            )
+            if billing_row:
+                user_id = billing_row["user_id"]
+                status = str(subscription.get("status") or ("canceled" if event_type.endswith("deleted") else "inactive"))
+                plan_tier = _resolve_plan_tier_from_subscription_status(status)
+                _upsert_billing_row(
+                    user_id,
+                    {
+                        "provider": "stripe",
+                        "customer_id": customer_id,
+                        "subscription_id": subscription_id,
+                        "price_id": _extract_primary_price_id(subscription) or billing_row.get("price_id") or STRIPE_PRICE_ID_PRO,
+                        "status": status,
+                        "plan_tier": plan_tier,
+                        "current_period_end": _to_iso_datetime_from_unix(subscription.get("current_period_end")),
+                        "cancel_at_period_end": bool(subscription.get("cancel_at_period_end") or False),
+                    },
+                )
+                _set_user_plan_tier(user_id, plan_tier)
+
+        elif event_type == "invoice.payment_failed":
+            invoice = event_obj or {}
+            subscription_id = str(invoice.get("subscription") or "")
+            customer_id = str(invoice.get("customer") or "")
+            billing_row = (
+                _fetch_billing_row_by_subscription_id(subscription_id)
+                or _fetch_billing_row_by_customer_id(customer_id)
+            )
+            if billing_row:
+                user_id = billing_row["user_id"]
+                _upsert_billing_row(
+                    user_id,
+                    {
+                        "provider": "stripe",
+                        "status": "past_due",
+                        "plan_tier": USAGE_FREE_PLAN,
+                    },
+                )
+                _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Webhook 처리 실패: {str(e)}")
+
+    return {"received": True, "event_type": event_type}
+
+
 @app.post("/api/auth/signup")
 async def signup(
     email: str = Form(...),
@@ -1882,5 +2395,6 @@ async def health_check():
         "apis": {
             "gemini": bool(GEMINI_API_KEY),
             "openai_whisper": bool(OPENAI_API_KEY),
+            "stripe_billing": _is_stripe_billing_enabled(),
         }
     }
