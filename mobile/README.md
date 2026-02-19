@@ -5,6 +5,7 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 ## 포함 기능
 - 이메일 로그인/회원가입
 - Google/Kakao 소셜 로그인 URL 연동
+- 최초 실행 시 개인정보처리방침 동의 팝업(동의 전 사용 불가)
 - 파일 선택(오디오/비디오) 후 변환 요청
 - 작업 상태 폴링(`/api/status/{task_id}`)
 - 변환 결과/요약 생성
@@ -16,6 +17,8 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 
 ```bash
 EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
+EXPO_PUBLIC_PRIVACY_URL_KO=https://ours-homepage.vercel.app/privacy
+EXPO_PUBLIC_PRIVACY_URL_EN=https://ours-homepage.vercel.app/privacy-en
 ```
 
 기본값은 `https://darakbang-transcription-backend.onrender.com` 입니다.

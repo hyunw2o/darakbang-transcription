@@ -21,6 +21,10 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://darakbang-transcript
 const AUTH_TOKEN_KEY = "mallog24_access_token";
 const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
+const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
+const PRIVACY_POLICY_VERSION = "2026-02-19";
+const PRIVACY_POLICY_URL_KO = process.env.EXPO_PUBLIC_PRIVACY_URL_KO || "https://ours-homepage.vercel.app/privacy";
+const PRIVACY_POLICY_URL_EN = process.env.EXPO_PUBLIC_PRIVACY_URL_EN || "https://ours-homepage.vercel.app/privacy-en";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [
@@ -324,6 +328,9 @@ function App() {
 
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [privacyConsentChecked, setPrivacyConsentChecked] = useState(false);
+  const [privacyConsentSaving, setPrivacyConsentSaving] = useState(false);
 
   const isLoggedIn = !!authToken && !!authUser;
   const resolvedThemeKey =
@@ -463,12 +470,16 @@ function App() {
       try {
         const savedTheme = await AsyncStorage.getItem(UI_THEME_KEY);
         const savedThemeMode = await AsyncStorage.getItem(UI_THEME_MODE_KEY);
+        const savedPrivacyConsent = await AsyncStorage.getItem(PRIVACY_CONSENT_KEY);
         if (savedThemeMode === "manual" || savedThemeMode === "auto") {
           setThemeMode(savedThemeMode);
         }
         if (savedTheme && MOBILE_THEMES[savedTheme]) {
           setThemeKey(savedTheme);
         }
+        const hasPrivacyConsent = savedPrivacyConsent === PRIVACY_POLICY_VERSION;
+        setPrivacyAccepted(hasPrivacyConsent);
+        setPrivacyConsentChecked(hasPrivacyConsent);
 
         const initialUrl = await Linking.getInitialURL();
         const initialAuth = parseAuthParamsFromUrl(initialUrl || "");
@@ -870,6 +881,33 @@ function App() {
       setThemeKey("noir");
     }
     setOpenSettingsMenu("");
+  };
+
+  const openPrivacyPolicy = async () => {
+    const targetUrl = language === "en" ? PRIVACY_POLICY_URL_EN : PRIVACY_POLICY_URL_KO;
+    try {
+      const supported = await Linking.canOpenURL(targetUrl);
+      if (!supported) throw new Error("개인정보처리방침 링크를 열 수 없습니다.");
+      await Linking.openURL(targetUrl);
+    } catch (e) {
+      setError(e.message || "개인정보처리방침 페이지를 열 수 없습니다.");
+    }
+  };
+
+  const handleAcceptPrivacyPolicy = async () => {
+    if (privacyConsentSaving || !privacyConsentChecked) return;
+
+    setPrivacyConsentSaving(true);
+    try {
+      await AsyncStorage.setItem(PRIVACY_CONSENT_KEY, PRIVACY_POLICY_VERSION);
+      setPrivacyAccepted(true);
+      setNotice("개인정보처리방침 동의가 완료되었습니다.");
+      setError("");
+    } catch {
+      setError("동의 상태 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setPrivacyConsentSaving(false);
+    }
   };
 
   const renderQuickControls = () => (
@@ -1291,6 +1329,72 @@ function App() {
           ) : null}
         </View>
       )}
+
+      {!privacyAccepted ? (
+        <View style={[styles.privacyOverlay, { backgroundColor: "rgba(5, 12, 24, 0.58)" }]}>
+          <FadeInView duration={260}>
+            <View style={[styles.privacyModal, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+              <Text style={[styles.privacyTitle, { color: activeTheme.textPrimary }]}>개인정보처리방침 동의</Text>
+              <Text style={[styles.privacyBody, { color: activeTheme.textSecondary }]}>
+                mallog24 이용 전 개인정보 처리 내용을 확인해주세요. 동의 후 로그인 및 음성 변환 기능을 사용할 수 있습니다.
+              </Text>
+
+              <View style={[styles.privacySummaryBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  • 원본 음성 파일: 변환 처리 후 임시 저장소에서 지체 없이 삭제
+                </Text>
+                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  • 변환 텍스트/기록본: 히스토리 및 기록 기능 제공 목적 범위 내 보관
+                </Text>
+                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  • 처리 위탁: Supabase, OpenAI, Google(Gemini)
+                </Text>
+                <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  • 소셜 로그인: Google/Kakao 계정 정보(이메일, 프로필, UID)
+                </Text>
+              </View>
+
+              <NmPressable
+                style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                onPress={openPrivacyPolicy}
+              >
+                <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>개인정보처리방침 전문 보기</Text>
+              </NmPressable>
+
+              <NmPressable
+                style={[styles.privacyCheckRow, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
+                onPress={() => setPrivacyConsentChecked((prev) => !prev)}
+              >
+                <View
+                  style={[
+                    styles.privacyCheckBox,
+                    { borderColor: activeTheme.inputBorder, backgroundColor: privacyConsentChecked ? activeTheme.accent : "transparent" },
+                  ]}
+                >
+                  {privacyConsentChecked ? <Text style={styles.privacyCheckMark}>✓</Text> : null}
+                </View>
+                <Text style={[styles.privacyCheckText, { color: activeTheme.textPrimary }]}>
+                  개인정보처리방침을 확인했고 동의합니다.
+                </Text>
+              </NmPressable>
+
+              <NmPressable
+                style={[
+                  styles.privacyAcceptButton,
+                  { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                  !privacyConsentChecked || privacyConsentSaving ? styles.buttonDisabled : null,
+                ]}
+                onPress={handleAcceptPrivacyPolicy}
+                disabled={!privacyConsentChecked || privacyConsentSaving}
+              >
+                <Text style={styles.privacyAcceptButtonText}>
+                  {privacyConsentSaving ? "저장 중..." : "동의하고 시작하기"}
+                </Text>
+              </NmPressable>
+            </View>
+          </FadeInView>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1806,5 +1910,108 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontSize: 12,
     lineHeight: 18,
+  },
+  privacyOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 60,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  privacyModal: {
+    width: "100%",
+    maxWidth: 640,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    gap: 11,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.24,
+    shadowRadius: 26,
+    elevation: 8,
+  },
+  privacyTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: NM.textPrimary,
+    letterSpacing: -0.25,
+  },
+  privacyBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: NM.textSecondary,
+  },
+  privacySummaryBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 7,
+  },
+  privacySummaryItem: {
+    fontSize: 11,
+    lineHeight: 17,
+    color: NM.textPrimary,
+    fontWeight: "600",
+  },
+  privacyLinkButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  privacyLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  privacyCheckRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  privacyCheckBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  privacyCheckMark: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  privacyCheckText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+    color: NM.textPrimary,
+  },
+  privacyAcceptButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    shadowColor: NM.accent,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  privacyAcceptButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
   },
 });
