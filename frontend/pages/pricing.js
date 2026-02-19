@@ -69,13 +69,19 @@ export default function PricingPage() {
     setError('')
     setMessage('')
     try {
+      const successUrl = `${window.location.origin}/pricing?checkout=success`
+      const cancelUrl = `${window.location.origin}/pricing?checkout=cancel`
       const res = await fetch(`${API_URL}/api/billing/checkout`, {
         method: 'POST',
         headers: {
           ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ locale: 'ko' }),
+        body: JSON.stringify({
+          locale: 'ko',
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -102,13 +108,17 @@ export default function PricingPage() {
     setError('')
     setMessage('')
     try {
+      const returnUrl = `${window.location.origin}/pricing`
       const res = await fetch(`${API_URL}/api/billing/portal`, {
         method: 'POST',
         headers: {
           ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ locale: 'ko' }),
+        body: JSON.stringify({
+          locale: 'ko',
+          return_url: returnUrl,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -126,7 +136,12 @@ export default function PricingPage() {
   }
 
   const currentPlan = status?.usage?.plan_tier || status?.plan_tier || 'free'
+  const billingProvider = status?.provider || 'portone'
+  const checkoutMode = status?.checkout_mode || 'disabled'
+  const checkoutSupported = Boolean(status?.checkout_supported)
+  const portalSupported = Boolean(status?.portal_supported)
   const paymentEnabled = Boolean(status?.payment_enabled)
+  const isMockCheckout = checkoutMode === 'mock'
   const isPaid = currentPlan !== 'free'
 
   return (
@@ -167,7 +182,7 @@ export default function PricingPage() {
             )}
             {authToken && (
               <p className="text-xs text-nm-text-secondary mt-1">
-                결제 기능 상태: {paymentEnabled ? '활성화' : '미설정'}
+                결제 공급자: {billingProvider} / 체크아웃 모드: {checkoutMode}
               </p>
             )}
           </div>
@@ -177,19 +192,29 @@ export default function PricingPage() {
               <button
                 type="button"
                 onClick={openBillingPortal}
-                disabled={!paymentEnabled || actionLoading !== ''}
+                disabled={!portalSupported || actionLoading !== ''}
                 className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
               >
-                {actionLoading === 'portal' ? '이동 중...' : '구독 관리하기'}
+                {actionLoading === 'portal'
+                  ? '이동 중...'
+                  : portalSupported
+                    ? '구독 관리하기'
+                    : '국내 PG 관리페이지 준비 중'}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={startCheckout}
-                disabled={!paymentEnabled || !authToken || actionLoading !== ''}
+                disabled={!checkoutSupported || !authToken || actionLoading !== ''}
                 className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
               >
-                {actionLoading === 'checkout' ? '연결 중...' : 'Pro 구독 시작하기'}
+                {actionLoading === 'checkout'
+                  ? '연결 중...'
+                  : checkoutSupported
+                    ? isMockCheckout
+                      ? '테스트 결제 시작하기'
+                      : 'Pro 구독 시작하기'
+                    : '결제 준비 중'}
               </button>
             )}
             <a
@@ -214,6 +239,11 @@ export default function PricingPage() {
           {!paymentEnabled && (
             <p className="text-xs text-nm-text-secondary mt-3">
               현재 서버에 결제 키가 설정되지 않아 실결제가 비활성화되어 있습니다.
+            </p>
+          )}
+          {checkoutSupported && isMockCheckout && (
+            <p className="text-xs text-nm-text-secondary mt-3">
+              현재는 테스트 결제 모드입니다. 실제 과금 없이 성공/취소 플로우를 확인할 수 있습니다.
             </p>
           )}
           {message && <p className="text-xs text-blue-600 mt-3">{message}</p>}

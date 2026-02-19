@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 import google.generativeai as genai
 from openai import OpenAI
 import os
@@ -8,7 +8,7 @@ import uuid
 import json
 import asyncio
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -109,15 +109,24 @@ USAGE_TABLE_NAME = "user_usage_quotas"
 USAGE_FREE_PLAN = "free"
 USAGE_TIMEZONE = (os.getenv("USAGE_TIMEZONE") or "Asia/Seoul").strip() or "Asia/Seoul"
 BILLING_TABLE_NAME = "billing_subscriptions"
-BILLING_PROVIDER = (os.getenv("BILLING_PROVIDER") or "stripe").strip().lower()
+BILLING_PROVIDER = (os.getenv("BILLING_PROVIDER") or "portone").strip().lower()
+SUPPORTED_BILLING_PROVIDERS = {"portone", "tosspayments", "stripe"}
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
 STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
 STRIPE_PRICE_ID_PRO = (os.getenv("STRIPE_PRICE_ID_PRO") or "").strip()
+PORTONE_STORE_ID = (os.getenv("PORTONE_STORE_ID") or "").strip()
+PORTONE_CHANNEL_KEY = (os.getenv("PORTONE_CHANNEL_KEY") or "").strip()
+PORTONE_API_SECRET = (os.getenv("PORTONE_API_SECRET") or "").strip()
+PORTONE_WEBHOOK_SECRET = (os.getenv("PORTONE_WEBHOOK_SECRET") or "").strip()
+TOSS_CLIENT_KEY = (os.getenv("TOSS_CLIENT_KEY") or "").strip()
+TOSS_SECRET_KEY = (os.getenv("TOSS_SECRET_KEY") or "").strip()
 BILLING_SUCCESS_URL = (os.getenv("BILLING_SUCCESS_URL") or "").strip()
 BILLING_CANCEL_URL = (os.getenv("BILLING_CANCEL_URL") or "").strip()
 BILLING_PORTAL_RETURN_URL = (os.getenv("BILLING_PORTAL_RETURN_URL") or "").strip()
 PAID_PLAN_TIER = (os.getenv("PAID_PLAN_TIER") or "pro").strip().lower() or "pro"
 STRIPE_ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
+BILLING_TEST_MODE = os.getenv("BILLING_TEST_MODE", "false").strip().lower() == "true"
+MOCK_CHECKOUT_SESSION_TTL_SECONDS = max(60, int(os.getenv("MOCK_CHECKOUT_SESSION_TTL_SECONDS", "1800")))
 
 app = FastAPI(title="말로그24 API")
 
@@ -153,8 +162,12 @@ async def startup_event():
         print("OpenAI Whisper: Ready")
     else:
         print("OpenAI Whisper: Not configured (Gemini fallback)")
-    billing_enabled = bool(stripe and BILLING_PROVIDER == "stripe" and STRIPE_SECRET_KEY and STRIPE_PRICE_ID_PRO)
-    print(f"Billing: {'Stripe enabled' if billing_enabled else 'disabled'}")
+    try:
+        billing_provider = _get_billing_provider_or_raise()
+        billing_enabled = _is_billing_enabled()
+        print(f"Billing provider: {billing_provider} ({'enabled' if billing_enabled else 'disabled'})")
+    except Exception as billing_err:
+        print(f"Billing provider configuration error: {billing_err}")
     try:
         if GEMINI_API_KEY:
             print("Checking available Gemini models...")
@@ -189,6 +202,7 @@ else:
 # 인메모리 상태 추적
 task_status = {}
 task_owner = {}
+mock_checkout_sessions: dict[str, dict] = {}
 
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
@@ -555,13 +569,55 @@ def _validate_redirect_url(redirect_to: str) -> str:
     return normalized
 
 
+def _get_billing_provider_or_raise() -> str:
+    provider = BILLING_PROVIDER.strip().lower()
+    if provider not in SUPPORTED_BILLING_PROVIDERS:
+        raise HTTPException(
+            status_code=500,
+            detail=f"지원하지 않는 BILLING_PROVIDER 입니다: {provider}",
+        )
+    return provider
+
+
 def _is_stripe_billing_enabled() -> bool:
     return bool(
         stripe is not None
-        and BILLING_PROVIDER == "stripe"
+        and _get_billing_provider_or_raise() == "stripe"
         and STRIPE_SECRET_KEY
         and STRIPE_PRICE_ID_PRO
     )
+
+
+def _is_portone_billing_enabled() -> bool:
+    return bool(
+        _get_billing_provider_or_raise() == "portone"
+        and PORTONE_STORE_ID
+        and PORTONE_CHANNEL_KEY
+        and PORTONE_API_SECRET
+    )
+
+
+def _is_tosspayments_billing_enabled() -> bool:
+    return bool(
+        _get_billing_provider_or_raise() == "tosspayments"
+        and TOSS_CLIENT_KEY
+        and TOSS_SECRET_KEY
+    )
+
+
+def _get_checkout_mode(provider: str | None = None) -> str:
+    resolved_provider = provider or _get_billing_provider_or_raise()
+
+    if resolved_provider == "stripe" and stripe is not None and STRIPE_SECRET_KEY and STRIPE_PRICE_ID_PRO:
+        return "live"
+    if BILLING_TEST_MODE:
+        return "mock"
+    return "disabled"
+
+
+def _is_billing_enabled() -> bool:
+    provider = _get_billing_provider_or_raise()
+    return _get_checkout_mode(provider) != "disabled"
 
 
 def _require_stripe_billing_enabled() -> None:
@@ -570,7 +626,7 @@ def _require_stripe_billing_enabled() -> None:
             status_code=500,
             detail="stripe 패키지가 설치되지 않았습니다. requirements.txt를 확인하세요.",
         )
-    if BILLING_PROVIDER != "stripe":
+    if _get_billing_provider_or_raise() != "stripe":
         raise HTTPException(status_code=503, detail="현재 결제 공급자 설정이 비활성화되어 있습니다.")
     if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID_PRO:
         raise HTTPException(
@@ -614,6 +670,61 @@ def _resolve_portal_return_url(request: Request, payload: dict) -> str:
     if raw_return:
         return _validate_redirect_url(raw_return)
     return _build_redirect_url_from_request(request, default_return_path)
+
+
+def _cleanup_expired_mock_checkout_sessions() -> None:
+    now_ts = time.time()
+    expired_ids = []
+    for session_id, session in mock_checkout_sessions.items():
+        created_ts = float(session.get("created_ts") or 0.0)
+        if created_ts <= 0:
+            expired_ids.append(session_id)
+            continue
+        if now_ts - created_ts > MOCK_CHECKOUT_SESSION_TTL_SECONDS:
+            expired_ids.append(session_id)
+
+    for session_id in expired_ids:
+        mock_checkout_sessions.pop(session_id, None)
+
+
+def _create_mock_checkout_session(
+    user_id: str,
+    email: str,
+    provider: str,
+    success_url: str,
+    cancel_url: str,
+    locale: str,
+    request: Request,
+) -> dict:
+    _cleanup_expired_mock_checkout_sessions()
+    session_id = f"mock_{uuid.uuid4().hex}"
+    now_ts = time.time()
+
+    mock_checkout_sessions[session_id] = {
+        "session_id": session_id,
+        "user_id": user_id,
+        "email": email,
+        "provider": provider,
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "locale": locale or "ko",
+        "created_ts": now_ts,
+    }
+
+    checkout_url = _build_redirect_url_from_request(request, f"/api/billing/mock/checkout/{session_id}")
+    return {
+        "session_id": session_id,
+        "checkout_url": checkout_url,
+        "expires_in_seconds": MOCK_CHECKOUT_SESSION_TTL_SECONDS,
+    }
+
+
+def _get_mock_checkout_session_or_raise(session_id: str) -> dict:
+    _cleanup_expired_mock_checkout_sessions()
+    session = mock_checkout_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="테스트 결제 세션이 만료되었거나 존재하지 않습니다.")
+    return session
 
 
 def _ensure_transcriptions_user_scope_ready() -> None:
@@ -685,7 +796,7 @@ def _ensure_billing_scope_ready() -> None:
 def _normalize_billing_row(row: dict, user_id: str | None = None) -> dict:
     return {
         "user_id": row.get("user_id") or user_id,
-        "provider": str(row.get("provider") or "stripe"),
+        "provider": str(row.get("provider") or "portone"),
         "customer_id": row.get("customer_id") or "",
         "subscription_id": row.get("subscription_id") or "",
         "price_id": row.get("price_id") or "",
@@ -755,7 +866,7 @@ def _upsert_billing_row(user_id: str, patch: dict) -> dict:
     _ensure_billing_scope_ready()
     payload = {
         "user_id": user_id,
-        "provider": BILLING_PROVIDER,
+        "provider": _get_billing_provider_or_raise(),
         "updated_at": datetime.utcnow().isoformat(),
     }
     payload.update(patch or {})
@@ -840,15 +951,22 @@ def _resolve_or_create_stripe_customer(user: dict) -> str:
 
 
 def _build_billing_status_payload(user_id: str) -> dict:
+    provider = _get_billing_provider_or_raise()
+    checkout_mode = _get_checkout_mode(provider)
+    checkout_supported = checkout_mode != "disabled"
+    portal_supported = provider == "stripe" and checkout_mode == "live"
+
     usage_row = _get_or_create_usage_row(user_id)
     usage_snapshot = _build_usage_snapshot(usage_row)
     billing_row = _fetch_billing_row_by_user_id(user_id)
     normalized_billing = _normalize_billing_row(billing_row or {}, user_id=user_id)
-    normalized_billing["payment_enabled"] = _is_stripe_billing_enabled()
+    normalized_billing["provider"] = provider
+    normalized_billing["payment_enabled"] = checkout_supported
+    normalized_billing["checkout_mode"] = checkout_mode
+    normalized_billing["checkout_supported"] = checkout_supported
+    normalized_billing["portal_supported"] = portal_supported
     normalized_billing["usage"] = usage_snapshot
-    normalized_billing["can_manage_subscription"] = bool(
-        normalized_billing["payment_enabled"] and normalized_billing["customer_id"]
-    )
+    normalized_billing["can_manage_subscription"] = bool(portal_supported and normalized_billing["customer_id"])
     return normalized_billing
 
 
@@ -1902,13 +2020,14 @@ async def create_checkout_session(
     request: Request,
     authorization: str | None = Header(default=None),
 ):
-    """Stripe Checkout 세션 생성 (월 구독 시작)"""
+    """결제 체크아웃 세션 생성 (공급자별)"""
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
-    _require_stripe_billing_enabled()
     user = _get_current_user(authorization)
     payload = await _read_optional_json_payload(request)
     success_url, cancel_url = _resolve_checkout_redirect_urls(request, payload)
+    billing_provider = _get_billing_provider_or_raise()
+    checkout_mode = _get_checkout_mode(billing_provider)
 
     usage_row = _get_or_create_usage_row(user["id"])
     billing_row = _fetch_billing_row_by_user_id(user["id"])
@@ -1917,6 +2036,53 @@ async def create_checkout_session(
         raise HTTPException(status_code=409, detail="이미 활성화된 구독이 있습니다. 구독 관리 페이지를 이용하세요.")
     if usage_row["plan_tier"] != USAGE_FREE_PLAN:
         raise HTTPException(status_code=409, detail="이미 유료 요금제를 사용 중입니다.")
+
+    if checkout_mode == "disabled":
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"{billing_provider} 결제 설정이 아직 완료되지 않았습니다. "
+                "환경변수 또는 테스트 모드(BILLING_TEST_MODE=true)를 확인하세요."
+            ),
+        )
+
+    if checkout_mode == "mock":
+        mock_session = _create_mock_checkout_session(
+            user_id=user["id"],
+            email=(user.get("email") or "").strip().lower(),
+            provider=billing_provider,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            locale=str(payload.get("locale") or "ko"),
+            request=request,
+        )
+
+        _upsert_billing_row(
+            user["id"],
+            {
+                "provider": billing_provider,
+                "status": "checkout_pending",
+                "plan_tier": usage_row["plan_tier"],
+                "price_id": STRIPE_PRICE_ID_PRO or "",
+            },
+        )
+
+        return {
+            "success": True,
+            "checkout_url": mock_session["checkout_url"],
+            "session_id": mock_session["session_id"],
+            "mode": "mock",
+            "provider": billing_provider,
+            "expires_in_seconds": mock_session["expires_in_seconds"],
+        }
+
+    if billing_provider != "stripe":
+        raise HTTPException(
+            status_code=501,
+            detail=f"{billing_provider} 라이브 결제 연동은 아직 구현되지 않았습니다.",
+        )
+
+    _require_stripe_billing_enabled()
 
     customer_id = _resolve_or_create_stripe_customer(user)
 
@@ -1958,7 +2124,176 @@ async def create_checkout_session(
         "success": True,
         "checkout_url": checkout_session.url,
         "session_id": checkout_session.id,
+        "mode": "live",
+        "provider": billing_provider,
     }
+
+
+@app.get("/api/billing/mock/checkout/{session_id}", response_class=HTMLResponse)
+async def render_mock_checkout_page(session_id: str):
+    """테스트 결제 화면 (BILLING_TEST_MODE=true 전용)"""
+    session = _get_mock_checkout_session_or_raise(session_id)
+    locale = str(session.get("locale") or "ko").lower()
+    is_en = locale == "en"
+    title = "Mock Checkout" if is_en else "테스트 결제창"
+    headline = "Test Payment Gateway" if is_en else "국내 PG 테스트 결제 화면"
+    description = (
+        "No real money will be charged. Choose success or cancel to test your flow."
+        if is_en
+        else "실제 결제는 발생하지 않습니다. 성공/취소를 눌러 결제 플로우를 확인하세요."
+    )
+    success_label = "Simulate Success" if is_en else "결제 성공 시뮬레이션"
+    cancel_label = "Simulate Cancel" if is_en else "결제 취소 시뮬레이션"
+    session_created = datetime.utcfromtimestamp(float(session.get("created_ts") or 0)).isoformat()
+
+    html = f"""
+    <!doctype html>
+    <html lang="{ 'en' if is_en else 'ko' }">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title}</title>
+        <style>
+          body {{
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(140deg, #eef3ff 0%, #f6f0ff 100%);
+            color: #1f2b47;
+          }}
+          .wrap {{
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+          }}
+          .card {{
+            width: 100%;
+            max-width: 520px;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 20px 48px rgba(56, 85, 168, 0.14);
+            padding: 24px;
+          }}
+          .title {{
+            margin: 0 0 8px;
+            font-size: 28px;
+            font-weight: 800;
+          }}
+          .desc {{
+            margin: 0 0 18px;
+            font-size: 14px;
+            color: #56648b;
+            line-height: 1.6;
+          }}
+          .meta {{
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #6d7ea8;
+          }}
+          .actions {{
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }}
+          .btn {{
+            border: none;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 13px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+          }}
+          .btn-success {{
+            background: #315df6;
+            color: #fff;
+          }}
+          .btn-cancel {{
+            background: #eef2ff;
+            color: #1f2b47;
+          }}
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="card">
+            <h1 class="title">{headline}</h1>
+            <p class="desc">{description}</p>
+            <p class="meta">Session: {session_id}</p>
+            <p class="meta">Provider: {session.get("provider", "mock")}</p>
+            <p class="meta">Created (UTC): {session_created}</p>
+            <div class="actions">
+              <a class="btn btn-success" href="/api/billing/mock/complete/{session_id}?result=success">{success_label}</a>
+              <a class="btn btn-cancel" href="/api/billing/mock/complete/{session_id}?result=cancel">{cancel_label}</a>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+
+@app.get("/api/billing/mock/complete/{session_id}")
+async def complete_mock_checkout(session_id: str, result: str = "success"):
+    """테스트 결제 완료 처리"""
+    session = _get_mock_checkout_session_or_raise(session_id)
+    user_id = str(session.get("user_id") or "")
+    provider = str(session.get("provider") or _get_billing_provider_or_raise())
+    success_url = str(session.get("success_url") or "")
+    cancel_url = str(session.get("cancel_url") or "")
+
+    if not user_id:
+        mock_checkout_sessions.pop(session_id, None)
+        raise HTTPException(status_code=400, detail="테스트 결제 세션 사용자 정보가 유효하지 않습니다.")
+
+    normalized_result = (result or "").strip().lower()
+    if normalized_result not in {"success", "cancel"}:
+        normalized_result = "cancel"
+
+    try:
+        if normalized_result == "success":
+            current_period_end = (datetime.utcnow() + timedelta(days=30)).isoformat()
+            _upsert_billing_row(
+                user_id,
+                {
+                    "provider": provider,
+                    "customer_id": f"mock_cus_{user_id[:8]}",
+                    "subscription_id": f"mock_sub_{uuid.uuid4().hex[:18]}",
+                    "price_id": STRIPE_PRICE_ID_PRO or "mock_price_pro",
+                    "status": "active",
+                    "plan_tier": PAID_PLAN_TIER,
+                    "current_period_end": current_period_end,
+                    "cancel_at_period_end": False,
+                    "checkout_completed_at": datetime.utcnow().isoformat(),
+                },
+            )
+            _set_user_plan_tier(user_id, PAID_PLAN_TIER)
+            redirect_url = success_url
+        else:
+            _upsert_billing_row(
+                user_id,
+                {
+                    "provider": provider,
+                    "status": "checkout_canceled",
+                    "plan_tier": USAGE_FREE_PLAN,
+                    "cancel_at_period_end": False,
+                },
+            )
+            _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+            redirect_url = cancel_url
+    finally:
+        mock_checkout_sessions.pop(session_id, None)
+
+    if not redirect_url:
+        redirect_url = "/pricing"
+    redirect_url = redirect_url.replace("{CHECKOUT_SESSION_ID}", session_id)
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @app.post("/api/billing/portal")
@@ -1966,8 +2301,21 @@ async def create_portal_session(
     request: Request,
     authorization: str | None = Header(default=None),
 ):
-    """Stripe Billing Portal 세션 생성"""
+    """구독 관리 포털 세션 생성 (공급자별)"""
     _ensure_billing_scope_ready()
+    billing_provider = _get_billing_provider_or_raise()
+    checkout_mode = _get_checkout_mode(billing_provider)
+    if billing_provider != "stripe":
+        raise HTTPException(
+            status_code=501,
+            detail=f"{billing_provider} 구독 관리 포털은 추후 구현 예정입니다.",
+        )
+    if checkout_mode != "live":
+        raise HTTPException(
+            status_code=501,
+            detail="테스트 모드에서는 Stripe Billing Portal을 사용할 수 없습니다.",
+        )
+
     _require_stripe_billing_enabled()
     user = _get_current_user(authorization)
     payload = await _read_optional_json_payload(request)
@@ -1996,6 +2344,16 @@ async def stripe_billing_webhook(request: Request):
     """Stripe webhook 수신 및 구독 상태 반영"""
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
+    billing_provider = _get_billing_provider_or_raise()
+    checkout_mode = _get_checkout_mode(billing_provider)
+    if billing_provider != "stripe":
+        raise HTTPException(
+            status_code=404,
+            detail=f"현재 BILLING_PROVIDER={billing_provider} 이므로 Stripe webhook이 비활성화되어 있습니다.",
+        )
+    if checkout_mode != "live":
+        raise HTTPException(status_code=404, detail="Stripe 라이브 결제가 비활성화되어 webhook을 처리하지 않습니다.")
+
     _require_stripe_billing_enabled()
 
     if not STRIPE_WEBHOOK_SECRET:
@@ -2386,6 +2744,17 @@ async def summarize_sermon(
 
 @app.get("/health")
 async def health_check():
+    try:
+        billing_provider = _get_billing_provider_or_raise()
+        billing_enabled = _is_billing_enabled()
+        billing_checkout_mode = _get_checkout_mode(billing_provider)
+        stripe_billing = _is_stripe_billing_enabled()
+    except Exception:
+        billing_provider = BILLING_PROVIDER
+        billing_enabled = False
+        billing_checkout_mode = "disabled"
+        stripe_billing = False
+
     return {
         "status": "healthy",
         "church_type": "다락방 전도운동",
@@ -2395,6 +2764,10 @@ async def health_check():
         "apis": {
             "gemini": bool(GEMINI_API_KEY),
             "openai_whisper": bool(OPENAI_API_KEY),
-            "stripe_billing": _is_stripe_billing_enabled(),
+            "billing_provider": billing_provider,
+            "billing_enabled": billing_enabled,
+            "billing_checkout_mode": billing_checkout_mode,
+            "billing_test_mode": BILLING_TEST_MODE,
+            "stripe_billing": stripe_billing,
         }
     }

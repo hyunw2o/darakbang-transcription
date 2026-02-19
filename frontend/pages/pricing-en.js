@@ -69,13 +69,19 @@ export default function PricingEnPage() {
     setError('')
     setMessage('')
     try {
+      const successUrl = `${window.location.origin}/pricing-en?checkout=success`
+      const cancelUrl = `${window.location.origin}/pricing-en?checkout=cancel`
       const res = await fetch(`${API_URL}/api/billing/checkout`, {
         method: 'POST',
         headers: {
           ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ locale: 'en' }),
+        body: JSON.stringify({
+          locale: 'en',
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -102,13 +108,17 @@ export default function PricingEnPage() {
     setError('')
     setMessage('')
     try {
+      const returnUrl = `${window.location.origin}/pricing-en`
       const res = await fetch(`${API_URL}/api/billing/portal`, {
         method: 'POST',
         headers: {
           ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ locale: 'en' }),
+        body: JSON.stringify({
+          locale: 'en',
+          return_url: returnUrl,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -126,7 +136,12 @@ export default function PricingEnPage() {
   }
 
   const currentPlan = status?.usage?.plan_tier || status?.plan_tier || 'free'
+  const billingProvider = status?.provider || 'portone'
+  const checkoutMode = status?.checkout_mode || 'disabled'
+  const checkoutSupported = Boolean(status?.checkout_supported)
+  const portalSupported = Boolean(status?.portal_supported)
   const paymentEnabled = Boolean(status?.payment_enabled)
+  const isMockCheckout = checkoutMode === 'mock'
   const isPaid = currentPlan !== 'free'
 
   return (
@@ -168,7 +183,7 @@ export default function PricingEnPage() {
             )}
             {authToken && (
               <p className="text-xs text-nm-text-secondary mt-1">
-                Billing availability: {paymentEnabled ? 'Enabled' : 'Not configured'}
+                Billing provider: {billingProvider} / checkout mode: {checkoutMode}
               </p>
             )}
           </div>
@@ -178,19 +193,29 @@ export default function PricingEnPage() {
               <button
                 type="button"
                 onClick={openBillingPortal}
-                disabled={!paymentEnabled || actionLoading !== ''}
+                disabled={!portalSupported || actionLoading !== ''}
                 className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
               >
-                {actionLoading === 'portal' ? 'Opening...' : 'Manage Subscription'}
+                {actionLoading === 'portal'
+                  ? 'Opening...'
+                  : portalSupported
+                    ? 'Manage Subscription'
+                    : 'Domestic PG portal pending'}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={startCheckout}
-                disabled={!paymentEnabled || !authToken || actionLoading !== ''}
+                disabled={!checkoutSupported || !authToken || actionLoading !== ''}
                 className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
               >
-                {actionLoading === 'checkout' ? 'Opening...' : 'Start Pro Subscription'}
+                {actionLoading === 'checkout'
+                  ? 'Opening...'
+                  : checkoutSupported
+                    ? isMockCheckout
+                      ? 'Start Mock Checkout'
+                      : 'Start Pro Subscription'
+                    : 'Checkout unavailable'}
               </button>
             )}
             <a
@@ -215,6 +240,11 @@ export default function PricingEnPage() {
           {!paymentEnabled && (
             <p className="text-xs text-nm-text-secondary mt-3">
               Billing keys are not configured on the backend yet, so live checkout is disabled.
+            </p>
+          )}
+          {checkoutSupported && isMockCheckout && (
+            <p className="text-xs text-nm-text-secondary mt-3">
+              Mock checkout mode is enabled. You can validate success/cancel flow without real charges.
             </p>
           )}
           {message && <p className="text-xs text-blue-600 mt-3">{message}</p>}

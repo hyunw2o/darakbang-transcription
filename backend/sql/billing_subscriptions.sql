@@ -1,9 +1,9 @@
--- mallog24 billing subscription model (Stripe)
+-- mallog24 billing subscription model (multi-provider ready)
 -- Run this in Supabase SQL Editor before using /api/billing/* endpoints.
 
 create table if not exists public.billing_subscriptions (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  provider text not null default 'stripe' check (provider in ('stripe')),
+  provider text not null default 'portone',
   customer_id text unique,
   subscription_id text unique,
   price_id text,
@@ -15,6 +15,26 @@ create table if not exists public.billing_subscriptions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Existing table migration support (from stripe-only constraint)
+alter table if exists public.billing_subscriptions
+  alter column provider set default 'portone';
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'billing_subscriptions_provider_check'
+  ) then
+    alter table public.billing_subscriptions
+      drop constraint billing_subscriptions_provider_check;
+  end if;
+
+  alter table public.billing_subscriptions
+    add constraint billing_subscriptions_provider_check
+    check (provider in ('portone', 'tosspayments', 'stripe'));
+end $$;
 
 create index if not exists idx_billing_subscriptions_status
   on public.billing_subscriptions (status);

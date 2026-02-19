@@ -27,6 +27,22 @@ services:
         sync: false
       - key: BILLING_PROVIDER
         sync: false
+      - key: BILLING_TEST_MODE
+        sync: false
+      - key: MOCK_CHECKOUT_SESSION_TTL_SECONDS
+        sync: false
+      - key: PORTONE_STORE_ID
+        sync: false
+      - key: PORTONE_CHANNEL_KEY
+        sync: false
+      - key: PORTONE_API_SECRET
+        sync: false
+      - key: PORTONE_WEBHOOK_SECRET
+        sync: false
+      - key: TOSS_CLIENT_KEY
+        sync: false
+      - key: TOSS_SECRET_KEY
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
