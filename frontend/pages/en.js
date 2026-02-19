@@ -8,6 +8,44 @@ const UI_THEME_OPTIONS = [
   { key: 'light', label: 'Light' },
   { key: 'dark', label: 'Dark' },
 ]
+const FREE_MONTHLY_LIMIT_SECONDS = 10800
+const UPGRADE_CONTACT_URL = '/pricing-en'
+const QUOTA_TOAST_MS = 2600
+
+const formatSecondsToHourMinute = (seconds) => {
+  const safe = Math.max(0, Number(seconds) || 0)
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  return `${hours}h ${minutes}m`
+}
+
+const getAudioDurationSecondsInBrowser = (file) =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const audio = document.createElement('audio')
+    audio.preload = 'metadata'
+    audio.src = objectUrl
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl)
+      audio.removeAttribute('src')
+    }
+
+    audio.onloadedmetadata = () => {
+      const duration = Number(audio.duration)
+      cleanup()
+      if (!Number.isFinite(duration) || duration <= 0) {
+        reject(new Error('Unable to read audio duration in browser.'))
+        return
+      }
+      resolve(Math.max(1, Math.ceil(duration)))
+    }
+
+    audio.onerror = () => {
+      cleanup()
+      reject(new Error('Unable to read audio duration in browser.'))
+    }
+  })
 
 function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode, locale = 'en' }) {
   const menuRef = useRef(null)
@@ -180,6 +218,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const [socialLoading, setSocialLoading] = useState('')
   const [authToken, setAuthToken] = useState('')
   const [authUser, setAuthUser] = useState(null)
+  const [usage, setUsage] = useState(null)
+  const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
+  const [toastMessage, setToastMessage] = useState('')
   const [savedRecords, setSavedRecords] = useState([])
   const [recordDrafts, setRecordDrafts] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
@@ -188,6 +229,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
   const pollStartTime = useRef(null)
+  const toastTimerRef = useRef(null)
+  const fileDurationProbeRef = useRef(0)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
@@ -258,13 +301,38 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     if (oauthAccessToken || oauthError) {
       window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`)
     }
-    return () => stopPolling()
+    return () => {
+      stopPolling()
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
+      }
+    }
   }, [])
 
   const getAuthHeaders = (token = authToken) => {
     if (!token) return {}
     return { Authorization: `Bearer ${token}` }
   }
+
+  const showToast = useCallback((message) => {
+    if (!message) return
+    setToastMessage(message)
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage('')
+      toastTimerRef.current = null
+    }, QUOTA_TOAST_MS)
+  }, [])
+
+  const isFreeTier = (usage?.plan_tier || 'free') === 'free'
+  const monthlyLimitSeconds = usage?.monthly_limit_seconds || FREE_MONTHLY_LIMIT_SECONDS
+  const remainingQuotaSeconds = isFreeTier
+    ? Math.max(0, usage?.remaining_seconds ?? monthlyLimitSeconds)
+    : Number.MAX_SAFE_INTEGER
+  const fileExceedsRemainingQuota = isFreeTier && fileDurationSeconds > 0 && fileDurationSeconds > remainingQuotaSeconds
+  const uploadBlockedByQuota = isFreeTier && remainingQuotaSeconds <= 0
 
   const fetchHistory = async (token = authToken) => {
     if (!token) {
@@ -292,9 +360,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       const data = await res.json()
       setAuthUser(data.user || null)
       fetchHistory(token)
+      fetchUsage(token)
     } catch (e) {
       setAuthToken('')
       setAuthUser(null)
+      setUsage(null)
       setSavedRecords([])
       setHistory([])
       setResult(null)
@@ -303,6 +373,29 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       setShowRecords(false)
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
       console.error('Failed to fetch current user', e)
+    }
+  }
+
+  const fetchUsage = async (token = authToken) => {
+    if (!token) {
+      setUsage(null)
+      return
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/usage`, {
+        headers: getAuthHeaders(token),
+      })
+      if (!res.ok) throw new Error('Failed to load monthly usage.')
+      const data = await res.json()
+      setUsage({
+        plan_tier: data.plan_tier || 'free',
+        used_audio_seconds: Number(data.used_audio_seconds) || 0,
+        monthly_limit_seconds: Number(data.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+        remaining_seconds: Number(data.remaining_seconds) || 0,
+        usage_percent: Number(data.usage_percent) || 0,
+      })
+    } catch (e) {
+      console.error('Failed to fetch usage', e)
     }
   }
 
@@ -327,29 +420,60 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     }
   }
 
-  const validateAndSetFile = (selectedFile) => {
+  const validateAndSetFile = async (selectedFile) => {
     if (selectedFile.size > 100 * 1024 * 1024) {
       setError('File size must be 100MB or less.')
       return
     }
-    setFile(selectedFile)
-    setError(null)
-    setNotice(null)
-    setResult(null)
-    setRecordDrafts({})
+
+    const probeId = fileDurationProbeRef.current + 1
+    fileDurationProbeRef.current = probeId
+
+    try {
+      const durationSeconds = await getAudioDurationSecondsInBrowser(selectedFile)
+      if (fileDurationProbeRef.current !== probeId) return
+
+      if (isFreeTier && durationSeconds > remainingQuotaSeconds) {
+        setFile(null)
+        setFileDurationSeconds(0)
+        setError('This file exceeds your remaining free allowance.')
+        setNotice(null)
+        showToast('This file exceeds your remaining free allowance.')
+        return
+      }
+
+      setFile(selectedFile)
+      setFileDurationSeconds(durationSeconds)
+      setError(null)
+      setNotice(null)
+      setResult(null)
+      setRecordDrafts({})
+    } catch {
+      if (fileDurationProbeRef.current !== probeId) return
+      setFile(selectedFile)
+      setFileDurationSeconds(0)
+      setError('Could not read duration in browser. The server will re-check before processing.')
+      setNotice(null)
+      setResult(null)
+      setRecordDrafts({})
+    }
   }
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0]
-    if (selectedFile) validateAndSetFile(selectedFile)
+    if (selectedFile) {
+      validateAndSetFile(selectedFile)
+    }
   }
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     setDragOver(false)
     const droppedFile = e.dataTransfer.files?.[0]
-    if (droppedFile) validateAndSetFile(droppedFile)
-  }, [])
+    if (droppedFile) {
+      validateAndSetFile(droppedFile)
+    }
+  }, [isFreeTier, remainingQuotaSeconds, showToast])
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault()
@@ -385,6 +509,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             setLoading(false)
             setCurrentStep(0)
             fetchHistory()
+            fetchUsage()
           }, 800)
         } else if (data.status === 'error') {
           stopPolling()
@@ -408,6 +533,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     }
     if (!file) {
       setError('Please select an audio file.')
+      return
+    }
+    if (uploadBlockedByQuota || fileExceedsRemainingQuota) {
+      setError('This file exceeds your remaining free allowance.')
+      showToast('This file exceeds your remaining free allowance.')
       return
     }
 
@@ -514,6 +644,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         setAuthUser(data.user || null)
         fetchSavedRecords(data.access_token)
         fetchHistory(data.access_token)
+        fetchUsage(data.access_token)
         setNotice(authMode === 'signup' ? 'Sign-up and login completed.' : 'Logged in successfully.')
       } else {
         setNotice(data.message || 'Sign-up completed. Please verify your email and log in.')
@@ -553,10 +684,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const handleLogout = () => {
     setAuthToken('')
     setAuthUser(null)
+    setUsage(null)
     setSavedRecords([])
     setHistory([])
     setResult(null)
     setFile(null)
+    setFileDurationSeconds(0)
     setRecordDrafts({})
     setShowHistory(false)
     setShowRecords(false)
@@ -899,6 +1032,40 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
         {authToken && (
           <>
+        {usage && (
+          <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-xs text-nm-text-secondary">This month usage</p>
+                <p className="text-sm font-semibold text-nm-text-primary">
+                  {isFreeTier
+                    ? `${formatSecondsToHourMinute(usage.used_audio_seconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
+                    : `${formatSecondsToHourMinute(usage.used_audio_seconds)} / Unlimited`}
+                </p>
+                {isFreeTier && (
+                  <p className="text-[11px] text-nm-text-secondary mt-1">
+                    Remaining: {formatSecondsToHourMinute(remainingQuotaSeconds)}
+                  </p>
+                )}
+              </div>
+              <a
+                href={UPGRADE_CONTACT_URL}
+                className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
+              >
+                Upgrade Subscription
+              </a>
+            </div>
+            {isFreeTier && (
+              <div className="mt-3 h-2 rounded-full nm-concave overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-nm-accent transition-all duration-500"
+                  style={{ width: `${Math.min(100, usage.usage_percent || 0)}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="nm-flat mb-5 p-4 animate-nm-card-in">
           <p className="text-xs sm:text-sm text-nm-accent font-medium">
             mallog24 focus: sermon flow + speaker separation for calls/meetings + clinical record structuring
@@ -911,12 +1078,19 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             {/* 드래그 앤 드롭 영역 */}
             <div
               className={`relative p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
-                ${dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
+                ${uploadBlockedByQuota ? 'opacity-60 cursor-not-allowed nm-concave' :
+                  dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
                   file ? 'nm-raised' : 'nm-concave'}`}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                if (uploadBlockedByQuota) {
+                  showToast('You already used this month\'s free 3-hour quota. Please upgrade your plan.')
+                  return
+                }
+                fileInputRef.current?.click()
+              }}
             >
               <input
                 ref={fileInputRef}
@@ -935,9 +1109,16 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   </div>
                   <p className="text-sm font-medium text-nm-text-primary">{file.name}</p>
                   <p className="text-xs text-nm-text-secondary">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                  {fileDurationSeconds > 0 && (
+                    <p className="text-xs text-nm-text-secondary">Duration: {formatSecondsToHourMinute(fileDurationSeconds)}</p>
+                  )}
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setFile(null)
+                      setFileDurationSeconds(0)
+                    }}
                     className="text-xs text-red-500 hover:text-red-600 font-medium mt-1"
                   >
                     Change File
@@ -987,16 +1168,29 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             <p className="mt-3 text-[11px] text-nm-text-secondary">
               {transcriptionTypeHints[transcriptionType]}
             </p>
+            {fileExceedsRemainingQuota && (
+              <p className="mt-2 text-[12px] text-red-600 font-medium">
+                This file exceeds your remaining free allowance.
+              </p>
+            )}
 
             {/* 변환 버튼 */}
             <button
               type="submit"
-              disabled={loading || !file || !authToken}
+              disabled={loading || !file || !authToken || uploadBlockedByQuota || fileExceedsRemainingQuota}
               className="w-full mt-5 nm-btn-primary py-3.5 font-semibold text-sm
                 disabled:opacity-50 disabled:cursor-not-allowed
                 active:scale-[0.98]"
             >
-              {loading ? 'Transcribing...' : authToken ? 'Start Transcription' : 'Sign In to Transcribe'}
+              {loading
+                ? 'Transcribing...'
+                : uploadBlockedByQuota
+                  ? 'Free quota exceeded (Upgrade required)'
+                  : fileExceedsRemainingQuota
+                    ? 'Exceeds remaining allowance'
+                    : authToken
+                      ? 'Start Transcription'
+                      : 'Sign In to Transcribe'}
             </button>
           </form>
 
@@ -1324,6 +1518,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
           </p>
         </footer>
       </main>
+      {toastMessage && (
+        <div className="fixed top-16 right-4 z-[70] max-w-xs nm-raised px-4 py-3 border-l-4 border-amber-500">
+          <p className="text-xs text-nm-text-primary">{toastMessage}</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import json
 import asyncio
 import random
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import tempfile
@@ -17,10 +18,17 @@ import time
 import math
 import mimetypes
 import re
+import wave
 import urllib.request
 import urllib.error
 import urllib.parse
 from collections import defaultdict, deque
+from pydub import AudioSegment
+
+try:
+    from mutagen import File as MutagenFile
+except Exception:
+    MutagenFile = None
 
 # 다락방 용어 임포트
 from church_terms import (
@@ -90,6 +98,11 @@ EXPOSE_TERMS_ENDPOINT = (os.getenv("EXPOSE_TERMS_ENDPOINT", "false").strip().low
 
 ALLOWED_LANGUAGES = {"ko", "en"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
+FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "10800")))
+FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(3시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
+USAGE_TABLE_NAME = "user_usage_quotas"
+USAGE_FREE_PLAN = "free"
+USAGE_TIMEZONE = (os.getenv("USAGE_TIMEZONE") or "Asia/Seoul").strip() or "Asia/Seoul"
 
 app = FastAPI(title="말로그24 API")
 
@@ -171,6 +184,7 @@ ALLOWED_RECORD_CATEGORIES = {
 }
 ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
 TRANSCRIPTION_SCOPE_VALIDATED = False
+USAGE_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -539,6 +553,206 @@ def _ensure_transcriptions_user_scope_ready() -> None:
                 detail="Supabase 설정 필요: backend/sql/transcriptions_user_scope.sql 을 먼저 실행하세요.",
             )
         raise
+
+
+def _usage_now() -> datetime:
+    try:
+        return datetime.now(ZoneInfo(USAGE_TIMEZONE))
+    except ZoneInfoNotFoundError:
+        return datetime.utcnow()
+
+
+def _current_usage_month_start() -> str:
+    now = _usage_now()
+    return f"{now.year:04d}-{now.month:02d}-01"
+
+
+def _ensure_user_usage_scope_ready() -> None:
+    global USAGE_SCOPE_VALIDATED
+    if USAGE_SCOPE_VALIDATED:
+        return
+
+    try:
+        _get_supabase_client().table(USAGE_TABLE_NAME).select("user_id").limit(1).execute()
+        USAGE_SCOPE_VALIDATED = True
+    except Exception as e:
+        error_text = str(e).lower()
+        if USAGE_TABLE_NAME in error_text and ("does not exist" in error_text or "relation" in error_text):
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase 설정 필요: backend/sql/user_usage_quota.sql 을 먼저 실행하세요.",
+            )
+        raise
+
+
+def _normalize_usage_row(row: dict, user_id: str) -> dict:
+    used_seconds = int(row.get("used_audio_seconds") or 0)
+    used_seconds = max(0, used_seconds)
+    plan_tier = str(row.get("plan_tier") or USAGE_FREE_PLAN).strip().lower() or USAGE_FREE_PLAN
+    usage_month = str(row.get("usage_month") or _current_usage_month_start())[:10]
+
+    return {
+        "user_id": user_id,
+        "plan_tier": plan_tier,
+        "used_audio_seconds": used_seconds,
+        "usage_month": usage_month,
+    }
+
+
+def _fetch_usage_row(user_id: str) -> dict | None:
+    response = (
+        _get_supabase_client().table(USAGE_TABLE_NAME)
+        .select("user_id, plan_tier, used_audio_seconds, usage_month")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+    return None
+
+
+def _create_usage_row(user_id: str) -> None:
+    current_month = _current_usage_month_start()
+    try:
+        _get_supabase_client().table(USAGE_TABLE_NAME).insert({
+            "user_id": user_id,
+            "plan_tier": USAGE_FREE_PLAN,
+            "used_audio_seconds": 0,
+            "usage_month": current_month,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception as e:
+        # Concurrent inserts may race. Read-after-write resolves this safely.
+        if "duplicate key" not in str(e).lower():
+            raise
+
+
+def _get_or_create_usage_row(user_id: str) -> dict:
+    _ensure_user_usage_scope_ready()
+
+    row = _fetch_usage_row(user_id)
+    if not row:
+        _create_usage_row(user_id)
+        row = _fetch_usage_row(user_id)
+        if not row:
+            raise HTTPException(status_code=500, detail="사용량 정보를 생성하지 못했습니다.")
+
+    normalized = _normalize_usage_row(row, user_id)
+    current_month = _current_usage_month_start()
+
+    if normalized["usage_month"] != current_month:
+        response = (
+            _get_supabase_client().table(USAGE_TABLE_NAME)
+            .update({
+                "used_audio_seconds": 0,
+                "usage_month": current_month,
+                "updated_at": datetime.utcnow().isoformat(),
+            })
+            .eq("user_id", user_id)
+            .execute()
+        )
+        updated = response.data[0] if response.data else {
+            **normalized,
+            "used_audio_seconds": 0,
+            "usage_month": current_month,
+        }
+        normalized = _normalize_usage_row(updated, user_id)
+
+    return normalized
+
+
+def _build_usage_snapshot(row: dict) -> dict:
+    plan_tier = row["plan_tier"]
+    used_seconds = int(row["used_audio_seconds"])
+
+    if plan_tier == USAGE_FREE_PLAN:
+        limit_seconds = FREE_MONTHLY_LIMIT_SECONDS
+        remaining_seconds = max(0, limit_seconds - used_seconds)
+        usage_percent = min(100.0, round((used_seconds / limit_seconds) * 100, 2))
+        return {
+            "plan_tier": plan_tier,
+            "used_audio_seconds": used_seconds,
+            "monthly_limit_seconds": limit_seconds,
+            "remaining_seconds": remaining_seconds,
+            "usage_percent": usage_percent,
+            "usage_month": row["usage_month"],
+            "can_upload": remaining_seconds > 0,
+        }
+
+    return {
+        "plan_tier": plan_tier,
+        "used_audio_seconds": used_seconds,
+        "monthly_limit_seconds": None,
+        "remaining_seconds": None,
+        "usage_percent": 0.0,
+        "usage_month": row["usage_month"],
+        "can_upload": True,
+    }
+
+
+def _enforce_upload_quota_or_raise(user_id: str, upload_audio_seconds: int) -> dict:
+    if upload_audio_seconds <= 0:
+        raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없습니다.")
+
+    row = _get_or_create_usage_row(user_id)
+    snapshot = _build_usage_snapshot(row)
+
+    if snapshot["plan_tier"] == USAGE_FREE_PLAN:
+        projected = int(snapshot["used_audio_seconds"]) + upload_audio_seconds
+        if projected > FREE_MONTHLY_LIMIT_SECONDS:
+            raise HTTPException(status_code=403, detail=FREE_LIMIT_EXCEEDED_MESSAGE)
+
+    return snapshot
+
+
+def _increment_user_usage_seconds(user_id: str, upload_audio_seconds: int) -> None:
+    if upload_audio_seconds <= 0:
+        return
+
+    row = _get_or_create_usage_row(user_id)
+    next_used = int(row["used_audio_seconds"]) + upload_audio_seconds
+
+    _get_supabase_client().table(USAGE_TABLE_NAME).update({
+        "used_audio_seconds": next_used,
+        "updated_at": datetime.utcnow().isoformat(),
+    }).eq("user_id", user_id).execute()
+
+
+def _extract_audio_duration_seconds(file_path: str) -> int:
+    duration_seconds = 0.0
+
+    if MutagenFile is not None:
+        try:
+            parsed = MutagenFile(file_path)
+            info = getattr(parsed, "info", None)
+            parsed_length = getattr(info, "length", 0) if info else 0
+            if parsed_length:
+                duration_seconds = float(parsed_length)
+        except Exception:
+            pass
+
+    if duration_seconds <= 0:
+        try:
+            with wave.open(file_path, "rb") as wav_file:
+                frames = wav_file.getnframes()
+                frame_rate = wav_file.getframerate()
+                if frames > 0 and frame_rate > 0:
+                    duration_seconds = frames / float(frame_rate)
+        except Exception:
+            pass
+
+    if duration_seconds <= 0:
+        try:
+            segment = AudioSegment.from_file(file_path)
+            duration_seconds = len(segment) / 1000.0
+        except Exception:
+            pass
+
+    if duration_seconds <= 0:
+        raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없는 파일입니다.")
+
+    return max(1, int(math.ceil(duration_seconds)))
 
 
 def _resolve_audio_mime_type(file_path: str) -> str:
@@ -1075,6 +1289,7 @@ async def process_transcription(
     correct: bool,
     transcription_type: str = "sermon",
     source_mime_type: str = "",
+    audio_seconds: int = 0,
 ):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     try:
@@ -1175,6 +1390,8 @@ async def process_transcription(
             "transcription_type": transcription_type,
         }).execute()
 
+        _increment_user_usage_seconds(user_id, audio_seconds)
+
         task_status[task_id] = "completed"
         task_owner.pop(task_id, None)
 
@@ -1208,9 +1425,12 @@ async def transcribe_audio(
     authorization: str | None = Header(default=None),
 ):
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
+    temp_file_path = ""
+    queued_for_processing = False
     try:
         # 파일 변환은 로그인 사용자만 허용
         _ensure_transcriptions_user_scope_ready()
+        _ensure_user_usage_scope_ready()
         user = _get_current_user(authorization)
         user_id = user["id"]
 
@@ -1233,6 +1453,9 @@ async def transcribe_audio(
             temp_file.write(contents)
             temp_file_path = temp_file.name
 
+        audio_seconds = _extract_audio_duration_seconds(temp_file_path)
+        usage_snapshot = _enforce_upload_quota_or_raise(user_id, audio_seconds)
+
         task_id = str(uuid.uuid4())
         task_status[task_id] = "queued"
         task_owner[task_id] = user_id
@@ -1246,7 +1469,9 @@ async def transcribe_audio(
             correct,
             normalized_transcription_type,
             source_mime_type,
+            audio_seconds,
         )
+        queued_for_processing = True
 
         type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
 
@@ -1257,11 +1482,17 @@ async def transcribe_audio(
             "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환 작업이 시작되었습니다.",
             "engine": "whisper+gemini" if openai_client else "gemini-only",
             "transcription_type": normalized_transcription_type,
+            "audio_seconds": audio_seconds,
+            "quota": usage_snapshot,
         }
 
     except HTTPException:
+        if temp_file_path and (not queued_for_processing) and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
         raise
     except Exception as e:
+        if temp_file_path and (not queued_for_processing) and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
         raise HTTPException(status_code=500, detail=f"오류: {str(e)}")
 
 
@@ -1357,6 +1588,18 @@ async def get_history(authorization: str | None = Header(default=None)):
         })
 
     return history
+
+
+@app.get("/api/usage")
+async def get_usage(authorization: str | None = Header(default=None)):
+    """로그인 사용자 월간 음성 사용량 조회"""
+    user = _get_current_user(authorization)
+    row = _get_or_create_usage_row(user["id"])
+    snapshot = _build_usage_snapshot(row)
+    return {
+        "success": True,
+        **snapshot,
+    }
 
 
 @app.post("/api/auth/signup")

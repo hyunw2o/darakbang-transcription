@@ -19,5 +19,11 @@ services:
         sync: false
       - key: OAUTH_REDIRECT_ALLOW_HOSTS
         sync: false
+      - key: OAUTH_REDIRECT_ALLOW_SCHEMES
+        sync: false
+      - key: FREE_MONTHLY_LIMIT_SECONDS
+        sync: false
+      - key: USAGE_TIMEZONE
+        sync: false
       - key: EXPOSE_TERMS_ENDPOINT
         sync: false

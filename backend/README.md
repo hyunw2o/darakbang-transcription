@@ -52,6 +52,7 @@ uvicorn main:app --reload
 4. Supabase SQL Editor에서 아래 SQL 실행
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
+   - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
 
 ## 배포 (Render)
 
@@ -67,6 +68,8 @@ uvicorn main:app --reload
    - `CORS_ALLOW_ORIGINS`
    - `OAUTH_REDIRECT_ALLOW_HOSTS`
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
+   - `FREE_MONTHLY_LIMIT_SECONDS` (기본 10800, 무료 3시간)
+   - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
 
@@ -91,6 +94,7 @@ uvicorn main:app --reload
 - `POST /api/auth/login` : 로그인
 - `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=google|kakao`, `redirect_to` 필요)
 - `GET /api/auth/me` : 현재 사용자 조회
+- `GET /api/usage` : 이번 달 사용량 조회 (무료 한도 3시간)
 - `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
 - `POST /api/records` : 기록본 저장 (인증 필요)
 - `GET /api/records` : 내 기록본 목록 조회 (인증 필요)
@@ -105,3 +109,15 @@ uvicorn main:app --reload
 - `MAX_UPLOAD_BYTES`, `MAX_TEXT_INPUT_CHARS`: 대용량 요청 제한
 - `EXPOSE_TERMS_ENDPOINT=false`: 디버깅용 `/api/terms` 외부 비활성화
 - Supabase SQL에서 RLS 정책 적용 여부 확인
+
+## 월간 무료 한도 초기화 Cron
+
+`backend/jobs/reset_monthly_free_usage.py`를 매월 1일에 실행하세요.
+
+예시:
+
+```bash
+python backend/jobs/reset_monthly_free_usage.py
+```
+
+Render Cron Job 스케줄 예시: `0 0 1 * *` (UTC 기준)

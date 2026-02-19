@@ -8,6 +8,44 @@ const UI_THEME_OPTIONS = [
   { key: 'light', label: 'Light' },
   { key: 'dark', label: 'Dark' },
 ]
+const FREE_MONTHLY_LIMIT_SECONDS = 10800
+const UPGRADE_CONTACT_URL = '/pricing'
+const QUOTA_TOAST_MS = 2600
+
+const formatSecondsToHourMinute = (seconds) => {
+  const safe = Math.max(0, Number(seconds) || 0)
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  return `${hours}시간 ${minutes}분`
+}
+
+const getAudioDurationSecondsInBrowser = (file) =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const audio = document.createElement('audio')
+    audio.preload = 'metadata'
+    audio.src = objectUrl
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl)
+      audio.removeAttribute('src')
+    }
+
+    audio.onloadedmetadata = () => {
+      const duration = Number(audio.duration)
+      cleanup()
+      if (!Number.isFinite(duration) || duration <= 0) {
+        reject(new Error('파일 길이를 브라우저에서 확인하지 못했습니다.'))
+        return
+      }
+      resolve(Math.max(1, Math.ceil(duration)))
+    }
+
+    audio.onerror = () => {
+      cleanup()
+      reject(new Error('파일 길이를 브라우저에서 확인하지 못했습니다.'))
+    }
+  })
 
 function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode, locale = 'kr' }) {
   const menuRef = useRef(null)
@@ -179,6 +217,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const [socialLoading, setSocialLoading] = useState('')
   const [authToken, setAuthToken] = useState('')
   const [authUser, setAuthUser] = useState(null)
+  const [usage, setUsage] = useState(null)
+  const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
+  const [toastMessage, setToastMessage] = useState('')
   const [savedRecords, setSavedRecords] = useState([])
   const [recordDrafts, setRecordDrafts] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
@@ -187,6 +228,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
   const pollStartTime = useRef(null)
+  const toastTimerRef = useRef(null)
+  const fileDurationProbeRef = useRef(0)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
@@ -257,13 +300,38 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     if (oauthAccessToken || oauthError) {
       window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`)
     }
-    return () => stopPolling()
+    return () => {
+      stopPolling()
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current)
+      }
+    }
   }, [])
 
   const getAuthHeaders = (token = authToken) => {
     if (!token) return {}
     return { Authorization: `Bearer ${token}` }
   }
+
+  const showToast = useCallback((message) => {
+    if (!message) return
+    setToastMessage(message)
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current)
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage('')
+      toastTimerRef.current = null
+    }, QUOTA_TOAST_MS)
+  }, [])
+
+  const isFreeTier = (usage?.plan_tier || 'free') === 'free'
+  const monthlyLimitSeconds = usage?.monthly_limit_seconds || FREE_MONTHLY_LIMIT_SECONDS
+  const remainingQuotaSeconds = isFreeTier
+    ? Math.max(0, usage?.remaining_seconds ?? monthlyLimitSeconds)
+    : Number.MAX_SAFE_INTEGER
+  const fileExceedsRemainingQuota = isFreeTier && fileDurationSeconds > 0 && fileDurationSeconds > remainingQuotaSeconds
+  const uploadBlockedByQuota = isFreeTier && remainingQuotaSeconds <= 0
 
   const fetchHistory = async (token = authToken) => {
     if (!token) {
@@ -291,9 +359,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       const data = await res.json()
       setAuthUser(data.user || null)
       fetchHistory(token)
+      fetchUsage(token)
     } catch (e) {
       setAuthToken('')
       setAuthUser(null)
+      setUsage(null)
       setSavedRecords([])
       setHistory([])
       setResult(null)
@@ -302,6 +372,29 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       setShowRecords(false)
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
       console.error('Failed to fetch current user', e)
+    }
+  }
+
+  const fetchUsage = async (token = authToken) => {
+    if (!token) {
+      setUsage(null)
+      return
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/usage`, {
+        headers: getAuthHeaders(token),
+      })
+      if (!res.ok) throw new Error('사용량을 불러오지 못했습니다.')
+      const data = await res.json()
+      setUsage({
+        plan_tier: data.plan_tier || 'free',
+        used_audio_seconds: Number(data.used_audio_seconds) || 0,
+        monthly_limit_seconds: Number(data.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+        remaining_seconds: Number(data.remaining_seconds) || 0,
+        usage_percent: Number(data.usage_percent) || 0,
+      })
+    } catch (e) {
+      console.error('Failed to fetch usage', e)
     }
   }
 
@@ -326,29 +419,60 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     }
   }
 
-  const validateAndSetFile = (selectedFile) => {
+  const validateAndSetFile = async (selectedFile) => {
     if (selectedFile.size > 100 * 1024 * 1024) {
       setError('파일 크기는 100MB 이하여야 합니다.')
       return
     }
-    setFile(selectedFile)
-    setError(null)
-    setNotice(null)
-    setResult(null)
-    setRecordDrafts({})
+
+    const probeId = fileDurationProbeRef.current + 1
+    fileDurationProbeRef.current = probeId
+
+    try {
+      const durationSeconds = await getAudioDurationSecondsInBrowser(selectedFile)
+      if (fileDurationProbeRef.current !== probeId) return
+
+      if (isFreeTier && durationSeconds > remainingQuotaSeconds) {
+        setFile(null)
+        setFileDurationSeconds(0)
+        setError('남은 허용 시간을 초과하는 파일입니다.')
+        setNotice(null)
+        showToast('남은 허용 시간을 초과하는 파일입니다')
+        return
+      }
+
+      setFile(selectedFile)
+      setFileDurationSeconds(durationSeconds)
+      setError(null)
+      setNotice(null)
+      setResult(null)
+      setRecordDrafts({})
+    } catch {
+      if (fileDurationProbeRef.current !== probeId) return
+      setFile(selectedFile)
+      setFileDurationSeconds(0)
+      setError('브라우저에서 길이 확인에 실패했습니다. 업로드 시 서버에서 다시 검사합니다.')
+      setNotice(null)
+      setResult(null)
+      setRecordDrafts({})
+    }
   }
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0]
-    if (selectedFile) validateAndSetFile(selectedFile)
+    if (selectedFile) {
+      validateAndSetFile(selectedFile)
+    }
   }
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     setDragOver(false)
     const droppedFile = e.dataTransfer.files?.[0]
-    if (droppedFile) validateAndSetFile(droppedFile)
-  }, [])
+    if (droppedFile) {
+      validateAndSetFile(droppedFile)
+    }
+  }, [isFreeTier, remainingQuotaSeconds, showToast])
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault()
@@ -384,6 +508,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             setLoading(false)
             setCurrentStep(0)
             fetchHistory()
+            fetchUsage()
           }, 800)
         } else if (data.status === 'error') {
           stopPolling()
@@ -407,6 +532,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     }
     if (!file) {
       setError('파일을 선택해주세요.')
+      return
+    }
+    if (uploadBlockedByQuota || fileExceedsRemainingQuota) {
+      setError('남은 허용 시간을 초과하는 파일입니다.')
+      showToast('남은 허용 시간을 초과하는 파일입니다')
       return
     }
 
@@ -513,6 +643,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         setAuthUser(data.user || null)
         fetchSavedRecords(data.access_token)
         fetchHistory(data.access_token)
+        fetchUsage(data.access_token)
         setNotice(authMode === 'signup' ? '회원가입 및 로그인이 완료되었습니다.' : '로그인되었습니다.')
       } else {
         setNotice(data.message || '회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.')
@@ -552,10 +683,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const handleLogout = () => {
     setAuthToken('')
     setAuthUser(null)
+    setUsage(null)
     setSavedRecords([])
     setHistory([])
     setResult(null)
     setFile(null)
+    setFileDurationSeconds(0)
     setRecordDrafts({})
     setShowHistory(false)
     setShowRecords(false)
@@ -894,6 +1027,40 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
         {authToken && (
           <>
+            {usage && (
+              <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-nm-text-secondary">이번 달 사용량</p>
+                    <p className="text-sm font-semibold text-nm-text-primary">
+                      {isFreeTier
+                        ? `${formatSecondsToHourMinute(usage.used_audio_seconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
+                        : `${formatSecondsToHourMinute(usage.used_audio_seconds)} / 무제한`}
+                    </p>
+                    {isFreeTier && (
+                      <p className="text-[11px] text-nm-text-secondary mt-1">
+                        남은 시간: {formatSecondsToHourMinute(remainingQuotaSeconds)}
+                      </p>
+                    )}
+                  </div>
+                  <a
+                    href={UPGRADE_CONTACT_URL}
+                    className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
+                  >
+                    구독 업그레이드하기
+                  </a>
+                </div>
+                {isFreeTier && (
+                  <div className="mt-3 h-2 rounded-full nm-concave overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-nm-accent transition-all duration-500"
+                      style={{ width: `${Math.min(100, usage.usage_percent || 0)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="nm-flat p-4 mb-5 animate-nm-card-in">
               <p className="text-xs sm:text-sm text-nm-accent font-medium">
                 mallog24 특화: 설교, 통화, 회의 기록을 목적에 맞게 구조화합니다.
@@ -906,13 +1073,20 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                 {/* 드래그 앤 드롭 영역 */}
                 <div
                   className={`relative p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
-                ${dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
+                ${uploadBlockedByQuota ? 'opacity-60 cursor-not-allowed nm-concave' :
+                    dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
                       file ? 'nm-raised' :
                         'nm-concave'}`}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (uploadBlockedByQuota) {
+                      showToast('이번 달 무료 제공량(3시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요.')
+                      return
+                    }
+                    fileInputRef.current?.click()
+                  }}
                 >
                   <input
                     ref={fileInputRef}
@@ -931,9 +1105,16 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                       </div>
                       <p className="text-sm font-medium text-nm-text-primary">{file.name}</p>
                       <p className="text-xs text-nm-text-secondary">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                      {fileDurationSeconds > 0 && (
+                        <p className="text-xs text-nm-text-secondary">길이: {formatSecondsToHourMinute(fileDurationSeconds)}</p>
+                      )}
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setFile(null)
+                          setFileDurationSeconds(0)
+                        }}
                         className="text-xs text-red-500 hover:text-red-600 font-medium mt-1"
                       >
                         파일 변경
@@ -983,14 +1164,27 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                 <p className="mt-3 text-[11px] text-nm-text-secondary">
                   {transcriptionTypeHints[transcriptionType]}
                 </p>
+                {fileExceedsRemainingQuota && (
+                  <p className="mt-2 text-[12px] text-red-600 font-medium">
+                    남은 허용 시간을 초과하는 파일입니다.
+                  </p>
+                )}
 
                 {/* 변환 버튼 */}
                 <button
                   type="submit"
-                  disabled={loading || !file || !authToken}
+                  disabled={loading || !file || !authToken || uploadBlockedByQuota || fileExceedsRemainingQuota}
                   className="w-full nm-btn-primary mt-5 py-3.5 font-semibold text-sm"
                 >
-                  {loading ? '변환 중...' : authToken ? '변환하기' : '로그인 후 변환하기'}
+                  {loading
+                    ? '변환 중...'
+                    : uploadBlockedByQuota
+                      ? '무료 한도 초과 (업그레이드 필요)'
+                      : fileExceedsRemainingQuota
+                        ? '남은 허용 시간 초과'
+                        : authToken
+                          ? '변환하기'
+                          : '로그인 후 변환하기'}
                 </button>
               </form>
 
@@ -1316,6 +1510,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
           </p>
         </footer>
       </main>
+      {toastMessage && (
+        <div className="fixed top-16 right-4 z-[70] max-w-xs nm-raised px-4 py-3 border-l-4 border-amber-500">
+          <p className="text-xs text-nm-text-primary">{toastMessage}</p>
+        </div>
+      )}
     </div>
   )
 }
