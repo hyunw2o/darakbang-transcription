@@ -80,8 +80,9 @@ export default function App({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <link rel="icon" type="image/png" href="/mallog24-app-icon.png" />
-        <link rel="apple-touch-icon" href="/mallog24-app-icon.png" />
+        <link rel="icon" href="/favicon.ico?v=20260220" sizes="any" />
+        <link rel="icon" type="image/png" href="/mallog24-app-icon.png?v=20260220" />
+        <link rel="apple-touch-icon" href="/mallog24-app-icon.png?v=20260220" />
       </Head>
       <Component
         {...pageProps}
