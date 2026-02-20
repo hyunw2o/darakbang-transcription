@@ -230,7 +230,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const pollStartTime = useRef(null)
   const toastTimerRef = useRef(null)
   const fileDurationProbeRef = useRef(0)
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000

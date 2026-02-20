@@ -66,6 +66,9 @@ DEFAULT_CORS_ORIGINS = [
     "https://www.malloc24.vercel.app",
     "https://mallog24.vercel.app",
     "https://www.mallog24.vercel.app",
+    "https://mallog24.com",
+    "https://www.mallog24.com",
+    "https://ours.mallog24.com",
 ]
 DEFAULT_OAUTH_REDIRECT_HOSTS = [
     "localhost",
@@ -74,6 +77,8 @@ DEFAULT_OAUTH_REDIRECT_HOSTS = [
     "www.malloc24.vercel.app",
     "mallog24.vercel.app",
     "www.mallog24.vercel.app",
+    "mallog24.com",
+    "www.mallog24.com",
 ]
 DEFAULT_OAUTH_REDIRECT_SCHEMES = [
     "http",

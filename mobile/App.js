@@ -18,7 +18,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import NmPressable from "./components/NmPressable";
 import FadeInView from "./components/FadeInView";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://darakbang-transcription-backend.onrender.com";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://api.mallog24.com";
 const AUTH_TOKEN_KEY = "mallog24_access_token";
 const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";

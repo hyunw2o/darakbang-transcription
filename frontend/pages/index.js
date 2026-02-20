@@ -230,7 +230,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const pollStartTime = useRef(null)
   const toastTimerRef = useRef(null)
   const fileDurationProbeRef = useRef(0)
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
@@ -1063,7 +1063,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
             <div className="nm-flat p-4 mb-5 animate-nm-card-in">
               <p className="text-xs sm:text-sm text-nm-accent font-medium">
-                mallog24는 공식적으로 배포된 음성 파일의 사용을 권장 합니다. 부정적인 방법으로 사용 중 외부에 적발시 법적인 책임이 없음을 알립니다.
+                mallog24는 공식적으로 배포된 음성 파일의 사용을 권장 합니다. <br />부정적인 방법으로 사용 중 외부에 적발시 법적인 책임이 없음을 알립니다.
               </p>
             </div>
             {/* 업로드 카드 */}
