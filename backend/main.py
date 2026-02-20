@@ -113,7 +113,14 @@ FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", 
 FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(3시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
 USAGE_TABLE_NAME = "user_usage_quotas"
 USAGE_FREE_PLAN = "free"
+USAGE_ADMIN_PLAN = "admin"
 USAGE_TIMEZONE = (os.getenv("USAGE_TIMEZONE") or "Asia/Seoul").strip() or "Asia/Seoul"
+ADMIN_BYPASS_USER_IDS = {
+    value.lower() for value in _parse_csv_env("ADMIN_BYPASS_USER_IDS", []) if value
+}
+ADMIN_BYPASS_EMAILS = {
+    value.lower() for value in _parse_csv_env("ADMIN_BYPASS_EMAILS", []) if value
+}
 BILLING_TABLE_NAME = "billing_subscriptions"
 BILLING_PROVIDER = (os.getenv("BILLING_PROVIDER") or "portone").strip().lower()
 SUPPORTED_BILLING_PROVIDERS = {"portone", "tosspayments", "stripe"}
@@ -989,6 +996,16 @@ def _resolve_plan_tier_from_subscription_status(status: str | None) -> str:
     return USAGE_FREE_PLAN
 
 
+def _is_admin_bypass_user(user: dict | None = None, user_id: str | None = None, email: str | None = None) -> bool:
+    resolved_user_id = (user_id or (user or {}).get("id") or "").strip().lower()
+    resolved_email = (email or (user or {}).get("email") or "").strip().lower()
+    if resolved_user_id and resolved_user_id in ADMIN_BYPASS_USER_IDS:
+        return True
+    if resolved_email and resolved_email in ADMIN_BYPASS_EMAILS:
+        return True
+    return False
+
+
 def _set_user_plan_tier(user_id: str, plan_tier: str) -> None:
     safe_plan = (plan_tier or USAGE_FREE_PLAN).strip().lower() or USAGE_FREE_PLAN
     row = _get_or_create_usage_row(user_id)
@@ -1028,14 +1045,21 @@ def _resolve_or_create_stripe_customer(user: dict) -> str:
     return created.id
 
 
-def _build_billing_status_payload(user_id: str) -> dict:
+def _build_billing_status_payload(user: dict) -> dict:
+    user_id = user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="사용자 정보가 유효하지 않습니다.")
+
     provider = _get_billing_provider_or_raise()
     checkout_mode = _get_checkout_mode(provider)
     checkout_supported = checkout_mode != "disabled"
     portal_supported = provider == "stripe" and checkout_mode == "live"
 
     usage_row = _get_or_create_usage_row(user_id)
-    usage_snapshot = _build_usage_snapshot(usage_row)
+    usage_snapshot = _build_usage_snapshot(
+        usage_row,
+        is_admin_bypass=_is_admin_bypass_user(user=user),
+    )
     billing_row = _fetch_billing_row_by_user_id(user_id)
     normalized_billing = _normalize_billing_row(billing_row or {}, user_id=user_id)
     normalized_billing["provider"] = provider
@@ -1125,9 +1149,21 @@ def _get_or_create_usage_row(user_id: str) -> dict:
     return normalized
 
 
-def _build_usage_snapshot(row: dict) -> dict:
+def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False) -> dict:
     plan_tier = row["plan_tier"]
     used_seconds = int(row["used_audio_seconds"])
+
+    if is_admin_bypass:
+        return {
+            "plan_tier": USAGE_ADMIN_PLAN,
+            "used_audio_seconds": used_seconds,
+            "monthly_limit_seconds": None,
+            "remaining_seconds": None,
+            "usage_percent": 0.0,
+            "usage_month": row["usage_month"],
+            "can_upload": True,
+            "is_admin_bypass": True,
+        }
 
     if plan_tier == USAGE_FREE_PLAN:
         limit_seconds = FREE_MONTHLY_LIMIT_SECONDS
@@ -1141,6 +1177,7 @@ def _build_usage_snapshot(row: dict) -> dict:
             "usage_percent": usage_percent,
             "usage_month": row["usage_month"],
             "can_upload": remaining_seconds > 0,
+            "is_admin_bypass": False,
         }
 
     return {
@@ -1151,15 +1188,20 @@ def _build_usage_snapshot(row: dict) -> dict:
         "usage_percent": 0.0,
         "usage_month": row["usage_month"],
         "can_upload": True,
+        "is_admin_bypass": False,
     }
 
 
-def _enforce_upload_quota_or_raise(user_id: str, upload_audio_seconds: int) -> dict:
+def _enforce_upload_quota_or_raise(user: dict, upload_audio_seconds: int) -> dict:
     if upload_audio_seconds <= 0:
         raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없습니다.")
 
+    user_id = user["id"]
     row = _get_or_create_usage_row(user_id)
-    snapshot = _build_usage_snapshot(row)
+    snapshot = _build_usage_snapshot(
+        row,
+        is_admin_bypass=_is_admin_bypass_user(user=user),
+    )
 
     if snapshot["plan_tier"] == USAGE_FREE_PLAN:
         projected = int(snapshot["used_audio_seconds"]) + upload_audio_seconds
@@ -1950,7 +1992,7 @@ async def transcribe_audio(
             temp_file_path = temp_file.name
 
         audio_seconds = _extract_audio_duration_seconds(temp_file_path)
-        usage_snapshot = _enforce_upload_quota_or_raise(user_id, audio_seconds)
+        usage_snapshot = _enforce_upload_quota_or_raise(user, audio_seconds)
 
         task_id = str(uuid.uuid4())
         task_status[task_id] = "queued"
@@ -2103,7 +2145,10 @@ async def get_usage(authorization: str | None = Header(default=None)):
     """로그인 사용자 월간 음성 사용량 조회"""
     user = _get_current_user(authorization)
     row = _get_or_create_usage_row(user["id"])
-    snapshot = _build_usage_snapshot(row)
+    snapshot = _build_usage_snapshot(
+        row,
+        is_admin_bypass=_is_admin_bypass_user(user=user),
+    )
     return {
         "success": True,
         **snapshot,
@@ -2131,7 +2176,7 @@ async def get_billing_status(authorization: str | None = Header(default=None)):
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
     user = _get_current_user(authorization)
-    status = _build_billing_status_payload(user["id"])
+    status = _build_billing_status_payload(user)
     return {
         "success": True,
         **status,

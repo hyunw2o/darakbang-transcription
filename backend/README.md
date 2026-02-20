@@ -71,6 +71,8 @@ uvicorn main:app --reload
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
    - `FREE_MONTHLY_LIMIT_SECONDS` (기본 10800, 무료 3시간)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
+   - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회)
+   - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준)
    - `BILLING_PROVIDER` (권장 기본 `portone`, 필요 시 `stripe`)
    - `BILLING_TEST_MODE` (테스트 플로우 확인 시 `true`)
    - `MOCK_CHECKOUT_SESSION_TTL_SECONDS` (기본 1800초)
