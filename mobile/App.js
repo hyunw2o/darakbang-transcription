@@ -855,6 +855,15 @@ function App() {
   const legalDocs = LEGAL_DOCUMENTS[language] || LEGAL_DOCUMENTS.ko;
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
   const compactLayout = screenHeight < 760;
+  const tinyLayout = screenHeight < 680;
+  const legalModalMaxHeight = Math.max(
+    420,
+    Math.round(screenHeight * (tinyLayout ? 0.78 : compactLayout ? 0.84 : 0.9))
+  );
+  const privacyModalMaxHeight = Math.max(
+    380,
+    Math.round(screenHeight * (tinyLayout ? 0.72 : compactLayout ? 0.8 : 0.86))
+  );
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
@@ -1929,24 +1938,49 @@ function App() {
       )}
 
       {activeLegalDoc ? (
-        <View style={[styles.legalOverlay, { backgroundColor: "rgba(5, 12, 24, 0.64)" }]}>
+        <View
+          style={[
+            styles.legalOverlay,
+            compactLayout ? styles.modalOverlayCompact : null,
+            tinyLayout ? styles.modalOverlayTiny : null,
+            { backgroundColor: "rgba(5, 12, 24, 0.64)" },
+          ]}
+        >
           <FadeInView duration={220}>
             <View
               style={[
                 styles.legalModal,
                 compactLayout ? styles.legalModalCompact : null,
-                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                tinyLayout ? styles.legalModalTiny : null,
+                {
+                  backgroundColor: activeTheme.surface,
+                  borderColor: activeTheme.inputBorder,
+                  maxHeight: legalModalMaxHeight,
+                },
               ]}
             >
               <ScrollView
-                style={styles.legalModalScroll}
-                contentContainerStyle={styles.legalModalContent}
+                style={[styles.legalModalScroll, tinyLayout ? styles.modalScrollTiny : null]}
+                contentContainerStyle={[styles.legalModalContent, tinyLayout ? styles.modalContentTiny : null]}
                 showsVerticalScrollIndicator={false}
               >
-                <Text style={[styles.privacyTitle, { color: activeTheme.textPrimary }]}>
+                <Text
+                  style={[
+                    styles.privacyTitle,
+                    compactLayout ? styles.privacyTitleCompact : null,
+                    tinyLayout ? styles.privacyTitleTiny : null,
+                    { color: activeTheme.textPrimary },
+                  ]}
+                >
                   {activeLegalDoc.title}
                 </Text>
-                <Text style={[styles.legalUpdatedText, { color: activeTheme.textSecondary }]}>
+                <Text
+                  style={[
+                    styles.legalUpdatedText,
+                    tinyLayout ? styles.legalUpdatedTextTiny : null,
+                    { color: activeTheme.textSecondary },
+                  ]}
+                >
                   {activeLegalDoc.updatedAt}
                 </Text>
 
@@ -1955,16 +1989,27 @@ function App() {
                     key={`${activeLegalDoc.title}-${section.title}`}
                     style={[
                       styles.legalSectionBox,
+                      tinyLayout ? styles.legalSectionBoxTiny : null,
                       { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder },
                     ]}
                   >
-                    <Text style={[styles.legalSectionTitle, { color: activeTheme.textPrimary }]}>
+                    <Text
+                      style={[
+                        styles.legalSectionTitle,
+                        tinyLayout ? styles.legalSectionTitleTiny : null,
+                        { color: activeTheme.textPrimary },
+                      ]}
+                    >
                       {section.title}
                     </Text>
                     {section.body.map((line, index) => (
                       <Text
                         key={`${section.title}-${index}`}
-                        style={[styles.legalSectionBody, { color: activeTheme.textPrimary }]}
+                        style={[
+                          styles.legalSectionBody,
+                          tinyLayout ? styles.legalSectionBodyTiny : null,
+                          { color: activeTheme.textPrimary },
+                        ]}
                       >
                         • {line}
                       </Text>
@@ -1976,6 +2021,7 @@ function App() {
               <NmPressable
                 style={[
                   styles.privacyAcceptButton,
+                  tinyLayout ? styles.privacyAcceptButtonTiny : null,
                   { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
                 ]}
                 onPress={closeLegalDocument}
@@ -1988,64 +2034,96 @@ function App() {
       ) : null}
 
       {!privacyAccepted ? (
-        <View style={[styles.privacyOverlay, { backgroundColor: "rgba(5, 12, 24, 0.58)" }]}>
+        <View
+          style={[
+            styles.privacyOverlay,
+            compactLayout ? styles.modalOverlayCompact : null,
+            tinyLayout ? styles.modalOverlayTiny : null,
+            { backgroundColor: "rgba(5, 12, 24, 0.58)" },
+          ]}
+        >
           <FadeInView duration={260}>
-            <View style={[styles.privacyModal, compactLayout ? styles.privacyModalCompact : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-              <ScrollView style={styles.privacyModalScroll} contentContainerStyle={styles.privacyModalContent} showsVerticalScrollIndicator={false}>
-                <Text style={[styles.privacyTitle, { color: activeTheme.textPrimary }]}>{copy.privacy.title}</Text>
-                <Text style={[styles.privacyBody, { color: activeTheme.textSecondary }]}>
+            <View
+              style={[
+                styles.privacyModal,
+                compactLayout ? styles.privacyModalCompact : null,
+                tinyLayout ? styles.privacyModalTiny : null,
+                {
+                  backgroundColor: activeTheme.surface,
+                  borderColor: activeTheme.inputBorder,
+                  maxHeight: privacyModalMaxHeight,
+                },
+              ]}
+            >
+              <ScrollView
+                style={[styles.privacyModalScroll, tinyLayout ? styles.modalScrollTiny : null]}
+                contentContainerStyle={[styles.privacyModalContent, tinyLayout ? styles.modalContentTiny : null]}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text
+                  style={[
+                    styles.privacyTitle,
+                    compactLayout ? styles.privacyTitleCompact : null,
+                    tinyLayout ? styles.privacyTitleTiny : null,
+                    { color: activeTheme.textPrimary },
+                  ]}
+                >
+                  {copy.privacy.title}
+                </Text>
+                <Text style={[styles.privacyBody, compactLayout ? styles.privacyBodyCompact : null, tinyLayout ? styles.privacyBodyTiny : null, { color: activeTheme.textSecondary }]}>
                   {copy.privacy.body}
                 </Text>
 
-                <View style={[styles.privacySummaryBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                <View style={[styles.privacySummaryBox, tinyLayout ? styles.privacySummaryBoxTiny : null, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryFile}
                   </Text>
-                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryText}
                   </Text>
-                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryVendors}
                   </Text>
-                  <Text style={[styles.privacySummaryItem, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summarySocial}
                   </Text>
                 </View>
 
                 <NmPressable
-                  style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  style={[styles.privacyLinkButton, tinyLayout ? styles.privacyLinkButtonTiny : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={() => openLegalDocument("privacy")}
                 >
-                  <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewPolicy}</Text>
+                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, { color: activeTheme.accent }]}>{copy.privacy.viewPolicy}</Text>
                 </NmPressable>
 
                 <NmPressable
-                  style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  style={[styles.privacyLinkButton, tinyLayout ? styles.privacyLinkButtonTiny : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={() => openLegalDocument("terms")}
                 >
-                  <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewTerms}</Text>
+                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, { color: activeTheme.accent }]}>{copy.privacy.viewTerms}</Text>
                 </NmPressable>
 
                 <NmPressable
-                  style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  style={[styles.privacyLinkButton, tinyLayout ? styles.privacyLinkButtonTiny : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={() => openLegalDocument("company-policy")}
                 >
-                  <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewCompanyPolicy}</Text>
+                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, { color: activeTheme.accent }]}>{copy.privacy.viewCompanyPolicy}</Text>
                 </NmPressable>
 
                 <NmPressable
-                  style={[styles.privacyCheckRow, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
+                  style={[styles.privacyCheckRow, tinyLayout ? styles.privacyCheckRowTiny : null, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
                   onPress={() => setPrivacyConsentChecked((prev) => !prev)}
                 >
                   <View
                     style={[
                       styles.privacyCheckBox,
+                      tinyLayout ? styles.privacyCheckBoxTiny : null,
                       { borderColor: activeTheme.inputBorder, backgroundColor: privacyConsentChecked ? activeTheme.accent : "transparent" },
                     ]}
                   >
                     {privacyConsentChecked ? <Text style={styles.privacyCheckMark}>✓</Text> : null}
                   </View>
-                  <Text style={[styles.privacyCheckText, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacyCheckText, tinyLayout ? styles.privacyCheckTextTiny : null, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.check}
                   </Text>
                 </NmPressable>
@@ -2053,13 +2131,14 @@ function App() {
                 <NmPressable
                   style={[
                     styles.privacyAcceptButton,
+                    tinyLayout ? styles.privacyAcceptButtonTiny : null,
                     { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
                     !privacyConsentChecked || privacyConsentSaving ? styles.buttonDisabled : null,
                   ]}
                   onPress={handleAcceptPrivacyPolicy}
                   disabled={!privacyConsentChecked || privacyConsentSaving}
                 >
-                  <Text style={styles.privacyAcceptButtonText}>
+                  <Text style={[styles.privacyAcceptButtonText, tinyLayout ? styles.privacyAcceptButtonTextTiny : null]}>
                     {privacyConsentSaving ? copy.privacy.saving : copy.privacy.accept}
                   </Text>
                 </NmPressable>
@@ -2599,6 +2678,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  modalOverlayCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modalOverlayTiny: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   legalOverlay: {
     position: "absolute",
     top: 0,
@@ -2629,17 +2716,34 @@ const styles = StyleSheet.create({
     maxHeight: "92%",
     padding: 14,
   },
+  legalModalTiny: {
+    borderRadius: 16,
+    padding: 10,
+    gap: 8,
+  },
   legalModalScroll: {
     flexGrow: 0,
+    flexShrink: 1,
   },
   legalModalContent: {
     gap: 10,
     paddingBottom: 2,
   },
+  modalScrollTiny: {
+    maxHeight: "100%",
+  },
+  modalContentTiny: {
+    gap: 8,
+    paddingBottom: 0,
+  },
   legalUpdatedText: {
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "600",
+  },
+  legalUpdatedTextTiny: {
+    fontSize: 10,
+    lineHeight: 14,
   },
   legalSectionBox: {
     borderRadius: 12,
@@ -2648,15 +2752,29 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 7,
   },
+  legalSectionBoxTiny: {
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    gap: 5,
+  },
   legalSectionTitle: {
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "800",
   },
+  legalSectionTitleTiny: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
   legalSectionBody: {
     fontSize: 11,
     lineHeight: 17,
     fontWeight: "600",
+  },
+  legalSectionBodyTiny: {
+    fontSize: 10,
+    lineHeight: 15,
   },
   privacyOverlay: {
     position: "absolute",
@@ -2687,8 +2805,13 @@ const styles = StyleSheet.create({
     maxHeight: "90%",
     padding: 14,
   },
+  privacyModalTiny: {
+    borderRadius: 16,
+    padding: 10,
+  },
   privacyModalScroll: {
     flexGrow: 0,
+    flexShrink: 1,
   },
   privacyModalContent: {
     gap: 11,
@@ -2700,10 +2823,26 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     letterSpacing: -0.25,
   },
+  privacyTitleCompact: {
+    fontSize: 16,
+  },
+  privacyTitleTiny: {
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.15,
+  },
   privacyBody: {
     fontSize: 12,
     lineHeight: 18,
     color: NM.textSecondary,
+  },
+  privacyBodyCompact: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  privacyBodyTiny: {
+    fontSize: 10,
+    lineHeight: 15,
   },
   privacySummaryBox: {
     borderRadius: 12,
@@ -2712,11 +2851,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 7,
   },
+  privacySummaryBoxTiny: {
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    gap: 5,
+  },
   privacySummaryItem: {
     fontSize: 11,
     lineHeight: 17,
     color: NM.textPrimary,
     fontWeight: "600",
+  },
+  privacySummaryItemCompact: {
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  privacySummaryItemTiny: {
+    fontSize: 9.5,
+    lineHeight: 14,
   },
   privacyLinkButton: {
     borderRadius: 999,
@@ -2724,9 +2877,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
+  privacyLinkButtonTiny: {
+    paddingVertical: 8,
+  },
   privacyLinkText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  privacyLinkTextTiny: {
+    fontSize: 11,
   },
   privacyCheckRow: {
     flexDirection: "row",
@@ -2737,6 +2896,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 10,
   },
+  privacyCheckRowTiny: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 8,
+  },
   privacyCheckBox: {
     width: 20,
     height: 20,
@@ -2744,6 +2908,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  privacyCheckBoxTiny: {
+    width: 18,
+    height: 18,
   },
   privacyCheckMark: {
     color: "#ffffff",
@@ -2757,6 +2925,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: NM.textPrimary,
   },
+  privacyCheckTextTiny: {
+    fontSize: 10.5,
+    lineHeight: 15,
+  },
   privacyAcceptButton: {
     borderRadius: 999,
     borderWidth: 1,
@@ -2768,9 +2940,15 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 4,
   },
+  privacyAcceptButtonTiny: {
+    paddingVertical: 10,
+  },
   privacyAcceptButtonText: {
     color: "#ffffff",
     fontSize: 13,
     fontWeight: "800",
+  },
+  privacyAcceptButtonTextTiny: {
+    fontSize: 12,
   },
 });
