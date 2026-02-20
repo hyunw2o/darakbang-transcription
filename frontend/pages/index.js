@@ -19,33 +19,70 @@ const formatSecondsToHourMinute = (seconds) => {
   return `${hours}시간 ${minutes}분`
 }
 
-const getAudioDurationSecondsInBrowser = (file) =>
-  new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file)
-    const audio = document.createElement('audio')
-    audio.preload = 'metadata'
-    audio.src = objectUrl
+const getAudioDurationSecondsInBrowser = async (file) => {
+  const fromMetadata = () =>
+    new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file)
+      const audio = document.createElement('audio')
+      audio.preload = 'metadata'
+      audio.src = objectUrl
 
-    const cleanup = () => {
-      URL.revokeObjectURL(objectUrl)
-      audio.removeAttribute('src')
-    }
-
-    audio.onloadedmetadata = () => {
-      const duration = Number(audio.duration)
-      cleanup()
-      if (!Number.isFinite(duration) || duration <= 0) {
-        reject(new Error('파일 길이를 브라우저에서 확인하지 못했습니다.'))
-        return
+      const cleanup = () => {
+        URL.revokeObjectURL(objectUrl)
+        audio.removeAttribute('src')
       }
-      resolve(Math.max(1, Math.ceil(duration)))
+
+      const timeoutId = window.setTimeout(() => {
+        cleanup()
+        reject(new Error('metadata-timeout'))
+      }, 6000)
+
+      audio.onloadedmetadata = () => {
+        window.clearTimeout(timeoutId)
+        const duration = Number(audio.duration)
+        cleanup()
+        if (!Number.isFinite(duration) || duration <= 0) {
+          reject(new Error('invalid-metadata-duration'))
+          return
+        }
+        resolve(Math.max(1, Math.ceil(duration)))
+      }
+
+      audio.onerror = () => {
+        window.clearTimeout(timeoutId)
+        cleanup()
+        reject(new Error('metadata-error'))
+      }
+    })
+
+  const fromDecode = async () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) {
+      throw new Error('audio-context-unavailable')
     }
 
-    audio.onerror = () => {
-      cleanup()
-      reject(new Error('파일 길이를 브라우저에서 확인하지 못했습니다.'))
+    const audioContext = new AudioContextClass()
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0))
+      const duration = Number(decoded.duration)
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new Error('invalid-decoded-duration')
+      }
+      return Math.max(1, Math.ceil(duration))
+    } finally {
+      if (typeof audioContext.close === 'function') {
+        audioContext.close().catch(() => {})
+      }
     }
-  })
+  }
+
+  try {
+    return await fromMetadata()
+  } catch {
+    return fromDecode()
+  }
+}
 
 function HeaderMenuControls({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode, locale = 'kr' }) {
   const menuRef = useRef(null)
@@ -451,8 +488,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (fileDurationProbeRef.current !== probeId) return
       setFile(selectedFile)
       setFileDurationSeconds(0)
-      setError('브라우저에서 길이 확인에 실패했습니다. 업로드 시 서버에서 다시 검사합니다.')
-      setNotice(null)
+      setError(null)
+      setNotice('브라우저에서 길이 확인에 실패해 업로드는 진행합니다. 서버에서 길이를 다시 검사합니다.')
       setResult(null)
       setRecordDrafts({})
     }
