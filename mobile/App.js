@@ -26,6 +26,12 @@ const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
 const PRIVACY_POLICY_VERSION = "2026-02-19";
 const PRIVACY_POLICY_URL_KO = process.env.EXPO_PUBLIC_PRIVACY_URL_KO || "https://ours.mallog24.com/privacy";
 const PRIVACY_POLICY_URL_EN = process.env.EXPO_PUBLIC_PRIVACY_URL_EN || "https://ours.mallog24.com/privacy-en";
+const TERMS_URL_KO = process.env.EXPO_PUBLIC_TERMS_URL_KO || "https://ours.mallog24.com/terms";
+const TERMS_URL_EN = process.env.EXPO_PUBLIC_TERMS_URL_EN || "https://ours.mallog24.com/terms-en";
+const COMPANY_POLICY_URL_KO =
+  process.env.EXPO_PUBLIC_COMPANY_POLICY_URL_KO || "https://ours.mallog24.com/company-policy";
+const COMPANY_POLICY_URL_EN =
+  process.env.EXPO_PUBLIC_COMPANY_POLICY_URL_EN || "https://ours.mallog24.com/company-policy-en";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [
@@ -126,6 +132,7 @@ const I18N = {
   ko: {
     languageOptionKo: "한국어",
     languageOptionEn: "English",
+    legalMenu: "정책 메뉴",
     loadingApp: "앱 초기화 중...",
     authIntro: "AI 음성 기록, 지금 시작하세요.",
     authSubcopy: "로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.",
@@ -145,6 +152,11 @@ const I18N = {
       transcribe: "변환",
       history: "히스토리",
       records: "기록본",
+    },
+    legal: {
+      openPrivacy: "개인정보처리방침",
+      openTerms: "이용약관",
+      openCompanyPolicy: "회사 정책",
     },
     transcriptionTypes: {
       sermon: "설교",
@@ -195,6 +207,8 @@ const I18N = {
       summaryVendors: "• 처리 위탁: Supabase, OpenAI, Google(Gemini)",
       summarySocial: "• 소셜 로그인: Google/Kakao 계정 정보(이메일, 프로필, UID)",
       viewPolicy: "개인정보처리방침 전문 보기",
+      viewTerms: "이용약관 보기",
+      viewCompanyPolicy: "회사 정책 보기",
       check: "개인정보처리방침을 확인했고 동의합니다.",
       accept: "동의하고 시작하기",
       saving: "저장 중...",
@@ -244,6 +258,10 @@ const I18N = {
       saveFailed: "기록본 저장 실패",
       openPrivacyFailed: "개인정보처리방침 페이지를 열 수 없습니다.",
       openPrivacyLinkFailed: "개인정보처리방침 링크를 열 수 없습니다.",
+      openTermsFailed: "이용약관 페이지를 열 수 없습니다.",
+      openTermsLinkFailed: "이용약관 링크를 열 수 없습니다.",
+      openCompanyPolicyFailed: "회사 정책 페이지를 열 수 없습니다.",
+      openCompanyPolicyLinkFailed: "회사 정책 링크를 열 수 없습니다.",
       privacySaveFailed: "동의 상태 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
       requestFailedPrefix: "요청 실패",
       timeout: "요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.",
@@ -266,6 +284,7 @@ const I18N = {
   en: {
     languageOptionKo: "Korean",
     languageOptionEn: "English",
+    legalMenu: "Legal menu",
     loadingApp: "Initializing app...",
     authIntro: "Start AI speech records now.",
     authSubcopy: "Sign in to upload files and start transcription.",
@@ -285,6 +304,11 @@ const I18N = {
       transcribe: "Transcribe",
       history: "History",
       records: "Records",
+    },
+    legal: {
+      openPrivacy: "Privacy Policy",
+      openTerms: "Terms of Service",
+      openCompanyPolicy: "Company Policy",
     },
     transcriptionTypes: {
       sermon: "Sermon",
@@ -335,6 +359,8 @@ const I18N = {
       summaryVendors: "• Processors: Supabase, OpenAI, Google (Gemini)",
       summarySocial: "• Social login: Google/Kakao account data (email, profile, UID)",
       viewPolicy: "View full privacy policy",
+      viewTerms: "View terms of service",
+      viewCompanyPolicy: "View company policy",
       check: "I have reviewed and agree to the Privacy Policy.",
       accept: "Agree and Continue",
       saving: "Saving...",
@@ -384,6 +410,10 @@ const I18N = {
       saveFailed: "Failed to save record",
       openPrivacyFailed: "Unable to open the privacy policy page.",
       openPrivacyLinkFailed: "Unable to open privacy policy link.",
+      openTermsFailed: "Unable to open terms of service page.",
+      openTermsLinkFailed: "Unable to open terms of service link.",
+      openCompanyPolicyFailed: "Unable to open company policy page.",
+      openCompanyPolicyLinkFailed: "Unable to open company policy link.",
       privacySaveFailed: "Failed to save consent state. Please try again.",
       requestFailedPrefix: "Request failed",
       timeout: "Request timed out. Please check server status.",
@@ -1168,14 +1198,30 @@ function App() {
     setOpenSettingsMenu("");
   };
 
-  const openPrivacyPolicy = async () => {
-    const targetUrl = language === "en" ? PRIVACY_POLICY_URL_EN : PRIVACY_POLICY_URL_KO;
+  const openLegalDocument = async (documentType) => {
+    const isEn = language === "en";
+    let targetUrl = "";
+    let linkErrorMessage = copy.errors.openPrivacyLinkFailed;
+    let openErrorMessage = copy.errors.openPrivacyFailed;
+
+    if (documentType === "terms") {
+      targetUrl = isEn ? TERMS_URL_EN : TERMS_URL_KO;
+      linkErrorMessage = copy.errors.openTermsLinkFailed;
+      openErrorMessage = copy.errors.openTermsFailed;
+    } else if (documentType === "company-policy") {
+      targetUrl = isEn ? COMPANY_POLICY_URL_EN : COMPANY_POLICY_URL_KO;
+      linkErrorMessage = copy.errors.openCompanyPolicyLinkFailed;
+      openErrorMessage = copy.errors.openCompanyPolicyFailed;
+    } else {
+      targetUrl = isEn ? PRIVACY_POLICY_URL_EN : PRIVACY_POLICY_URL_KO;
+    }
+
     try {
       const supported = await Linking.canOpenURL(targetUrl);
-      if (!supported) throw new Error(copy.errors.openPrivacyLinkFailed);
+      if (!supported) throw new Error(linkErrorMessage);
       await Linking.openURL(targetUrl);
     } catch (e) {
-      setError(e.message || copy.errors.openPrivacyFailed);
+      setError(e.message || openErrorMessage);
     }
   };
 
@@ -1201,14 +1247,23 @@ function App() {
         <NmPressable
           style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
           onPress={() => setOpenSettingsMenu((prev) => (prev === "language" ? "" : "language"))}
+          accessibilityLabel={copy.languageOptionEn}
         >
           <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>🌐</Text>
         </NmPressable>
         <NmPressable
           style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
           onPress={() => setOpenSettingsMenu((prev) => (prev === "theme" ? "" : "theme"))}
+          accessibilityLabel="Theme menu"
         >
           <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>◐</Text>
+        </NmPressable>
+        <NmPressable
+          style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
+          onPress={() => setOpenSettingsMenu((prev) => (prev === "legal" ? "" : "legal"))}
+          accessibilityLabel={copy.legalMenu}
+        >
+          <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>⚖︎</Text>
         </NmPressable>
       </View>
 
@@ -1258,6 +1313,44 @@ function App() {
               </NmPressable>
             );
           })}
+        </View>
+      ) : null}
+
+      {openSettingsMenu === "legal" ? (
+        <View style={[styles.quickMenu, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+          <NmPressable
+            style={[styles.quickMenuItem, { borderColor: activeTheme.inputBorder }]}
+            onPress={() => {
+              openLegalDocument("privacy");
+              setOpenSettingsMenu("");
+            }}
+          >
+            <Text style={[styles.quickMenuText, { color: activeTheme.textPrimary }]}>
+              {copy.legal.openPrivacy}
+            </Text>
+          </NmPressable>
+          <NmPressable
+            style={[styles.quickMenuItem, { borderColor: activeTheme.inputBorder }]}
+            onPress={() => {
+              openLegalDocument("terms");
+              setOpenSettingsMenu("");
+            }}
+          >
+            <Text style={[styles.quickMenuText, { color: activeTheme.textPrimary }]}>
+              {copy.legal.openTerms}
+            </Text>
+          </NmPressable>
+          <NmPressable
+            style={[styles.quickMenuItem, { borderColor: activeTheme.inputBorder }]}
+            onPress={() => {
+              openLegalDocument("company-policy");
+              setOpenSettingsMenu("");
+            }}
+          >
+            <Text style={[styles.quickMenuText, { color: activeTheme.textPrimary }]}>
+              {copy.legal.openCompanyPolicy}
+            </Text>
+          </NmPressable>
         </View>
       ) : null}
     </View>
@@ -1661,9 +1754,23 @@ function App() {
 
                 <NmPressable
                   style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                  onPress={openPrivacyPolicy}
+                  onPress={() => openLegalDocument("privacy")}
                 >
                   <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewPolicy}</Text>
+                </NmPressable>
+
+                <NmPressable
+                  style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  onPress={() => openLegalDocument("terms")}
+                >
+                  <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewTerms}</Text>
+                </NmPressable>
+
+                <NmPressable
+                  style={[styles.privacyLinkButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  onPress={() => openLegalDocument("company-policy")}
+                >
+                  <Text style={[styles.privacyLinkText, { color: activeTheme.accent }]}>{copy.privacy.viewCompanyPolicy}</Text>
                 </NmPressable>
 
                 <NmPressable

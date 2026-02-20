@@ -269,6 +269,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const fileDurationProbeRef = useRef(0)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
+  const OURS_PRIVACY_URL = `${OURS_URL}/privacy-en`
+  const OURS_TERMS_URL = `${OURS_URL}/terms-en`
+  const OURS_COMPANY_POLICY_URL = `${OURS_URL}/company-policy-en`
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000
@@ -1546,6 +1549,19 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
         {/* 푸터 */}
         <footer className="mt-12 text-center">
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+            <a href={OURS_PRIVACY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
+              Privacy Policy
+            </a>
+            <span className="text-nm-text-secondary">·</span>
+            <a href={OURS_TERMS_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
+              Terms of Service
+            </a>
+            <span className="text-nm-text-secondary">·</span>
+            <a href={OURS_COMPANY_POLICY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
+              Company Policy
+            </a>
+          </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.
           </p>
