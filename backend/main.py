@@ -772,10 +772,22 @@ def _ensure_user_usage_scope_ready() -> None:
         USAGE_SCOPE_VALIDATED = True
     except Exception as e:
         error_text = str(e).lower()
-        if USAGE_TABLE_NAME in error_text and ("does not exist" in error_text or "relation" in error_text):
+        if (
+            USAGE_TABLE_NAME in error_text
+            and (
+                "does not exist" in error_text
+                or "relation" in error_text
+                or "schema cache" in error_text
+                or "could not find the table" in error_text
+                or "pgrst205" in error_text
+            )
+        ):
             raise HTTPException(
                 status_code=500,
-                detail="Supabase 설정 필요: backend/sql/user_usage_quota.sql 을 먼저 실행하세요.",
+                detail=(
+                    "Supabase 설정 필요: backend/sql/user_usage_quota.sql 을 실행한 뒤 "
+                    "SQL Editor에서 `NOTIFY pgrst, 'reload schema';` 를 실행하세요."
+                ),
             )
         raise
 
@@ -790,10 +802,22 @@ def _ensure_billing_scope_ready() -> None:
         BILLING_SCOPE_VALIDATED = True
     except Exception as e:
         error_text = str(e).lower()
-        if BILLING_TABLE_NAME in error_text and ("does not exist" in error_text or "relation" in error_text):
+        if (
+            BILLING_TABLE_NAME in error_text
+            and (
+                "does not exist" in error_text
+                or "relation" in error_text
+                or "schema cache" in error_text
+                or "could not find the table" in error_text
+                or "pgrst205" in error_text
+            )
+        ):
             raise HTTPException(
                 status_code=500,
-                detail="Supabase 설정 필요: backend/sql/billing_subscriptions.sql 을 먼저 실행하세요.",
+                detail=(
+                    "Supabase 설정 필요: backend/sql/billing_subscriptions.sql 을 실행한 뒤 "
+                    "SQL Editor에서 `NOTIFY pgrst, 'reload schema';` 를 실행하세요."
+                ),
             )
         raise
 
