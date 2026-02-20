@@ -17,8 +17,8 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 
 ```bash
 EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
-EXPO_PUBLIC_PRIVACY_URL_KO=https://ours-homepage.vercel.app/privacy
-EXPO_PUBLIC_PRIVACY_URL_EN=https://ours-homepage.vercel.app/privacy-en
+EXPO_PUBLIC_PRIVACY_URL_KO=https://ours.mallog24.com/privacy
+EXPO_PUBLIC_PRIVACY_URL_EN=https://ours.mallog24.com/privacy-en
 ```
 
 기본값은 `https://darakbang-transcription-backend.onrender.com` 입니다.

@@ -79,6 +79,7 @@ DEFAULT_OAUTH_REDIRECT_HOSTS = [
     "www.mallog24.vercel.app",
     "mallog24.com",
     "www.mallog24.com",
+    "ours.mallog24.com",
 ]
 DEFAULT_OAUTH_REDIRECT_SCHEMES = [
     "http",

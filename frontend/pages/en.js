@@ -268,7 +268,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const toastTimerRef = useRef(null)
   const fileDurationProbeRef = useRef(0)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
-  const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours-homepage.vercel.app'
+  const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000

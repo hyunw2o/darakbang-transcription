@@ -24,8 +24,8 @@ const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
 const PRIVACY_POLICY_VERSION = "2026-02-19";
-const PRIVACY_POLICY_URL_KO = process.env.EXPO_PUBLIC_PRIVACY_URL_KO || "https://ours-homepage.vercel.app/privacy";
-const PRIVACY_POLICY_URL_EN = process.env.EXPO_PUBLIC_PRIVACY_URL_EN || "https://ours-homepage.vercel.app/privacy-en";
+const PRIVACY_POLICY_URL_KO = process.env.EXPO_PUBLIC_PRIVACY_URL_KO || "https://ours.mallog24.com/privacy";
+const PRIVACY_POLICY_URL_EN = process.env.EXPO_PUBLIC_PRIVACY_URL_EN || "https://ours.mallog24.com/privacy-en";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [

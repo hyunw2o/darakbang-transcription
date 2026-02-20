@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Head from 'next/head'
 import '../styles/globals.css'
 
 const THEME_KEY = 'mallog24-ui-theme'
@@ -77,14 +78,20 @@ export default function App({ Component, pageProps }) {
   }, [uiTheme, uiThemeMode])
 
   return (
-    <Component
-      {...pageProps}
-      darkMode={darkMode}
-      setDarkMode={setDarkMode}
-      uiThemeMode={uiThemeMode}
-      setUiThemeMode={setUiThemeMode}
-      uiTheme={uiTheme}
-      setUiTheme={setUiTheme}
-    />
+    <>
+      <Head>
+        <link rel="icon" type="image/png" href="/mallog24-app-icon.png" />
+        <link rel="apple-touch-icon" href="/mallog24-app-icon.png" />
+      </Head>
+      <Component
+        {...pageProps}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        uiThemeMode={uiThemeMode}
+        setUiThemeMode={setUiThemeMode}
+        uiTheme={uiTheme}
+        setUiTheme={setUiTheme}
+      />
+    </>
   )
 }
