@@ -24,14 +24,6 @@ const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
 const PRIVACY_POLICY_VERSION = "2026-02-19";
-const PRIVACY_POLICY_URL_KO = process.env.EXPO_PUBLIC_PRIVACY_URL_KO || "https://ours.mallog24.com/privacy";
-const PRIVACY_POLICY_URL_EN = process.env.EXPO_PUBLIC_PRIVACY_URL_EN || "https://ours.mallog24.com/privacy-en";
-const TERMS_URL_KO = process.env.EXPO_PUBLIC_TERMS_URL_KO || "https://ours.mallog24.com/terms";
-const TERMS_URL_EN = process.env.EXPO_PUBLIC_TERMS_URL_EN || "https://ours.mallog24.com/terms-en";
-const COMPANY_POLICY_URL_KO =
-  process.env.EXPO_PUBLIC_COMPANY_POLICY_URL_KO || "https://ours.mallog24.com/company-policy";
-const COMPANY_POLICY_URL_EN =
-  process.env.EXPO_PUBLIC_COMPANY_POLICY_URL_EN || "https://ours.mallog24.com/company-policy-en";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [
@@ -157,6 +149,7 @@ const I18N = {
       openPrivacy: "개인정보처리방침",
       openTerms: "이용약관",
       openCompanyPolicy: "회사 정책",
+      close: "닫기",
     },
     transcriptionTypes: {
       sermon: "설교",
@@ -309,6 +302,7 @@ const I18N = {
       openPrivacy: "Privacy Policy",
       openTerms: "Terms of Service",
       openCompanyPolicy: "Company Policy",
+      close: "Close",
     },
     transcriptionTypes: {
       sermon: "Sermon",
@@ -431,6 +425,227 @@ const I18N = {
       emailNotConfirmed: "Email verification is not complete. Please verify your email first.",
       timeout: "Auth server response is delayed. Please try again shortly.",
       default: "Authentication failed",
+    },
+  },
+};
+
+const LEGAL_DOCUMENTS = {
+  ko: {
+    privacy: {
+      title: "개인정보처리방침",
+      updatedAt: "최종 업데이트: 2026년 2월 20일",
+      sections: [
+        {
+          title: "1. 수집 및 처리 항목",
+          body: [
+            "회원 인증(이메일/소셜 로그인), 업로드 음성 파일, 변환 텍스트, 저장 기록본, 접속 로그를 처리할 수 있습니다.",
+          ],
+        },
+        {
+          title: "2. 처리 목적",
+          body: [
+            "로그인/회원관리, 음성 전사 및 교정, 요약, 기록본 저장, 고객지원 및 보안 대응을 위해 처리합니다.",
+          ],
+        },
+        {
+          title: "3. 보관 및 파기",
+          body: [
+            "원본 음성 파일은 처리 목적의 임시 저장 후 지체 없이 삭제합니다.",
+            "변환 결과와 기록본은 서비스 제공 범위 내 보관되며, 삭제 요청 또는 계정 정리 시 파기됩니다.",
+          ],
+        },
+        {
+          title: "4. 처리 위탁",
+          body: [
+            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini) 등 외부 처리사를 사용합니다.",
+          ],
+        },
+        {
+          title: "5. 문의",
+          body: ["문의: ours113814@gmail.com"],
+        },
+      ],
+    },
+    terms: {
+      title: "이용약관",
+      updatedAt: "시행일: 2026년 2월 20일",
+      sections: [
+        {
+          title: "1. 서비스 이용",
+          body: [
+            "mallog24는 음성 파일 전사/교정/요약/기록본 저장 기능을 제공합니다.",
+            "서비스 품질 향상을 위해 기능이 변경될 수 있습니다.",
+          ],
+        },
+        {
+          title: "2. 계정 관리",
+          body: [
+            "계정 및 인증정보 관리 책임은 이용자에게 있습니다.",
+            "보안 위험 또는 약관 위반 시 이용 제한이 적용될 수 있습니다.",
+          ],
+        },
+        {
+          title: "3. 금지 행위",
+          body: [
+            "권리침해/불법 콘텐츠 업로드, 서비스 우회/공격/악용, 무단 재판매를 금지합니다.",
+          ],
+        },
+        {
+          title: "4. 면책 및 책임",
+          body: [
+            "외부 API 장애, 통신 장애, 불가항력 상황에서 서비스 지연이 발생할 수 있습니다.",
+            "전사 결과의 최종 검토와 활용 책임은 이용자에게 있습니다.",
+          ],
+        },
+        {
+          title: "5. 문의",
+          body: ["문의: ours113814@gmail.com"],
+        },
+      ],
+    },
+    companyPolicy: {
+      title: "회사 정책",
+      updatedAt: "최종 업데이트: 2026년 2월 20일",
+      sections: [
+        {
+          title: "1. 운영 원칙",
+          body: [
+            "정확도, 보안, 안정성을 우선순위로 서비스 운영 및 개선을 진행합니다.",
+          ],
+        },
+        {
+          title: "2. 데이터 최소 처리",
+          body: [
+            "서비스 제공에 필요한 최소 데이터만 처리하며, 불필요한 보관을 지양합니다.",
+          ],
+        },
+        {
+          title: "3. 보안 정책",
+          body: [
+            "HTTPS, 토큰 인증, 권한 분리, 요청 제한 등 기본 보안조치를 적용합니다.",
+          ],
+        },
+        {
+          title: "4. AI 윤리",
+          body: [
+            "업로드 데이터는 서비스 처리 목적에 한정해 사용합니다.",
+            "불법/권리침해 이용 신고 시 내부 기준에 따라 검토 및 제한 조치합니다.",
+          ],
+        },
+        {
+          title: "5. 문의",
+          body: ["문의: ours113814@gmail.com"],
+        },
+      ],
+    },
+  },
+  en: {
+    privacy: {
+      title: "Privacy Policy",
+      updatedAt: "Last updated: February 20, 2026",
+      sections: [
+        {
+          title: "1. Data We Process",
+          body: [
+            "We may process account credentials, uploaded audio, transcript text, saved records, and access logs.",
+          ],
+        },
+        {
+          title: "2. Purpose",
+          body: [
+            "Data is used for authentication, transcription, correction, summarization, saved records, support, and security operations.",
+          ],
+        },
+        {
+          title: "3. Retention and Deletion",
+          body: [
+            "Source audio is handled in temporary storage and removed promptly after processing.",
+            "Transcript text and records are retained for service features and deleted upon request/account closure.",
+          ],
+        },
+        {
+          title: "4. Processors",
+          body: [
+            "We use Supabase (auth/database), OpenAI (Whisper), and Google (Gemini) for required processing.",
+          ],
+        },
+        {
+          title: "5. Contact",
+          body: ["Contact: ours113814@gmail.com"],
+        },
+      ],
+    },
+    terms: {
+      title: "Terms of Service",
+      updatedAt: "Effective date: February 20, 2026",
+      sections: [
+        {
+          title: "1. Service Use",
+          body: [
+            "mallog24 provides speech transcription, correction, summarization, and structured record features.",
+            "Features may change for quality and security improvements.",
+          ],
+        },
+        {
+          title: "2. Account Responsibility",
+          body: [
+            "Users are responsible for account security and credential management.",
+            "Access may be limited for security risks or policy violations.",
+          ],
+        },
+        {
+          title: "3. Prohibited Conduct",
+          body: [
+            "Uploading unlawful content, abuse/attacks, bypass attempts, and unauthorized resale are prohibited.",
+          ],
+        },
+        {
+          title: "4. Disclaimer",
+          body: [
+            "Service delays may occur due to external API outages, network failures, or force majeure events.",
+            "Users are responsible for final review and business use of generated transcripts.",
+          ],
+        },
+        {
+          title: "5. Contact",
+          body: ["Contact: ours113814@gmail.com"],
+        },
+      ],
+    },
+    companyPolicy: {
+      title: "Company Policy",
+      updatedAt: "Last updated: February 20, 2026",
+      sections: [
+        {
+          title: "1. Operating Principles",
+          body: [
+            "We prioritize transcript quality, security, and service stability in product operations.",
+          ],
+        },
+        {
+          title: "2. Data Minimization",
+          body: [
+            "Only the minimum data required for service delivery is processed and retained.",
+          ],
+        },
+        {
+          title: "3. Security",
+          body: [
+            "HTTPS, token-based auth, access control, and request throttling are applied as baseline controls.",
+          ],
+        },
+        {
+          title: "4. Responsible AI Use",
+          body: [
+            "Uploaded data is processed for service functionality only.",
+            "Reported abuse or rights-infringing usage is reviewed under internal policy.",
+          ],
+        },
+        {
+          title: "5. Contact",
+          body: ["Contact: ours113814@gmail.com"],
+        },
+      ],
     },
   },
 };
@@ -633,9 +848,12 @@ function App() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [privacyConsentChecked, setPrivacyConsentChecked] = useState(false);
   const [privacyConsentSaving, setPrivacyConsentSaving] = useState(false);
+  const [legalModalDocType, setLegalModalDocType] = useState("");
 
   const isLoggedIn = !!authToken && !!authUser;
   const copy = I18N[language] || I18N.ko;
+  const legalDocs = LEGAL_DOCUMENTS[language] || LEGAL_DOCUMENTS.ko;
+  const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
   const compactLayout = screenHeight < 760;
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
@@ -1198,31 +1416,14 @@ function App() {
     setOpenSettingsMenu("");
   };
 
-  const openLegalDocument = async (documentType) => {
-    const isEn = language === "en";
-    let targetUrl = "";
-    let linkErrorMessage = copy.errors.openPrivacyLinkFailed;
-    let openErrorMessage = copy.errors.openPrivacyFailed;
+  const openLegalDocument = (documentType) => {
+    const normalizedType = documentType === "company-policy" ? "companyPolicy" : documentType;
+    if (!legalDocs[normalizedType]) return;
+    setLegalModalDocType(normalizedType);
+  };
 
-    if (documentType === "terms") {
-      targetUrl = isEn ? TERMS_URL_EN : TERMS_URL_KO;
-      linkErrorMessage = copy.errors.openTermsLinkFailed;
-      openErrorMessage = copy.errors.openTermsFailed;
-    } else if (documentType === "company-policy") {
-      targetUrl = isEn ? COMPANY_POLICY_URL_EN : COMPANY_POLICY_URL_KO;
-      linkErrorMessage = copy.errors.openCompanyPolicyLinkFailed;
-      openErrorMessage = copy.errors.openCompanyPolicyFailed;
-    } else {
-      targetUrl = isEn ? PRIVACY_POLICY_URL_EN : PRIVACY_POLICY_URL_KO;
-    }
-
-    try {
-      const supported = await Linking.canOpenURL(targetUrl);
-      if (!supported) throw new Error(linkErrorMessage);
-      await Linking.openURL(targetUrl);
-    } catch (e) {
-      setError(e.message || openErrorMessage);
-    }
+  const closeLegalDocument = () => {
+    setLegalModalDocType("");
   };
 
   const handleAcceptPrivacyPolicy = async () => {
@@ -1726,6 +1927,65 @@ function App() {
           ) : null}
         </View>
       )}
+
+      {activeLegalDoc ? (
+        <View style={[styles.legalOverlay, { backgroundColor: "rgba(5, 12, 24, 0.64)" }]}>
+          <FadeInView duration={220}>
+            <View
+              style={[
+                styles.legalModal,
+                compactLayout ? styles.legalModalCompact : null,
+                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+              ]}
+            >
+              <ScrollView
+                style={styles.legalModalScroll}
+                contentContainerStyle={styles.legalModalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={[styles.privacyTitle, { color: activeTheme.textPrimary }]}>
+                  {activeLegalDoc.title}
+                </Text>
+                <Text style={[styles.legalUpdatedText, { color: activeTheme.textSecondary }]}>
+                  {activeLegalDoc.updatedAt}
+                </Text>
+
+                {activeLegalDoc.sections.map((section) => (
+                  <View
+                    key={`${activeLegalDoc.title}-${section.title}`}
+                    style={[
+                      styles.legalSectionBox,
+                      { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder },
+                    ]}
+                  >
+                    <Text style={[styles.legalSectionTitle, { color: activeTheme.textPrimary }]}>
+                      {section.title}
+                    </Text>
+                    {section.body.map((line, index) => (
+                      <Text
+                        key={`${section.title}-${index}`}
+                        style={[styles.legalSectionBody, { color: activeTheme.textPrimary }]}
+                      >
+                        • {line}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
+              </ScrollView>
+
+              <NmPressable
+                style={[
+                  styles.privacyAcceptButton,
+                  { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                ]}
+                onPress={closeLegalDocument}
+              >
+                <Text style={styles.privacyAcceptButtonText}>{copy.legal.close}</Text>
+              </NmPressable>
+            </View>
+          </FadeInView>
+        </View>
+      ) : null}
 
       {!privacyAccepted ? (
         <View style={[styles.privacyOverlay, { backgroundColor: "rgba(5, 12, 24, 0.58)" }]}>
@@ -2338,6 +2598,65 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontSize: 12,
     lineHeight: 18,
+  },
+  legalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 80,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  legalModal: {
+    width: "100%",
+    maxWidth: 700,
+    maxHeight: "90%",
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.24,
+    shadowRadius: 26,
+    elevation: 8,
+    gap: 10,
+  },
+  legalModalCompact: {
+    maxHeight: "92%",
+    padding: 14,
+  },
+  legalModalScroll: {
+    flexGrow: 0,
+  },
+  legalModalContent: {
+    gap: 10,
+    paddingBottom: 2,
+  },
+  legalUpdatedText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
+  legalSectionBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 7,
+  },
+  legalSectionTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  legalSectionBody: {
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "600",
   },
   privacyOverlay: {
     position: "absolute",

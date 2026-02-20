@@ -6,7 +6,7 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 - 이메일 로그인/회원가입
 - Google/Kakao 소셜 로그인 URL 연동
 - 최초 실행 시 개인정보처리방침 동의 팝업(동의 전 사용 불가)
-- 앱 상단 정책 메뉴(개인정보처리방침/이용약관/회사 정책 바로가기)
+- 앱 상단 정책 메뉴(개인정보처리방침/이용약관/회사 정책 인앱 보기)
 - 파일 선택(오디오/비디오) 후 변환 요청
 - 작업 상태 폴링(`/api/status/{task_id}`)
 - 변환 결과/요약 생성
@@ -18,12 +18,6 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 
 ```bash
 EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
-EXPO_PUBLIC_PRIVACY_URL_KO=https://ours.mallog24.com/privacy
-EXPO_PUBLIC_PRIVACY_URL_EN=https://ours.mallog24.com/privacy-en
-EXPO_PUBLIC_TERMS_URL_KO=https://ours.mallog24.com/terms
-EXPO_PUBLIC_TERMS_URL_EN=https://ours.mallog24.com/terms-en
-EXPO_PUBLIC_COMPANY_POLICY_URL_KO=https://ours.mallog24.com/company-policy
-EXPO_PUBLIC_COMPANY_POLICY_URL_EN=https://ours.mallog24.com/company-policy-en
 ```
 
 기본값은 `https://api.mallog24.com` 입니다.
