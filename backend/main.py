@@ -751,6 +751,54 @@ def _ensure_transcriptions_user_scope_ready() -> None:
         raise
 
 
+def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> None:
+    """transcriptions 상태를 안전하게 갱신/생성한다."""
+    if not patch:
+        return
+
+    payload = dict(patch)
+    payload.pop("task_id", None)
+    payload.pop("user_id", None)
+    if not payload:
+        return
+
+    try:
+        client = _get_supabase_client()
+        existing = (
+            client.table("transcriptions")
+            .select("task_id")
+            .eq("task_id", task_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        if existing.data:
+            (
+                client.table("transcriptions")
+                .update(payload)
+                .eq("task_id", task_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
+            return
+
+        insert_payload = {
+            "task_id": task_id,
+            "user_id": user_id,
+            "created_at": datetime.now().isoformat(),
+            "status": "queued",
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+            "darakbang_optimized": False,
+            **payload,
+        }
+        client.table("transcriptions").insert(insert_payload).execute()
+    except Exception as e:
+        print(f"Failed to upsert transcription state ({task_id}): {e}")
+
+
 def _usage_now() -> datetime:
     try:
         return datetime.now(ZoneInfo(USAGE_TIMEZONE))
@@ -1696,7 +1744,7 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
     return response.text
 
 
-async def process_transcription(
+def _process_transcription_sync(
     task_id: str,
     user_id: str,
     temp_file_path: str,
@@ -1709,6 +1757,11 @@ async def process_transcription(
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     try:
         task_status[task_id] = "processing"
+        _upsert_transcription_state(task_id, user_id, {
+            "status": "processing",
+            "language": language,
+            "transcription_type": transcription_type,
+        })
 
         if openai_client:
             # ===== 2단계 방식: Whisper + Gemini =====
@@ -1724,7 +1777,7 @@ async def process_transcription(
 
             # 2단계: Gemini로 교정 + 구조화
             print(f"[{task_id}] Step 2: Gemini correction...")
-            corrected_text = await gemini_correct_and_structure(raw_text, task_id, transcription_type, language)
+            corrected_text = asyncio.run(gemini_correct_and_structure(raw_text, task_id, transcription_type, language))
             print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
 
             # 3단계: 규칙 기반 후처리
@@ -1761,7 +1814,7 @@ async def process_transcription(
                 except Exception as e:
                     if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
                         wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
-                        await asyncio.sleep(wait_time)
+                        time.sleep(wait_time)
                     else:
                         raise e
 
@@ -1791,9 +1844,7 @@ async def process_transcription(
             "transcription_type": transcription_type,
         }
 
-        _get_supabase_client().table("transcriptions").insert({
-            "task_id": task_id,
-            "user_id": user_id,
+        _upsert_transcription_state(task_id, user_id, {
             "status": "completed",
             "created_at": result_data["created_at"],
             "language": language,
@@ -1803,7 +1854,8 @@ async def process_transcription(
             "darakbang_optimized": transcription_type == "sermon",
             "engine": engine,
             "transcription_type": transcription_type,
-        }).execute()
+            "error": None,
+        })
 
         _increment_user_usage_seconds(user_id, audio_seconds)
 
@@ -1816,18 +1868,47 @@ async def process_transcription(
         traceback.print_exc()
         task_status[task_id] = "error"
         try:
-            _get_supabase_client().table("transcriptions").insert({
-                "task_id": task_id,
-                "user_id": user_id,
+            _upsert_transcription_state(task_id, user_id, {
                 "status": "error",
                 "error": str(e),
                 "created_at": datetime.now().isoformat(),
+                "language": language,
                 "transcription_type": transcription_type,
-            }).execute()
+            })
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
         finally:
             task_owner.pop(task_id, None)
+    finally:
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                pass
+
+
+async def process_transcription(
+    task_id: str,
+    user_id: str,
+    temp_file_path: str,
+    language: str,
+    correct: bool,
+    transcription_type: str = "sermon",
+    source_mime_type: str = "",
+    audio_seconds: int = 0,
+):
+    """이벤트 루프를 막지 않도록 변환 로직을 별도 스레드에서 실행한다."""
+    await asyncio.to_thread(
+        _process_transcription_sync,
+        task_id,
+        user_id,
+        temp_file_path,
+        language,
+        correct,
+        transcription_type,
+        source_mime_type,
+        audio_seconds,
+    )
 
 
 @app.post("/api/transcribe")
@@ -1874,6 +1955,18 @@ async def transcribe_audio(
         task_id = str(uuid.uuid4())
         task_status[task_id] = "queued"
         task_owner[task_id] = user_id
+        _upsert_transcription_state(task_id, user_id, {
+            "status": "queued",
+            "created_at": datetime.now().isoformat(),
+            "language": normalized_language,
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+            "darakbang_optimized": normalized_transcription_type == "sermon",
+            "engine": "whisper+gemini" if openai_client else "gemini-only",
+            "transcription_type": normalized_transcription_type,
+            "error": None,
+        })
 
         background_tasks.add_task(
             process_transcription,
