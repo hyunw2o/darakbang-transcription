@@ -106,6 +106,7 @@ MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
 MAX_TEXT_INPUT_CHARS = int(os.getenv("MAX_TEXT_INPUT_CHARS", "120000"))
 MAX_RECORD_CONTENT_CHARS = int(os.getenv("MAX_RECORD_CONTENT_CHARS", "80000"))
 EXPOSE_TERMS_ENDPOINT = (os.getenv("EXPOSE_TERMS_ENDPOINT", "false").strip().lower() == "true")
+LOG_GEMINI_MODELS_ON_STARTUP = (os.getenv("LOG_GEMINI_MODELS_ON_STARTUP", "false").strip().lower() == "true")
 
 ALLOWED_LANGUAGES = {"ko", "en"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
@@ -182,14 +183,15 @@ async def startup_event():
         print(f"Billing provider: {billing_provider} ({'enabled' if billing_enabled else 'disabled'})")
     except Exception as billing_err:
         print(f"Billing provider configuration error: {billing_err}")
-    try:
-        if GEMINI_API_KEY:
-            print("Checking available Gemini models...")
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    print(f" - {m.name}")
-    except Exception as e:
-        print(f"Failed to list models: {e}")
+    if LOG_GEMINI_MODELS_ON_STARTUP:
+        try:
+            if GEMINI_API_KEY:
+                print("Checking available Gemini models...")
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        print(f" - {m.name}")
+        except Exception as e:
+            print(f"Failed to list models: {e}")
 
 
 @app.on_event("shutdown")

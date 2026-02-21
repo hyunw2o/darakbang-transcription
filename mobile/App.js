@@ -29,6 +29,10 @@ const LEGAL_DOC_VERSION = process.env.EXPO_PUBLIC_LEGAL_DOC_VERSION || "v2026.02
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const FREE_MONTHLY_LIMIT_SECONDS = 10 * 60 * 60;
 const PRICING_URL = process.env.EXPO_PUBLIC_PRICING_URL || "https://mallog24.com/pricing";
+const AUTH_REQUEST_TIMEOUT_MS = Math.max(
+  10000,
+  Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 60000
+);
 
 const MOBILE_THEME_OPTIONS = [
   { key: "auto", label: "System", targetTheme: "" },
@@ -959,6 +963,10 @@ function parseResponseText(raw) {
   }
 }
 
+function isTimeoutErrorMessage(message) {
+  return /timed out|timeout|시간 초과/i.test(String(message || ""));
+}
+
 function getFriendlyAuthError(message, copy) {
   const raw = (message || "").trim();
   const normalized = raw.toLowerCase();
@@ -1570,6 +1578,18 @@ function App() {
     }
   };
 
+  const requestApiWithTimeoutRetry = async (path, options = {}, retryDelayMs = 1200) => {
+    try {
+      return await requestApi(path, options);
+    } catch (e) {
+      if (!isTimeoutErrorMessage(e?.message || "")) {
+        throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      return requestApi(path, options);
+    }
+  };
+
   const clearAuthState = async (message = "") => {
     stopPolling();
     setAuthToken("");
@@ -1720,7 +1740,7 @@ function App() {
     try {
       const shouldVerifyUser = verifyUser || !userHint;
       const userData = shouldVerifyUser
-        ? (await requestApi("/api/auth/me", { token, timeoutMs: 12000 }))?.user || null
+        ? (await requestApiWithTimeoutRetry("/api/auth/me", { token, timeoutMs: AUTH_REQUEST_TIMEOUT_MS }))?.user || null
         : (userHint || null);
 
       setAuthToken(token);
@@ -1846,7 +1866,11 @@ function App() {
       }
 
       const endpoint = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-      const data = await requestApi(endpoint, { method: "POST", body });
+      const data = await requestApiWithTimeoutRetry(endpoint, {
+        method: "POST",
+        body,
+        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+      });
 
       if (data?.access_token) {
         setHistory([]);
@@ -1881,7 +1905,7 @@ function App() {
     try {
       const redirectTo = ExpoLinking.createURL("auth-callback");
       const path = `/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
-      const data = await requestApi(path);
+      const data = await requestApiWithTimeoutRetry(path, { timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
       if (!data?.auth_url) throw new Error(copy.errors.oauthUrlCreate);
 
       const supported = await Linking.canOpenURL(data.auth_url);
