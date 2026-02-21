@@ -119,7 +119,7 @@ const MIME_BY_EXT = {
 
 const TRANSCRIPTION_TYPES = ["sermon", "phonecall", "conversation"];
 const RECORD_CATEGORIES = ["meeting_keywords", "clinical_notes", "sermon_core_summary"];
-const APP_TABS = ["transcribe", "history", "records"];
+const APP_TABS = ["transcribe", "history", "records", "settings"];
 
 const I18N = {
   ko: {
@@ -145,6 +145,7 @@ const I18N = {
       transcribe: "변환",
       history: "히스토리",
       records: "기록본",
+      settings: "설정",
     },
     legal: {
       openPrivacy: "개인정보처리방침",
@@ -194,6 +195,14 @@ const I18N = {
       phonecall: "통화 화자 분리와 핵심 문장 중심으로 정리합니다.",
       conversation: "회의 안건/결정/후속 조치를 분리해 정리합니다.",
     },
+    settingsTitle: "설정",
+    settingsSubtitle: "정책 확인과 앱 환경을 관리합니다.",
+    settingsLegalTitle: "법률 문서",
+    settingsLegalHint: "개인정보처리방침, 이용약관, 회사 정책을 앱 내 문서 페이지에서 확인하세요.",
+    settingsAppearanceTitle: "언어 및 테마",
+    settingsAppearanceHint: "언어와 테마를 즉시 변경할 수 있습니다.",
+    settingsLanguageLabel: "언어 선택",
+    settingsThemeLabel: "테마 선택",
     privacy: {
       title: "개인정보처리방침 동의",
       version: `정책 버전: ${LEGAL_DOC_VERSION}`,
@@ -300,6 +309,7 @@ const I18N = {
       transcribe: "Transcribe",
       history: "History",
       records: "Records",
+      settings: "Settings",
     },
     legal: {
       openPrivacy: "Privacy Policy",
@@ -349,6 +359,14 @@ const I18N = {
       phonecall: "Focuses on speaker separation and core call statements.",
       conversation: "Separates agenda, decisions, and action items for meetings.",
     },
+    settingsTitle: "Settings",
+    settingsSubtitle: "Manage legal documents and app preferences.",
+    settingsLegalTitle: "Legal Documents",
+    settingsLegalHint: "Review privacy policy, terms of service, and company policy in the in-app document page.",
+    settingsAppearanceTitle: "Language & Theme",
+    settingsAppearanceHint: "Change language and theme instantly.",
+    settingsLanguageLabel: "Language",
+    settingsThemeLabel: "Theme",
     privacy: {
       title: "Privacy Policy Consent",
       version: `Policy version: ${LEGAL_DOC_VERSION}`,
@@ -899,10 +917,6 @@ function App() {
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
   const compactLayout = screenHeight < 760;
   const tinyLayout = screenHeight < 680;
-  const legalModalMaxHeight = Math.max(
-    420,
-    Math.round(screenHeight * (tinyLayout ? 0.78 : compactLayout ? 0.84 : 0.9))
-  );
   const privacyModalMaxHeight = Math.max(
     380,
     Math.round(screenHeight * (tinyLayout ? 0.72 : compactLayout ? 0.8 : 0.86))
@@ -1471,6 +1485,7 @@ function App() {
   const openLegalDocument = (documentType) => {
     const normalizedType = documentType === "company-policy" ? "companyPolicy" : documentType;
     if (!legalDocs[normalizedType]) return;
+    setOpenSettingsMenu("");
     setLegalModalDocType(normalizedType);
   };
 
@@ -1510,13 +1525,6 @@ function App() {
           accessibilityLabel="Theme menu"
         >
           <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>◐</Text>
-        </NmPressable>
-        <NmPressable
-          style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
-          onPress={() => setOpenSettingsMenu((prev) => (prev === "legal" ? "" : "legal"))}
-          accessibilityLabel={copy.legalMenu}
-        >
-          <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>⚖︎</Text>
         </NmPressable>
       </View>
 
@@ -1568,44 +1576,6 @@ function App() {
           })}
         </View>
       ) : null}
-
-      {openSettingsMenu === "legal" ? (
-        <View style={[styles.quickMenu, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-          <NmPressable
-            style={[styles.quickMenuItem, { borderColor: activeTheme.inputBorder }]}
-            onPress={() => {
-              openLegalDocument("privacy");
-              setOpenSettingsMenu("");
-            }}
-          >
-            <Text style={[styles.quickMenuText, { color: activeTheme.textPrimary }]}>
-              {copy.legal.openPrivacy}
-            </Text>
-          </NmPressable>
-          <NmPressable
-            style={[styles.quickMenuItem, { borderColor: activeTheme.inputBorder }]}
-            onPress={() => {
-              openLegalDocument("terms");
-              setOpenSettingsMenu("");
-            }}
-          >
-            <Text style={[styles.quickMenuText, { color: activeTheme.textPrimary }]}>
-              {copy.legal.openTerms}
-            </Text>
-          </NmPressable>
-          <NmPressable
-            style={[styles.quickMenuItem, { borderColor: activeTheme.inputBorder }]}
-            onPress={() => {
-              openLegalDocument("company-policy");
-              setOpenSettingsMenu("");
-            }}
-          >
-            <Text style={[styles.quickMenuText, { color: activeTheme.textPrimary }]}>
-              {copy.legal.openCompanyPolicy}
-            </Text>
-          </NmPressable>
-        </View>
-      ) : null}
     </View>
   );
 
@@ -1638,9 +1608,81 @@ function App() {
 
       <Banner type="error" text={error} />
       <Banner type="notice" text={notice} />
-      {renderQuickControls()}
+      {!activeLegalDoc ? renderQuickControls() : null}
 
-      {!isLoggedIn ? (
+      {activeLegalDoc ? (
+        <View style={styles.legalPageContainer}>
+          <FadeInView duration={220}>
+            <View style={[styles.legalPageHeader, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+              <Text
+                style={[
+                  styles.privacyTitle,
+                  compactLayout ? styles.privacyTitleCompact : null,
+                  tinyLayout ? styles.privacyTitleTiny : null,
+                  { color: activeTheme.textPrimary },
+                ]}
+              >
+                {activeLegalDoc.title}
+              </Text>
+              <NmPressable
+                style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                onPress={closeLegalDocument}
+              >
+                <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.legal.close}</Text>
+              </NmPressable>
+            </View>
+          </FadeInView>
+
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <FadeInView delay={80} duration={240}>
+              <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                <Text
+                  style={[
+                    styles.legalUpdatedText,
+                    tinyLayout ? styles.legalUpdatedTextTiny : null,
+                    { color: activeTheme.textSecondary },
+                  ]}
+                >
+                  {`${activeLegalDoc.updatedAt}${activeLegalDoc.version ? ` · ${copy.legal.docVersion}: ${activeLegalDoc.version}` : ""}`}
+                </Text>
+
+                {activeLegalDoc.sections.map((section) => (
+                  <View
+                    key={`${activeLegalDoc.title}-${section.title}`}
+                    style={[
+                      styles.legalSectionBox,
+                      tinyLayout ? styles.legalSectionBoxTiny : null,
+                      { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.legalSectionTitle,
+                        tinyLayout ? styles.legalSectionTitleTiny : null,
+                        { color: activeTheme.textPrimary },
+                      ]}
+                    >
+                      {section.title}
+                    </Text>
+                    {section.body.map((line, index) => (
+                      <Text
+                        key={`${section.title}-${index}`}
+                        style={[
+                          styles.legalSectionBody,
+                          tinyLayout ? styles.legalSectionBodyTiny : null,
+                          { color: activeTheme.textPrimary },
+                        ]}
+                      >
+                        • {line}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            </FadeInView>
+          </ScrollView>
+        </View>
+      ) : !isLoggedIn ? (
         <ScrollView
           contentContainerStyle={[styles.authScrollContent, compactLayout ? styles.authScrollContentCompact : null]}
           keyboardShouldPersistTaps="handled"
@@ -1977,106 +2019,79 @@ function App() {
               </FadeInView>
             </ScrollView>
           ) : null}
+
+          {activeTab === "settings" ? (
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+              <FadeInView key="settings-main">
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsTitle}</Text>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsSubtitle}</Text>
+                </View>
+              </FadeInView>
+
+              <FadeInView key="settings-legal" delay={90}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsLegalTitle}</Text>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsLegalHint}</Text>
+
+                  <NmPressable
+                    style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                    onPress={() => openLegalDocument("privacy")}
+                  >
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.legal.openPrivacy}</Text>
+                  </NmPressable>
+                  <NmPressable
+                    style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                    onPress={() => openLegalDocument("terms")}
+                  >
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.legal.openTerms}</Text>
+                  </NmPressable>
+                  <NmPressable
+                    style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                    onPress={() => openLegalDocument("company-policy")}
+                  >
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.legal.openCompanyPolicy}</Text>
+                  </NmPressable>
+                </View>
+              </FadeInView>
+
+              <FadeInView key="settings-appearance" delay={150}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsAppearanceTitle}</Text>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsAppearanceHint}</Text>
+
+                  <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.settingsLanguageLabel}</Text>
+                  <View style={styles.segmentRow}>
+                    <SegmentButton label={copy.languageOptionKo} active={language === "ko"} onPress={() => setLanguage("ko")} theme={activeTheme} />
+                    <SegmentButton label={copy.languageOptionEn} active={language === "en"} onPress={() => setLanguage("en")} theme={activeTheme} />
+                  </View>
+
+                  <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.settingsThemeLabel}</Text>
+                  <View style={styles.segmentRow}>
+                    {MOBILE_THEME_OPTIONS.map((themeOption) => {
+                      const active =
+                        themeOption.key === "auto"
+                          ? themeMode === "auto"
+                          : themeMode === "manual" && themeOption.targetTheme === themeKey;
+                      return (
+                        <SegmentButton
+                          key={`settings-${themeOption.key}`}
+                          label={themeOption.label}
+                          active={active}
+                          onPress={() => applyThemeOption(themeOption.key)}
+                          theme={activeTheme}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              </FadeInView>
+            </ScrollView>
+          ) : null}
         </View>
       )}
 
-      {activeLegalDoc ? (
-        <View
-          style={[
-            styles.legalOverlay,
-            compactLayout ? styles.modalOverlayCompact : null,
-            tinyLayout ? styles.modalOverlayTiny : null,
-            { backgroundColor: "rgba(5, 12, 24, 0.64)" },
-          ]}
-        >
-          <FadeInView duration={220}>
-            <View
-              style={[
-                styles.legalModal,
-                compactLayout ? styles.legalModalCompact : null,
-                tinyLayout ? styles.legalModalTiny : null,
-                {
-                  backgroundColor: activeTheme.surface,
-                  borderColor: activeTheme.inputBorder,
-                  maxHeight: legalModalMaxHeight,
-                },
-              ]}
-            >
-              <ScrollView
-                style={[styles.legalModalScroll, tinyLayout ? styles.modalScrollTiny : null]}
-                contentContainerStyle={[styles.legalModalContent, tinyLayout ? styles.modalContentTiny : null]}
-                showsVerticalScrollIndicator={false}
-              >
-                <Text
-                  style={[
-                    styles.privacyTitle,
-                    compactLayout ? styles.privacyTitleCompact : null,
-                    tinyLayout ? styles.privacyTitleTiny : null,
-                    { color: activeTheme.textPrimary },
-                  ]}
-                >
-                  {activeLegalDoc.title}
-                </Text>
-                <Text
-                  style={[
-                    styles.legalUpdatedText,
-                    tinyLayout ? styles.legalUpdatedTextTiny : null,
-                    { color: activeTheme.textSecondary },
-                  ]}
-                >
-                  {`${activeLegalDoc.updatedAt}${activeLegalDoc.version ? ` · ${copy.legal.docVersion}: ${activeLegalDoc.version}` : ""}`}
-                </Text>
-
-                {activeLegalDoc.sections.map((section) => (
-                  <View
-                    key={`${activeLegalDoc.title}-${section.title}`}
-                    style={[
-                      styles.legalSectionBox,
-                      tinyLayout ? styles.legalSectionBoxTiny : null,
-                      { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.legalSectionTitle,
-                        tinyLayout ? styles.legalSectionTitleTiny : null,
-                        { color: activeTheme.textPrimary },
-                      ]}
-                    >
-                      {section.title}
-                    </Text>
-                    {section.body.map((line, index) => (
-                      <Text
-                        key={`${section.title}-${index}`}
-                        style={[
-                          styles.legalSectionBody,
-                          tinyLayout ? styles.legalSectionBodyTiny : null,
-                          { color: activeTheme.textPrimary },
-                        ]}
-                      >
-                        • {line}
-                      </Text>
-                    ))}
-                  </View>
-                ))}
-              </ScrollView>
-
-              <NmPressable
-                style={[
-                  styles.privacyAcceptButton,
-                  tinyLayout ? styles.privacyAcceptButtonTiny : null,
-                  { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
-                ]}
-                onPress={closeLegalDocument}
-              >
-                <Text style={styles.privacyAcceptButtonText}>{copy.legal.close}</Text>
-              </NmPressable>
-            </View>
-          </FadeInView>
-        </View>
-      ) : null}
-
-      {!privacyAccepted ? (
+      {!privacyAccepted && !activeLegalDoc ? (
         <View
           style={[
             styles.privacyOverlay,
@@ -2257,6 +2272,27 @@ const styles = StyleSheet.create({
   },
   workspaceContainer: {
     flex: 1,
+  },
+  legalPageContainer: {
+    flex: 1,
+  },
+  legalPageHeader: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    borderRadius: NM.radius,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: NM.shadowTint,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 4,
   },
   scrollContent: {
     paddingHorizontal: 16,
