@@ -984,7 +984,7 @@ function Banner({ type = "notice", text }) {
 function App() {
   const pollRef = useRef(null);
   const colorScheme = useColorScheme();
-  const { height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
 
   const [bootLoading, setBootLoading] = useState(true);
   const [themeMode, setThemeMode] = useState("auto");
@@ -1033,11 +1033,22 @@ function App() {
   const copy = I18N[language] || I18N.ko;
   const legalDocs = LEGAL_DOCUMENTS[language] || LEGAL_DOCUMENTS.ko;
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
-  const compactLayout = screenHeight < 760;
-  const tinyLayout = screenHeight < 680;
+  const shortestEdge = Math.min(screenWidth, screenHeight);
+  const compactLayout = screenHeight < 760 || shortestEdge < 390 || fontScale >= 1.1;
+  const tinyLayout = screenHeight < 680 || shortestEdge < 360 || fontScale >= 1.25;
+  const modalHorizontalPadding = shortestEdge < 360 ? 10 : 16;
+  const modalVerticalPadding = tinyLayout ? 8 : compactLayout ? 10 : 12;
+  const modalViewportHeight = Math.max(
+    460,
+    screenHeight - modalVerticalPadding * 2
+  );
+  const privacyModalWidth = Math.max(
+    280,
+    Math.min(screenWidth - modalHorizontalPadding * 2, tinyLayout ? 420 : 520)
+  );
   const privacyModalMaxHeight = Math.max(
-    380,
-    Math.round(screenHeight * (tinyLayout ? 0.72 : compactLayout ? 0.8 : 0.86))
+    300,
+    Math.round(modalViewportHeight * (tinyLayout ? 0.66 : compactLayout ? 0.74 : 0.8))
   );
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
@@ -2233,9 +2244,11 @@ function App() {
         <View
           style={[
             styles.privacyOverlay,
-            compactLayout ? styles.modalOverlayCompact : null,
-            tinyLayout ? styles.modalOverlayTiny : null,
-            { backgroundColor: "rgba(5, 12, 24, 0.58)" },
+            {
+              backgroundColor: "rgba(5, 12, 24, 0.58)",
+              paddingHorizontal: modalHorizontalPadding,
+              paddingVertical: modalVerticalPadding,
+            },
           ]}
         >
           <FadeInView duration={260}>
@@ -2248,6 +2261,7 @@ function App() {
                   backgroundColor: activeTheme.surface,
                   borderColor: activeTheme.inputBorder,
                   maxHeight: privacyModalMaxHeight,
+                  width: privacyModalWidth,
                 },
               ]}
             >
