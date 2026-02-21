@@ -1252,9 +1252,11 @@ function App() {
 
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
 
   const [recordDrafts, setRecordDrafts] = useState({});
   const [draftLoadingCategory, setDraftLoadingCategory] = useState("");
@@ -1365,6 +1367,25 @@ function App() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (activeTab === "history" && !historyLoaded && !historyLoading) {
+      fetchHistory(authToken);
+      return;
+    }
+    if (activeTab === "records" && !recordsLoaded && !recordsLoading) {
+      fetchRecords(authToken);
+    }
+  }, [
+    activeTab,
+    isLoggedIn,
+    historyLoaded,
+    historyLoading,
+    recordsLoaded,
+    recordsLoading,
+    authToken,
+  ]);
+
   const warmUpBackend = () => {
     requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
   };
@@ -1396,7 +1417,9 @@ function App() {
     setAuthToken("");
     setAuthUser(null);
     setHistory([]);
+    setHistoryLoaded(false);
     setRecords([]);
+    setRecordsLoaded(false);
     setResult(null);
     setPickedFile(null);
     setRecordDrafts({});
@@ -1408,12 +1431,14 @@ function App() {
   const fetchHistory = async (token = authToken) => {
     if (!token) {
       setHistory([]);
+      setHistoryLoaded(false);
       return;
     }
     setHistoryLoading(true);
     try {
       const data = await requestApi("/api/history", { token });
       setHistory(Array.isArray(data) ? data : []);
+      setHistoryLoaded(true);
     } catch (e) {
       setError(e.message || copy.errors.historyReadFailed);
     } finally {
@@ -1424,12 +1449,14 @@ function App() {
   const fetchRecords = async (token = authToken) => {
     if (!token) {
       setRecords([]);
+      setRecordsLoaded(false);
       return;
     }
     setRecordsLoading(true);
     try {
       const data = await requestApi("/api/records", { token });
       setRecords(Array.isArray(data) ? data : []);
+      setRecordsLoaded(true);
     } catch (e) {
       setError(e.message || copy.errors.recordsReadFailed);
     } finally {
@@ -1444,7 +1471,7 @@ function App() {
 
   const hydrateWithToken = async (
     token,
-    { successMessage = "", userHint = null, verifyUser = true, loadWorkspace = true } = {}
+    { successMessage = "", userHint = null, verifyUser = true, loadWorkspace = false } = {}
   ) => {
     try {
       const shouldVerifyUser = verifyUser || !userHint;
@@ -1576,11 +1603,15 @@ function App() {
       const data = await requestApi(endpoint, { method: "POST", body });
 
       if (data?.access_token) {
+        setHistory([]);
+        setRecords([]);
+        setHistoryLoaded(false);
+        setRecordsLoaded(false);
         await hydrateWithToken(data.access_token, {
           successMessage: authMode === "signup" ? copy.notices.authDoneSignup : copy.notices.authDoneLogin,
           userHint: data?.user || null,
           verifyUser: false,
-          loadWorkspace: true,
+          loadWorkspace: false,
         });
       } else {
         setNotice(data?.message || copy.notices.signupDone);
@@ -2564,7 +2595,9 @@ function App() {
                       <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                         <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.transcription_type || "sermon"} · {item.status}</Text>
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
-                        <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.summary_preview || ""}</Text>
+                        <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>
+                          {item.summary_preview || (language === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}
+                        </Text>
                         <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => handleLoadHistoryItem(item.task_id)}>
                           <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.load}</Text>
                         </NmPressable>

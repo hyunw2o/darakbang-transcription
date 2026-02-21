@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 import google.generativeai as genai
 from openai import OpenAI
+import httpx
 import os
 import uuid
 import json
+import base64
 import asyncio
 import random
 from datetime import datetime, timedelta
@@ -19,8 +21,6 @@ import math
 import mimetypes
 import re
 import wave
-import urllib.request
-import urllib.error
 import urllib.parse
 from collections import defaultdict, deque
 from pydub import AudioSegment
@@ -170,6 +170,7 @@ WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 약간 여유
 # 시작 시 용어 로딩 확인
 @app.on_event("startup")
 async def startup_event():
+    _get_auth_http_client()
     print_terms_summary()
     if openai_client:
         print("OpenAI Whisper: Ready")
@@ -189,6 +190,14 @@ async def startup_event():
                     print(f" - {m.name}")
     except Exception as e:
         print(f"Failed to list models: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global _auth_http_client
+    if _auth_http_client is not None:
+        await _auth_http_client.aclose()
+        _auth_http_client = None
 
 @app.get("/")
 async def root():
@@ -220,7 +229,9 @@ mock_checkout_sessions: dict[str, dict] = {}
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
 MODEL_CACHE_TTL = 3600
-AUTH_TIMEOUT = 20
+AUTH_TIMEOUT = max(1, int(os.getenv("AUTH_TIMEOUT", "12")))
+AUTH_CONNECT_TIMEOUT = max(1, int(os.getenv("AUTH_CONNECT_TIMEOUT", "4")))
+AUTH_USER_CACHE_TTL_SECONDS = max(0, int(os.getenv("AUTH_USER_CACHE_TTL_SECONDS", "20")))
 ALLOWED_RECORD_CATEGORIES = {
     "meeting_keywords",
     "clinical_notes",
@@ -323,6 +334,8 @@ EN_RESPONSE_PREFIXES = (
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 _request_counters: dict[str, deque[float]] = defaultdict(deque)
+_auth_user_cache: dict[str, dict] = {}
+_auth_http_client: httpx.AsyncClient | None = None
 
 
 def _normalize_content_type(content_type: str | None) -> str:
@@ -513,7 +526,22 @@ def _extract_auth_error_message(raw_text: str) -> str:
         return raw_text or "인증 서버 오류"
 
 
-def _supabase_auth_request(path: str, method: str = "POST", payload: dict | None = None, token: str | None = None) -> dict:
+def _get_auth_http_client() -> httpx.AsyncClient:
+    global _auth_http_client
+    if _auth_http_client is None:
+        timeout = httpx.Timeout(
+            timeout=AUTH_TIMEOUT,
+            connect=AUTH_CONNECT_TIMEOUT,
+            read=AUTH_TIMEOUT,
+            write=AUTH_TIMEOUT,
+            pool=AUTH_CONNECT_TIMEOUT,
+        )
+        limits = httpx.Limits(max_connections=100, max_keepalive_connections=20)
+        _auth_http_client = httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=False)
+    return _auth_http_client
+
+
+async def _supabase_auth_request(path: str, method: str = "POST", payload: dict | None = None, token: str | None = None) -> dict:
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise HTTPException(status_code=500, detail="Supabase 인증 환경이 설정되지 않았습니다.")
 
@@ -528,18 +556,83 @@ def _supabase_auth_request(path: str, method: str = "POST", payload: dict | None
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = urllib.request.Request(url, headers=headers, data=body, method=method)
-
+    client = _get_auth_http_client()
     try:
-        with urllib.request.urlopen(request, timeout=AUTH_TIMEOUT) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        error_raw = e.read().decode("utf-8", errors="ignore")
-        raise HTTPException(status_code=e.code, detail=_extract_auth_error_message(error_raw))
+        response = await client.request(
+            method.upper(),
+            url,
+            headers=headers,
+            json=payload if payload is not None else None,
+        )
+        raw = response.text or ""
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=_extract_auth_error_message(raw),
+            )
+        return json.loads(raw) if raw else {}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Supabase 인증 요청 시간 초과")
+    except HTTPException:
+        raise
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Supabase 인증 네트워크 오류: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Supabase 인증 요청 실패: {str(e)}")
+
+
+def _decode_jwt_exp_unverified(token: str) -> int | None:
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        payload = parts[1]
+        padded = payload + ("=" * ((4 - len(payload) % 4) % 4))
+        decoded_payload = base64.urlsafe_b64decode(padded.encode("utf-8"))
+        decoded = json.loads(decoded_payload.decode("utf-8"))
+        exp = decoded.get("exp")
+        if isinstance(exp, int):
+            return exp
+        if isinstance(exp, float):
+            return int(exp)
+    except Exception:
+        return None
+    return None
+
+
+def _get_cached_user_by_token(token: str) -> dict | None:
+    if AUTH_USER_CACHE_TTL_SECONDS <= 0:
+        return None
+    cached = _auth_user_cache.get(token)
+    if not cached:
+        return None
+    expires_at = float(cached.get("expires_at") or 0)
+    if expires_at <= time.time():
+        _auth_user_cache.pop(token, None)
+        return None
+    user = cached.get("user")
+    if isinstance(user, dict) and user.get("id"):
+        return user
+    _auth_user_cache.pop(token, None)
+    return None
+
+
+def _cache_user_by_token(token: str, user: dict) -> None:
+    if AUTH_USER_CACHE_TTL_SECONDS <= 0:
+        return
+    ttl = AUTH_USER_CACHE_TTL_SECONDS
+    token_exp = _decode_jwt_exp_unverified(token)
+    if token_exp:
+        remaining = int(token_exp - time.time())
+        if remaining <= 0:
+            return
+        ttl = min(ttl, remaining)
+    if ttl <= 0:
+        return
+    _auth_user_cache[token] = {
+        "user": user,
+        "expires_at": time.time() + ttl,
+    }
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
@@ -552,11 +645,15 @@ def _extract_bearer_token(authorization: str | None) -> str:
     return parts[1].strip()
 
 
-def _get_current_user(authorization: str | None) -> dict:
+async def _get_current_user(authorization: str | None) -> dict:
     token = _extract_bearer_token(authorization)
-    user = _supabase_auth_request("user", method="GET", token=token)
+    cached_user = _get_cached_user_by_token(token)
+    if cached_user:
+        return cached_user
+    user = await _supabase_auth_request("user", method="GET", token=token)
     if not user.get("id"):
         raise HTTPException(status_code=401, detail="유효하지 않은 사용자 토큰입니다.")
+    _cache_user_by_token(token, user)
     return user
 
 
@@ -1969,7 +2066,7 @@ async def transcribe_audio(
         # 파일 변환은 로그인 사용자만 허용
         _ensure_transcriptions_user_scope_ready()
         _ensure_user_usage_scope_ready()
-        user = _get_current_user(authorization)
+        user = await _get_current_user(authorization)
         user_id = user["id"]
 
         normalized_language = (language or "ko").strip().lower()
@@ -2053,7 +2150,7 @@ async def get_task_status(
 ):
     """작업 상태 조회"""
     _ensure_transcriptions_user_scope_ready()
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     user_id = user["id"]
 
     if task_id in task_status:
@@ -2114,12 +2211,12 @@ async def get_terms():
 async def get_history(authorization: str | None = Header(default=None)):
     """변환 기록 목록 조회"""
     _ensure_transcriptions_user_scope_ready()
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     user_id = user["id"]
 
     response = (
         _get_supabase_client().table("transcriptions")
-        .select("task_id, status, created_at, characters, engine, corrected_text, transcription_type")
+        .select("task_id, status, created_at, characters, engine, transcription_type")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
         .execute()
@@ -2133,7 +2230,7 @@ async def get_history(authorization: str | None = Header(default=None)):
             "created_at": row["created_at"],
             "characters": row.get("characters") or 0,
             "engine": row.get("engine") or "unknown",
-            "summary_preview": ((row.get("corrected_text") or "")[:50] + "..."),
+            "summary_preview": "",
             "transcription_type": row.get("transcription_type", "sermon"),
         })
 
@@ -2143,7 +2240,7 @@ async def get_history(authorization: str | None = Header(default=None)):
 @app.get("/api/usage")
 async def get_usage(authorization: str | None = Header(default=None)):
     """로그인 사용자 월간 음성 사용량 조회"""
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     row = _get_or_create_usage_row(user["id"])
     snapshot = _build_usage_snapshot(
         row,
@@ -2175,7 +2272,7 @@ async def get_billing_status(authorization: str | None = Header(default=None)):
     """로그인 사용자 구독/결제 상태 조회"""
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     status = _build_billing_status_payload(user)
     return {
         "success": True,
@@ -2191,7 +2288,7 @@ async def create_checkout_session(
     """결제 체크아웃 세션 생성 (공급자별)"""
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     payload = await _read_optional_json_payload(request)
     success_url, cancel_url = _resolve_checkout_redirect_urls(request, payload)
     billing_provider = _get_billing_provider_or_raise()
@@ -2485,7 +2582,7 @@ async def create_portal_session(
         )
 
     _require_stripe_billing_enabled()
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     payload = await _read_optional_json_payload(request)
     return_url = _resolve_portal_return_url(request, payload)
 
@@ -2661,7 +2758,7 @@ async def signup(
     if full_name.strip():
         payload["data"] = {"full_name": full_name.strip()}
 
-    data = _supabase_auth_request("signup", payload=payload)
+    data = await _supabase_auth_request("signup", payload=payload)
     session = data.get("session") or {}
     access_token = data.get("access_token") or session.get("access_token")
     refresh_token = data.get("refresh_token") or session.get("refresh_token")
@@ -2682,7 +2779,7 @@ async def login(
 ):
     """Supabase Auth 로그인"""
     normalized_email = _normalize_email_or_raise(email)
-    data = _supabase_auth_request(
+    data = await _supabase_auth_request(
         "token?grant_type=password",
         payload={"email": normalized_email, "password": password},
     )
@@ -2724,10 +2821,26 @@ async def get_oauth_url(
 @app.get("/api/auth/me")
 async def me(authorization: str | None = Header(default=None)):
     """현재 로그인 사용자 조회"""
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     return {
         "success": True,
         "user": user,
+    }
+
+
+@app.get("/api/auth/bootstrap")
+async def auth_bootstrap(authorization: str | None = Header(default=None)):
+    """로그인 초기 화면 부팅용 사용자/사용량 통합 조회"""
+    user = await _get_current_user(authorization)
+    row = _get_or_create_usage_row(user["id"])
+    snapshot = _build_usage_snapshot(
+        row,
+        is_admin_bypass=_is_admin_bypass_user(user=user),
+    )
+    return {
+        "success": True,
+        "user": user,
+        "usage": snapshot,
     }
 
 
@@ -2739,7 +2852,7 @@ async def generate_record_draft(
     authorization: str | None = Header(default=None),
 ):
     """기록본 초안 생성 (회의 키워드/진료 도움 기록/설교 핵심 요약)"""
-    _get_current_user(authorization)
+    await _get_current_user(authorization)
     normalized_category = category.strip()
     normalized_language = (language or "ko").strip().lower()
     normalized_text = text.strip()
@@ -2799,7 +2912,7 @@ async def save_record(
     authorization: str | None = Header(default=None),
 ):
     """로그인 사용자별 기록본 저장"""
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     normalized_category = category.strip()
     normalized_content = content.strip()
 
@@ -2837,7 +2950,7 @@ async def get_records(
     authorization: str | None = Header(default=None),
 ):
     """로그인 사용자별 저장 기록 조회"""
-    user = _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     normalized_category = category.strip()
     if normalized_category and normalized_category not in ALLOWED_RECORD_CATEGORIES:
         raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
@@ -2868,7 +2981,7 @@ async def summarize_text(
 ):
     """텍스트 요약 (유형별 프롬프트: 설교/통화/회의)"""
     try:
-        _get_current_user(authorization)
+        await _get_current_user(authorization)
         normalized_text = text.strip()
         if not normalized_text:
             raise HTTPException(status_code=400, detail="요약할 텍스트가 비어 있습니다.")

@@ -435,6 +435,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoaded, setHistoryLoaded] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -452,6 +454,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
   const [toastMessage, setToastMessage] = useState('')
   const [savedRecords, setSavedRecords] = useState([])
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  const [recordsLoaded, setRecordsLoaded] = useState(false)
   const [recordDrafts, setRecordDrafts] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
   const [savingCategory, setSavingCategory] = useState('')
@@ -511,8 +515,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       } else {
         setAuthToken(oauthAccessToken)
         window.sessionStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
-        fetchCurrentUser(oauthAccessToken)
-        fetchSavedRecords(oauthAccessToken)
+        fetchBootstrap(oauthAccessToken)
         setNotice('소셜 로그인이 완료되었습니다.')
       }
     } else {
@@ -522,8 +525,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
           window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
         } else {
           setAuthToken(savedToken)
-          fetchCurrentUser(savedToken)
-          fetchSavedRecords(savedToken)
+          fetchBootstrap(savedToken)
         }
       }
     }
@@ -570,42 +572,58 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const fetchHistory = async (token = authToken) => {
     if (!token) {
       setHistory([])
+      setHistoryLoaded(false)
       return
     }
+    setHistoryLoading(true)
     try {
       const res = await fetch(`${API_URL}/api/history`, {
         headers: getAuthHeaders(token),
       })
       if (!res.ok) throw new Error('변환 기록을 불러오지 못했습니다.')
       setHistory(await res.json())
+      setHistoryLoaded(true)
     } catch (e) {
       console.error("Failed to fetch history", e)
+    } finally {
+      setHistoryLoading(false)
     }
   }
 
-  const fetchCurrentUser = async (token = authToken) => {
+  const fetchBootstrap = async (token = authToken) => {
     if (!token) return
     try {
-      const res = await fetch(`${API_URL}/api/auth/me`, {
+      const res = await fetch(`${API_URL}/api/auth/bootstrap`, {
         headers: getAuthHeaders(token),
       })
       if (!res.ok) throw new Error('사용자 인증이 만료되었습니다.')
       const data = await res.json()
       setAuthUser(data.user || null)
-      fetchHistory(token)
-      fetchUsage(token)
+      if (data.usage) {
+        setUsage({
+          plan_tier: data.usage.plan_tier || 'free',
+          used_audio_seconds: Number(data.usage.used_audio_seconds) || 0,
+          monthly_limit_seconds: Number(data.usage.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+          remaining_seconds: Number(data.usage.remaining_seconds) || 0,
+          usage_percent: Number(data.usage.usage_percent) || 0,
+        })
+      } else {
+        fetchUsage(token)
+      }
     } catch (e) {
       setAuthToken('')
       setAuthUser(null)
       setUsage(null)
       setSavedRecords([])
+      setRecordsLoaded(false)
       setHistory([])
+      setHistoryLoaded(false)
       setResult(null)
       setRecordDrafts({})
       setShowHistory(false)
       setShowRecords(false)
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
-      console.error('Failed to fetch current user', e)
+      console.error('Failed to bootstrap auth state', e)
     }
   }
 
@@ -633,7 +651,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const fetchSavedRecords = async (token = authToken) => {
-    if (!token) return
+    if (!token) {
+      setSavedRecords([])
+      setRecordsLoaded(false)
+      return
+    }
+    setRecordsLoading(true)
     try {
       const res = await fetch(`${API_URL}/api/records`, {
         headers: getAuthHeaders(token),
@@ -641,10 +664,23 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (!res.ok) throw new Error('저장 기록을 불러오지 못했습니다.')
       const data = await res.json()
       setSavedRecords(Array.isArray(data) ? data : [])
+      setRecordsLoaded(true)
     } catch (e) {
       console.error("Failed to fetch saved records", e)
+    } finally {
+      setRecordsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!authToken || !showHistory || historyLoaded || historyLoading) return
+    fetchHistory(authToken)
+  }, [authToken, showHistory, historyLoaded, historyLoading])
+
+  useEffect(() => {
+    if (!authToken || !showRecords || recordsLoaded || recordsLoading) return
+    fetchSavedRecords(authToken)
+  }, [authToken, showRecords, recordsLoaded, recordsLoading])
 
   const stopPolling = () => {
     if (pollInterval.current) {
@@ -880,9 +916,13 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         setAuthToken(data.access_token)
         window.sessionStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
         setAuthUser(data.user || null)
-        fetchSavedRecords(data.access_token)
-        fetchHistory(data.access_token)
-        fetchUsage(data.access_token)
+        setHistory([])
+        setSavedRecords([])
+        setHistoryLoaded(false)
+        setRecordsLoaded(false)
+        setShowHistory(false)
+        setShowRecords(false)
+        fetchBootstrap(data.access_token)
         setNotice(authMode === 'signup' ? '회원가입 및 로그인이 완료되었습니다.' : '로그인되었습니다.')
       } else {
         setNotice(data.message || '회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.')
@@ -924,7 +964,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setAuthUser(null)
     setUsage(null)
     setSavedRecords([])
+    setRecordsLoaded(false)
+    setRecordsLoading(false)
     setHistory([])
+    setHistoryLoaded(false)
+    setHistoryLoading(false)
     setResult(null)
     setFile(null)
     setFileDurationSeconds(0)
@@ -1664,7 +1708,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             )}
 
             {/* 히스토리 */}
-            {history.length > 0 && (
+            {authToken && (
               <div className="mt-8">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
@@ -1673,50 +1717,56 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showHistory ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  최근 변환 기록 ({history.length})
+                  최근 변환 기록 {historyLoaded ? `(${history.length})` : ''}
                 </button>
 
                 {showHistory && (
                   <div className="nm-raised overflow-hidden animate-slide-up">
-                    <ul className="divide-y divide-nm-dark/20">
-                      {history.map((item) => (
-                        <li key={item.task_id}>
-                          <button
-                            onClick={() => handleLoadHistory(item.task_id)}
-                            className="w-full text-left p-4 hover:bg-nm-light/30 transition-colors group"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1 min-w-0 pr-4">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === 'completed' ? 'bg-green-500' :
-                                    item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
-                                    }`} />
-                                  <span className="text-[11px] text-nm-text-secondary">
-                                    {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                  {item.transcription_type && item.transcription_type !== 'sermon' && (
-                                    <span className="nm-flat px-2 py-0.5 text-[11px] text-nm-text-secondary font-medium">
-                                      {item.transcription_type === 'phonecall' ? '통화' : '회의'}
-                                    </span>
-                                  )}
-                                  {item.characters > 0 && (
+                    {historyLoading ? (
+                      <p className="text-sm text-nm-text-secondary p-4">기록 불러오는 중...</p>
+                    ) : history.length === 0 ? (
+                      <p className="text-sm text-nm-text-secondary p-4">아직 변환 기록이 없습니다.</p>
+                    ) : (
+                      <ul className="divide-y divide-nm-dark/20">
+                        {history.map((item) => (
+                          <li key={item.task_id}>
+                            <button
+                              onClick={() => handleLoadHistory(item.task_id)}
+                              className="w-full text-left p-4 hover:bg-nm-light/30 transition-colors group"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1 min-w-0 pr-4">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === 'completed' ? 'bg-green-500' :
+                                      item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
+                                      }`} />
                                     <span className="text-[11px] text-nm-text-secondary">
-                                      {item.characters?.toLocaleString()}자
+                                      {new Date(item.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                     </span>
-                                  )}
+                                    {item.transcription_type && item.transcription_type !== 'sermon' && (
+                                      <span className="nm-flat px-2 py-0.5 text-[11px] text-nm-text-secondary font-medium">
+                                        {item.transcription_type === 'phonecall' ? '통화' : '회의'}
+                                      </span>
+                                    )}
+                                    {item.characters > 0 && (
+                                      <span className="text-[11px] text-nm-text-secondary">
+                                        {item.characters?.toLocaleString()}자
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-nm-text-primary truncate group-hover:text-nm-accent transition-colors">
+                                    {item.summary_preview || '완료된 전사 결과를 열어 확인하세요.'}
+                                  </p>
                                 </div>
-                                <p className="text-sm text-nm-text-primary truncate group-hover:text-nm-accent transition-colors">
-                                  {item.summary_preview || "내용 없음"}
-                                </p>
+                                <svg className="w-4 h-4 text-nm-text-secondary group-hover:text-nm-accent shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
                               </div>
-                              <svg className="w-4 h-4 text-nm-text-secondary group-hover:text-nm-accent shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>
@@ -1737,7 +1787,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
                 {showRecords && (
                   <div className="nm-raised overflow-hidden animate-slide-up">
-                    {savedRecords.length === 0 ? (
+                    {recordsLoading ? (
+                      <p className="text-sm text-nm-text-secondary p-4">저장 기록을 불러오는 중...</p>
+                    ) : savedRecords.length === 0 ? (
                       <p className="text-sm text-nm-text-secondary p-4">아직 저장된 기록본이 없습니다.</p>
                     ) : (
                       <ul className="divide-y divide-nm-dark/20">
