@@ -35,6 +35,48 @@ npx expo install --fix
 npm run start
 ```
 
+## 출시 준비 (EAS)
+1. Expo 계정 로그인
+```bash
+npx expo login
+```
+
+2. 프로젝트 연결 (최초 1회)
+```bash
+npx eas init
+```
+
+3. 프로덕션 빌드 생성
+```bash
+npm run release:android
+npm run release:ios
+```
+
+4. 스토어 제출
+```bash
+npm run submit:android
+npm run submit:ios
+```
+
+### 출시 전 체크리스트
+- `app.json` 번들 ID/패키지명 최종 확인
+  - iOS: `com.mallog24.app`
+  - Android: `com.mallog24.app`
+- 앱 버전 증가
+  - `expo.version` (예: `1.0.1`)
+  - Android `android.versionCode`는 자동 증가(`eas.json production.autoIncrement`)
+  - iOS `ios.buildNumber`는 자동 증가(`eas.json production.autoIncrement`)
+- 운영 API 주소 확인
+  - `mobile/.env`의 `EXPO_PUBLIC_API_URL=https://api.mallog24.com`
+- 개인정보처리방침/이용약관/회사정책 최신 버전 확인
+- 실제 단말 테스트
+  - 로그인(이메일/구글/카카오), 파일 업로드, 변환, 요약, 기록본 저장, TXT/DOCX 공유
+
+### 주의
+- 첫 `eas init` 후 생성되는 `projectId`를 `app.json`의 `expo.extra.eas.projectId`에 반영해야 할 수 있습니다.
+- iOS 제출은 Apple Developer Program(유료) 등록이 필요합니다.
+- Android 제출은 Google Play Console(유료) 등록이 필요합니다.
+
 ## SDK 불일치 에러 시
 Expo Go가 SDK 54인데 프로젝트가 다르면 실행되지 않습니다.
 현재 프로젝트는 SDK 54 기준입니다. 위 재설치 명령 후 다시 QR 접속하세요.
