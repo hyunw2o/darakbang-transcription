@@ -27,6 +27,8 @@ const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
 const PRIVACY_POLICY_VERSION = "2026-02-21";
 const LEGAL_DOC_VERSION = process.env.EXPO_PUBLIC_LEGAL_DOC_VERSION || "v2026.02.21";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const FREE_MONTHLY_LIMIT_SECONDS = 10 * 60 * 60;
+const PRICING_URL = process.env.EXPO_PUBLIC_PRICING_URL || "https://mallog24.com/pricing";
 
 const MOBILE_THEME_OPTIONS = [
   { key: "auto", label: "System", targetTheme: "" },
@@ -213,6 +215,41 @@ const I18N = {
     settingsThemeLabel: "테마 선택",
     settingsSupportTitle: "공지 및 도움말",
     settingsSupportHint: "업데이트 공지와 자주 묻는 질문을 앱 내 문서로 확인하세요.",
+    settingsUsageTitle: "사용량 및 구독",
+    settingsUsageHint: "이번 달 남은 사용 시간을 확인하고 구독 업그레이드를 진행할 수 있습니다.",
+    usagePlanLabel: "현재 플랜",
+    usageStatusLabel: "구독 상태",
+    usageBillingProvider: "결제 공급자",
+    usageCheckoutMode: "결제 모드",
+    usageThisMonth: "이번 달 사용량",
+    usageRemaining: "남은 시간",
+    usageUnlimited: "무제한",
+    usageLoading: "사용량 정보를 불러오는 중...",
+    usageUnavailable: "사용량 정보를 아직 불러오지 못했습니다.",
+    usageRefresh: "사용량 새로고침",
+    usageUpgrade: "구독 업그레이드",
+    usageManageSubscription: "구독 관리",
+    usageOpenPricing: "요금제 안내 보기",
+    billingUnsupported: "현재 결제 설정에서는 앱 내 결제 호출이 비활성화되어 있습니다.",
+    planLabels: {
+      free: "Free",
+      pro: "Pro",
+      enterprise: "Enterprise",
+      admin: "Admin",
+    },
+    billingStatusLabels: {
+      inactive: "미구독",
+      active: "활성",
+      trialing: "체험중",
+      checkout_pending: "결제 대기",
+      checkout_canceled: "결제 취소",
+      canceled: "해지",
+      past_due: "미납",
+      unpaid: "미납",
+      incomplete: "미완료",
+      incomplete_expired: "만료",
+      unknown: "확인 필요",
+    },
     clipboardCopy: "클립보드 복사",
     exportTxt: "TXT 저장/공유",
     exportDocx: "DOCX 저장/공유",
@@ -248,6 +285,9 @@ const I18N = {
       copiedToClipboard: "{label} 내용을 클립보드에 복사했습니다.",
       openedShareTxt: "TXT 저장/공유 창을 열었습니다.",
       openedShareDocx: "DOCX 저장/공유 창을 열었습니다.",
+      usageLoaded: "사용량 정보를 업데이트했습니다.",
+      checkoutOpened: "결제 페이지를 열었습니다.",
+      portalOpened: "구독 관리 페이지를 열었습니다.",
     },
     errors: {
       authRequired: "로그인 후 파일 변환을 사용할 수 있습니다.",
@@ -289,6 +329,11 @@ const I18N = {
       openCompanyPolicyFailed: "회사 정책 페이지를 열 수 없습니다.",
       openCompanyPolicyLinkFailed: "회사 정책 링크를 열 수 없습니다.",
       privacySaveFailed: "동의 상태 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      usageReadFailed: "사용량 정보를 불러오지 못했습니다.",
+      billingStatusReadFailed: "구독 상태를 불러오지 못했습니다.",
+      billingCheckoutFailed: "결제 페이지를 열지 못했습니다.",
+      billingPortalFailed: "구독 관리 페이지를 열지 못했습니다.",
+      openExternalFailed: "외부 페이지를 열 수 없습니다.",
       requestFailedPrefix: "요청 실패",
       timeout: "요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.",
     },
@@ -397,6 +442,41 @@ const I18N = {
     settingsThemeLabel: "Theme",
     settingsSupportTitle: "Notices & Help",
     settingsSupportHint: "Read product updates and frequently asked questions in the in-app document page.",
+    settingsUsageTitle: "Usage & Subscription",
+    settingsUsageHint: "Check remaining monthly time and open subscription actions.",
+    usagePlanLabel: "Current plan",
+    usageStatusLabel: "Subscription status",
+    usageBillingProvider: "Billing provider",
+    usageCheckoutMode: "Checkout mode",
+    usageThisMonth: "This month usage",
+    usageRemaining: "Remaining",
+    usageUnlimited: "Unlimited",
+    usageLoading: "Loading usage information...",
+    usageUnavailable: "Usage information is not available yet.",
+    usageRefresh: "Refresh usage",
+    usageUpgrade: "Upgrade subscription",
+    usageManageSubscription: "Manage subscription",
+    usageOpenPricing: "Open pricing page",
+    billingUnsupported: "In-app checkout is currently disabled for this billing setup.",
+    planLabels: {
+      free: "Free",
+      pro: "Pro",
+      enterprise: "Enterprise",
+      admin: "Admin",
+    },
+    billingStatusLabels: {
+      inactive: "Inactive",
+      active: "Active",
+      trialing: "Trialing",
+      checkout_pending: "Checkout pending",
+      checkout_canceled: "Checkout canceled",
+      canceled: "Canceled",
+      past_due: "Past due",
+      unpaid: "Unpaid",
+      incomplete: "Incomplete",
+      incomplete_expired: "Expired",
+      unknown: "Unknown",
+    },
     clipboardCopy: "Copy to Clipboard",
     exportTxt: "Save/Share TXT",
     exportDocx: "Save/Share DOCX",
@@ -432,6 +512,9 @@ const I18N = {
       copiedToClipboard: "{label} copied to clipboard.",
       openedShareTxt: "TXT save/share sheet opened.",
       openedShareDocx: "DOCX save/share sheet opened.",
+      usageLoaded: "Usage information updated.",
+      checkoutOpened: "Checkout page opened.",
+      portalOpened: "Subscription portal opened.",
     },
     errors: {
       authRequired: "Please log in to use transcription.",
@@ -473,6 +556,11 @@ const I18N = {
       openCompanyPolicyFailed: "Unable to open company policy page.",
       openCompanyPolicyLinkFailed: "Unable to open company policy link.",
       privacySaveFailed: "Failed to save consent state. Please try again.",
+      usageReadFailed: "Failed to load usage information.",
+      billingStatusReadFailed: "Failed to load subscription status.",
+      billingCheckoutFailed: "Failed to open checkout page.",
+      billingPortalFailed: "Failed to open subscription portal.",
+      openExternalFailed: "Unable to open external page.",
       requestFailedPrefix: "Request failed",
       timeout: "Request timed out. Please check server status.",
     },
@@ -975,6 +1063,14 @@ function formatDate(value) {
   }
 }
 
+function formatSecondsToHourMinute(totalSeconds) {
+  const safe = Math.max(0, Number(totalSeconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 function escapeXml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -1221,6 +1317,7 @@ function Banner({ type = "notice", text }) {
 
 function App() {
   const pollRef = useRef(null);
+  const scrollUnlockTimerRef = useRef(null);
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
 
@@ -1238,6 +1335,11 @@ function App() {
 
   const [authToken, setAuthToken] = useState("");
   const [authUser, setAuthUser] = useState(null);
+  const [usage, setUsage] = useState(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [billingStatus, setBillingStatus] = useState(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingActionLoading, setBillingActionLoading] = useState("");
 
   const [activeTab, setActiveTab] = useState("transcribe");
 
@@ -1356,6 +1458,27 @@ function App() {
     () => APP_TABS.map((key) => ({ key, label: copy.tabs[key] || key })),
     [copy]
   );
+  const usagePlan = String(usage?.plan_tier || "free");
+  const isFreeUsagePlan = usagePlan === "free";
+  const usedAudioSeconds = Math.max(0, Number(usage?.used_audio_seconds) || 0);
+  const monthlyLimitSeconds = Math.max(
+    1,
+    Number(usage?.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS
+  );
+  const remainingAudioSeconds = isFreeUsagePlan
+    ? Math.max(0, Number(usage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
+    : null;
+  const usagePercent = isFreeUsagePlan
+    ? Math.max(0, Math.min(100, Number(usage?.usage_percent) || 0))
+    : 0;
+  const billingProvider = String(billingStatus?.provider || "portone");
+  const billingState = String(billingStatus?.status || "inactive");
+  const billingCheckoutMode = String(billingStatus?.checkout_mode || "disabled");
+  const billingCheckoutSupported = Boolean(billingStatus?.checkout_supported);
+  const billingPortalSupported = Boolean(billingStatus?.portal_supported);
+  const billingManageSupported = Boolean(billingStatus?.can_manage_subscription);
+  const planLabel = copy.planLabels?.[usagePlan] || usagePlan;
+  const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
 
   useEffect(() => {
     setOpenSettingsMenu("");
@@ -1366,6 +1489,12 @@ function App() {
       setWorkspaceScrollEnabled(true);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (result) {
+      unlockWorkspaceScroll();
+    }
+  }, [result]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -1386,6 +1515,16 @@ function App() {
     authToken,
   ]);
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (!usage && !usageLoading) {
+      fetchUsage(authToken).catch(() => {});
+    }
+    if (!billingStatus && !billingLoading) {
+      fetchBillingStatus(authToken).catch(() => {});
+    }
+  }, [isLoggedIn, authToken, usage, usageLoading, billingStatus, billingLoading]);
+
   const warmUpBackend = () => {
     requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
   };
@@ -1402,8 +1541,27 @@ function App() {
     });
   };
 
-  const lockWorkspaceScroll = () => updateWorkspaceScrollLock(true);
-  const unlockWorkspaceScroll = () => updateWorkspaceScrollLock(false);
+  const clearScrollUnlockTimer = () => {
+    if (scrollUnlockTimerRef.current) {
+      clearTimeout(scrollUnlockTimerRef.current);
+      scrollUnlockTimerRef.current = null;
+    }
+  };
+
+  const lockWorkspaceScroll = () => {
+    updateWorkspaceScrollLock(true);
+    clearScrollUnlockTimer();
+    // Android nested scroll 이벤트 누락 시 고착 방지용 자동 해제
+    scrollUnlockTimerRef.current = setTimeout(() => {
+      updateWorkspaceScrollLock(false);
+      scrollUnlockTimerRef.current = null;
+    }, 1200);
+  };
+
+  const unlockWorkspaceScroll = () => {
+    clearScrollUnlockTimer();
+    updateWorkspaceScrollLock(false);
+  };
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -1416,6 +1574,9 @@ function App() {
     stopPolling();
     setAuthToken("");
     setAuthUser(null);
+    setUsage(null);
+    setBillingStatus(null);
+    setBillingActionLoading("");
     setHistory([]);
     setHistoryLoaded(false);
     setRecords([]);
@@ -1426,6 +1587,88 @@ function App() {
     setTaskStateText("");
     if (message) setNotice(message);
     await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+  };
+
+  const fetchUsage = async (token = authToken, { quiet = false } = {}) => {
+    if (!token) {
+      setUsage(null);
+      return null;
+    }
+    setUsageLoading(true);
+    try {
+      const data = await requestApi("/api/usage", { token });
+      const normalized = {
+        plan_tier: String(data?.plan_tier || "free"),
+        used_audio_seconds: Math.max(0, Number(data?.used_audio_seconds) || 0),
+        monthly_limit_seconds: Number(data?.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+        remaining_seconds:
+          data?.remaining_seconds === null || data?.remaining_seconds === undefined
+            ? null
+            : Math.max(0, Number(data?.remaining_seconds) || 0),
+        usage_percent: Math.max(0, Math.min(100, Number(data?.usage_percent) || 0)),
+      };
+      setUsage(normalized);
+      return normalized;
+    } catch (e) {
+      if (!quiet) {
+        setError(e.message || copy.errors.usageReadFailed);
+      }
+      return null;
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  const fetchBillingStatus = async (token = authToken, { quiet = false } = {}) => {
+    if (!token) {
+      setBillingStatus(null);
+      return null;
+    }
+    setBillingLoading(true);
+    try {
+      const data = await requestApi("/api/billing/status", { token });
+      if (data?.usage) {
+        setUsage({
+          plan_tier: String(data.usage.plan_tier || "free"),
+          used_audio_seconds: Math.max(0, Number(data.usage.used_audio_seconds) || 0),
+          monthly_limit_seconds: Number(data.usage.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+          remaining_seconds:
+            data.usage.remaining_seconds === null || data.usage.remaining_seconds === undefined
+              ? null
+              : Math.max(0, Number(data.usage.remaining_seconds) || 0),
+          usage_percent: Math.max(0, Math.min(100, Number(data.usage.usage_percent) || 0)),
+        });
+      }
+      setBillingStatus(data || null);
+      return data || null;
+    } catch (e) {
+      if (!quiet) {
+        setError(e.message || copy.errors.billingStatusReadFailed);
+      }
+      return null;
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const refreshUsageAndBilling = async (token = authToken, { showNotice = false } = {}) => {
+    if (!token) return;
+    const [usageData, billingData] = await Promise.all([
+      fetchUsage(token, { quiet: true }),
+      fetchBillingStatus(token, { quiet: true }),
+    ]);
+
+    if (!usageData) {
+      setError(copy.errors.usageReadFailed);
+      return;
+    }
+    if (!billingData) {
+      setError(copy.errors.billingStatusReadFailed);
+      return;
+    }
+    if (showNotice) {
+      setNotice(copy.notices.usageLoaded);
+    }
   };
 
   const fetchHistory = async (token = authToken) => {
@@ -1467,6 +1710,7 @@ function App() {
   const loadWorkspaceInBackground = (token) => {
     fetchHistory(token);
     fetchRecords(token);
+    refreshUsageAndBilling(token).catch(() => {});
   };
 
   const hydrateWithToken = async (
@@ -1510,6 +1754,7 @@ function App() {
       await hydrateWithToken(accessToken, {
         successMessage: copy.notices.socialLoginDone,
         verifyUser: true,
+        loadWorkspace: true,
       });
     } catch (e) {
       setError(e.message || copy.errors.socialSessionFailed);
@@ -1554,7 +1799,7 @@ function App() {
         if (!consumedOauthToken) {
           const savedToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
           if (savedToken) {
-            await hydrateWithToken(savedToken, { verifyUser: true });
+            await hydrateWithToken(savedToken, { verifyUser: true, loadWorkspace: true });
           }
         }
       } catch {
@@ -1567,6 +1812,7 @@ function App() {
     return () => {
       active = false;
       subscription?.remove?.();
+      clearScrollUnlockTimer();
       stopPolling();
     };
   }, []);
@@ -1611,7 +1857,7 @@ function App() {
           successMessage: authMode === "signup" ? copy.notices.authDoneSignup : copy.notices.authDoneLogin,
           userHint: data?.user || null,
           verifyUser: false,
-          loadWorkspace: false,
+          loadWorkspace: true,
         });
       } else {
         setNotice(data?.message || copy.notices.signupDone);
@@ -1654,6 +1900,83 @@ function App() {
   const handleLogout = async () => {
     clearMessages();
     await clearAuthState(copy.notices.loggedOut);
+  };
+
+  const openExternalUrl = async (url) => {
+    if (!url) throw new Error(copy.errors.openExternalFailed);
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) throw new Error(copy.errors.openExternalFailed);
+    await Linking.openURL(url);
+  };
+
+  const handleOpenPricing = async () => {
+    try {
+      await openExternalUrl(PRICING_URL);
+    } catch (e) {
+      setError(e.message || copy.errors.openExternalFailed);
+    }
+  };
+
+  const handleBillingCheckout = async () => {
+    clearMessages();
+    if (!isLoggedIn) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    if (!billingCheckoutSupported) {
+      setNotice(copy.billingUnsupported);
+      await handleOpenPricing();
+      return;
+    }
+
+    setBillingActionLoading("checkout");
+    try {
+      const data = await requestApi("/api/billing/checkout", {
+        method: "POST",
+        token: authToken,
+      });
+      if (!data?.checkout_url) {
+        throw new Error(copy.errors.billingCheckoutFailed);
+      }
+      await openExternalUrl(data.checkout_url);
+      setNotice(copy.notices.checkoutOpened);
+      fetchBillingStatus(authToken, { quiet: true }).catch(() => {});
+    } catch (e) {
+      setError(e.message || copy.errors.billingCheckoutFailed);
+    } finally {
+      setBillingActionLoading("");
+    }
+  };
+
+  const handleBillingPortal = async () => {
+    clearMessages();
+    if (!isLoggedIn) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    if (!billingPortalSupported || !billingManageSupported) {
+      setError(copy.errors.billingPortalFailed);
+      return;
+    }
+
+    setBillingActionLoading("portal");
+    try {
+      const data = await requestApi("/api/billing/portal", {
+        method: "POST",
+        token: authToken,
+      });
+      if (!data?.portal_url) {
+        throw new Error(copy.errors.billingPortalFailed);
+      }
+      await openExternalUrl(data.portal_url);
+      setNotice(copy.notices.portalOpened);
+    } catch (e) {
+      setError(e.message || copy.errors.billingPortalFailed);
+    } finally {
+      setBillingActionLoading("");
+    }
   };
 
   const pickAudioFile = async () => {
@@ -1715,6 +2038,7 @@ function App() {
           setResult(data);
           setNotice(copy.notices.transcribeDone);
           fetchHistory(authToken);
+          refreshUsageAndBilling(authToken).catch(() => {});
           return;
         }
 
@@ -1783,6 +2107,7 @@ function App() {
         setTaskStateText(copy.taskState.done);
         setResult(data);
         fetchHistory(authToken);
+        refreshUsageAndBilling(authToken).catch(() => {});
       } else {
         setSubmitting(false);
         setTaskStateText("");
@@ -1797,6 +2122,7 @@ function App() {
 
   const handleLoadHistoryItem = async (taskId) => {
     clearMessages();
+    unlockWorkspaceScroll();
     setSubmitting(true);
     setTaskStateText(copy.taskState.historyLoading);
 
@@ -1813,11 +2139,13 @@ function App() {
     } finally {
       setSubmitting(false);
       setTaskStateText("");
+      unlockWorkspaceScroll();
     }
   };
 
   const handleSummarize = async () => {
     clearMessages();
+    unlockWorkspaceScroll();
 
     if (!isLoggedIn) {
       setError(copy.errors.authRequired);
@@ -1852,6 +2180,7 @@ function App() {
       setError(e.message || copy.errors.summaryFailed);
     } finally {
       setSummaryLoading(false);
+      unlockWorkspaceScroll();
     }
   };
 
@@ -2446,6 +2775,8 @@ function App() {
                       onTouchStart={lockWorkspaceScroll}
                       onTouchEnd={unlockWorkspaceScroll}
                       onTouchCancel={unlockWorkspaceScroll}
+                      onResponderRelease={unlockWorkspaceScroll}
+                      onResponderTerminate={unlockWorkspaceScroll}
                       onScrollBeginDrag={lockWorkspaceScroll}
                       onScrollEndDrag={unlockWorkspaceScroll}
                       onMomentumScrollBegin={lockWorkspaceScroll}
@@ -2461,19 +2792,19 @@ function App() {
                         style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                         onPress={() => handleCopyToClipboard(copy.correctedText, result.corrected_text || result.raw_text || "")}
                       >
-                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
                       </NmPressable>
                       <NmPressable
                         style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                         onPress={() => handleShareExport(copy.correctedText, result.corrected_text || result.raw_text || "", "txt")}
                       >
-                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
                       </NmPressable>
                       <NmPressable
                         style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                         onPress={() => handleShareExport(copy.correctedText, result.corrected_text || result.raw_text || "", "docx")}
                       >
-                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
                       </NmPressable>
                     </View>
 
@@ -2542,6 +2873,8 @@ function App() {
                           onFocus={lockWorkspaceScroll}
                           onBlur={unlockWorkspaceScroll}
                           onTouchStart={lockWorkspaceScroll}
+                          onTouchEnd={unlockWorkspaceScroll}
+                          onTouchCancel={unlockWorkspaceScroll}
                           value={recordDrafts[category.key] || ""}
                           onChangeText={(text) =>
                             setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
@@ -2554,19 +2887,19 @@ function App() {
                             style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleCopyToClipboard(category.label, recordDrafts[category.key] || "")}
                           >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
                           </NmPressable>
                           <NmPressable
                             style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleShareExport(category.label, recordDrafts[category.key] || "", "txt")}
                           >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
                           </NmPressable>
                           <NmPressable
                             style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleShareExport(category.label, recordDrafts[category.key] || "", "docx")}
                           >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
                           </NmPressable>
                         </View>
                       </View>
@@ -2633,19 +2966,19 @@ function App() {
                             style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleCopyToClipboard(item.title || item.category || copy.recordsTitle, item.content || "")}
                           >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
                           </NmPressable>
                           <NmPressable
                             style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "txt")}
                           >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
                           </NmPressable>
                           <NmPressable
                             style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "docx")}
                           >
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
                           </NmPressable>
                         </View>
                       </View>
@@ -2662,6 +2995,113 @@ function App() {
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsTitle}</Text>
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsSubtitle}</Text>
+                </View>
+              </FadeInView>
+
+              <FadeInView key="settings-usage" delay={50}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsUsageTitle}</Text>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsUsageHint}</Text>
+
+                  {usageLoading && !usage ? (
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.usageLoading}</Text>
+                  ) : usage ? (
+                    <>
+                      <View style={styles.usageMetaGrid}>
+                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usagePlanLabel}</Text>
+                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{planLabel}</Text>
+                        </View>
+                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageStatusLabel}</Text>
+                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingStateLabel}</Text>
+                        </View>
+                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageBillingProvider}</Text>
+                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingProvider}</Text>
+                        </View>
+                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageCheckoutMode}</Text>
+                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingCheckoutMode}</Text>
+                        </View>
+                      </View>
+
+                      <Text style={[styles.metaText, { color: activeTheme.textPrimary }]}>
+                        {copy.usageThisMonth}:{" "}
+                        {isFreeUsagePlan
+                          ? `${formatSecondsToHourMinute(usedAudioSeconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
+                          : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`}
+                      </Text>
+                      {isFreeUsagePlan ? (
+                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
+                          {copy.usageRemaining}: {formatSecondsToHourMinute(remainingAudioSeconds)}
+                        </Text>
+                      ) : null}
+                      {isFreeUsagePlan ? (
+                        <View style={[styles.usageProgressTrack, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <View style={[styles.usageProgressFill, { backgroundColor: activeTheme.accent, width: `${usagePercent}%` }]} />
+                        </View>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.usageUnavailable}</Text>
+                  )}
+
+                  {!billingCheckoutSupported ? (
+                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.billingUnsupported}</Text>
+                  ) : null}
+
+                  <View style={styles.billingActionRow}>
+                    <NmPressable
+                      style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                      onPress={() => {
+                        clearMessages();
+                        refreshUsageAndBilling(authToken, { showNotice: true }).catch(() => {});
+                      }}
+                      disabled={usageLoading || billingLoading}
+                    >
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                        {usageLoading || billingLoading ? copy.loading : copy.usageRefresh}
+                      </Text>
+                    </NmPressable>
+                    <NmPressable
+                      style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, billingActionLoading ? styles.buttonDisabled : null]}
+                      onPress={handleBillingCheckout}
+                      disabled={!!billingActionLoading}
+                    >
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                        {billingActionLoading === "checkout" ? copy.processing : copy.usageUpgrade}
+                      </Text>
+                    </NmPressable>
+                  </View>
+
+                  <View style={styles.billingActionRow}>
+                    <NmPressable
+                      style={[
+                        styles.tinyButton,
+                        styles.billingActionButton,
+                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                        !billingPortalSupported || !billingManageSupported || !!billingActionLoading
+                          ? styles.buttonDisabled
+                          : null,
+                      ]}
+                      onPress={handleBillingPortal}
+                      disabled={!billingPortalSupported || !billingManageSupported || !!billingActionLoading}
+                    >
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                        {billingActionLoading === "portal" ? copy.processing : copy.usageManageSubscription}
+                      </Text>
+                    </NmPressable>
+                    <NmPressable
+                      style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                      onPress={() => {
+                        clearMessages();
+                        handleOpenPricing();
+                      }}
+                    >
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.usageOpenPricing}</Text>
+                    </NmPressable>
+                  </View>
                 </View>
               </FadeInView>
 
@@ -3263,6 +3703,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  usageMetaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  usageMetaItem: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 3,
+  },
+  usageMetaLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  usageMetaValue: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  usageProgressTrack: {
+    marginTop: 2,
+    height: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  usageProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  billingActionRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  billingActionButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   userBar: {
     marginHorizontal: 16,
     marginTop: 14,
@@ -3410,12 +3892,14 @@ const styles = StyleSheet.create({
   exportTinyButton: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     justifyContent: "center",
     alignItems: "center",
   },
   exportTinyButtonText: {
     textAlign: "center",
+    fontSize: 10.5,
+    lineHeight: 14,
   },
   inlineBetween: {
     flexDirection: "row",
