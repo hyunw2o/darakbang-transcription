@@ -1277,17 +1277,17 @@ function App() {
   const tinyLayout = screenHeight < 680 || shortestEdge < 360 || fontScale >= 1.25;
   const modalHorizontalPadding = shortestEdge < 360 ? 10 : 16;
   const modalVerticalPadding = tinyLayout ? 8 : compactLayout ? 10 : 12;
-  const modalViewportHeight = Math.max(
-    460,
-    screenHeight - modalVerticalPadding * 2
-  );
-  const privacyModalWidth = Math.max(
-    280,
-    Math.min(screenWidth - modalHorizontalPadding * 2, tinyLayout ? 420 : 520)
-  );
-  const privacyModalMaxHeight = Math.max(
-    300,
-    Math.round(modalViewportHeight * (tinyLayout ? 0.66 : compactLayout ? 0.74 : 0.8))
+  const modalAvailableWidth = Math.max(260, screenWidth - modalHorizontalPadding * 2);
+  const modalAvailableHeight = Math.max(260, screenHeight - modalVerticalPadding * 2);
+  const privacyModalWidth = Math.min(modalAvailableWidth, tinyLayout ? 420 : 520);
+  const privacyModalMaxHeight = Math.min(
+    modalAvailableHeight,
+    Math.max(
+      240,
+      Math.round(
+        modalAvailableHeight * (tinyLayout ? 0.95 : compactLayout ? 0.9 : 0.86)
+      )
+    )
   );
   const modalFontShrinkFactor = useMemo(() => {
     let factor = 1;
