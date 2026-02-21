@@ -24,6 +24,7 @@ const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
 const PRIVACY_POLICY_VERSION = "2026-02-21";
+const LEGAL_DOC_VERSION = "v2026.02.21";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [
@@ -149,6 +150,7 @@ const I18N = {
       openPrivacy: "개인정보처리방침",
       openTerms: "이용약관",
       openCompanyPolicy: "회사 정책",
+      docVersion: "문서 버전",
       close: "닫기",
     },
     transcriptionTypes: {
@@ -194,6 +196,7 @@ const I18N = {
     },
     privacy: {
       title: "개인정보처리방침 동의",
+      version: `정책 버전: ${LEGAL_DOC_VERSION}`,
       body: "mallog24 이용 전 개인정보 처리 내용을 확인해주세요. 동의 후 로그인 및 음성 변환 기능을 사용할 수 있습니다.",
       summaryFile: "• 원본 음성 파일: 변환 처리 후 임시 저장소에서 지체 없이 삭제",
       summaryText: "• 변환 텍스트/기록본: 히스토리 및 기록 기능 제공 목적 범위 내 보관",
@@ -302,6 +305,7 @@ const I18N = {
       openPrivacy: "Privacy Policy",
       openTerms: "Terms of Service",
       openCompanyPolicy: "Company Policy",
+      docVersion: "Doc version",
       close: "Close",
     },
     transcriptionTypes: {
@@ -347,6 +351,7 @@ const I18N = {
     },
     privacy: {
       title: "Privacy Policy Consent",
+      version: `Policy version: ${LEGAL_DOC_VERSION}`,
       body: "Please review our privacy handling details before using mallog24. You can use login and transcription after consent.",
       summaryFile: "• Source audio files: removed from temporary storage after processing",
       summaryText: "• Transcribed text/records: retained only for history and record features",
@@ -433,6 +438,7 @@ const LEGAL_DOCUMENTS = {
   ko: {
     privacy: {
       title: "개인정보처리방침",
+      version: LEGAL_DOC_VERSION,
       updatedAt: "최종 업데이트: 2026년 2월 21일",
       sections: [
         {
@@ -475,6 +481,7 @@ const LEGAL_DOCUMENTS = {
     },
     terms: {
       title: "이용약관",
+      version: LEGAL_DOC_VERSION,
       updatedAt: "시행일: 2026년 2월 21일",
       sections: [
         {
@@ -518,6 +525,7 @@ const LEGAL_DOCUMENTS = {
     },
     companyPolicy: {
       title: "회사 정책",
+      version: LEGAL_DOC_VERSION,
       updatedAt: "최종 업데이트: 2026년 2월 21일",
       sections: [
         {
@@ -559,6 +567,7 @@ const LEGAL_DOCUMENTS = {
   en: {
     privacy: {
       title: "Privacy Policy",
+      version: LEGAL_DOC_VERSION,
       updatedAt: "Last updated: February 21, 2026",
       sections: [
         {
@@ -600,6 +609,7 @@ const LEGAL_DOCUMENTS = {
     },
     terms: {
       title: "Terms of Service",
+      version: LEGAL_DOC_VERSION,
       updatedAt: "Effective date: February 21, 2026",
       sections: [
         {
@@ -643,6 +653,7 @@ const LEGAL_DOCUMENTS = {
     },
     companyPolicy: {
       title: "Company Policy",
+      version: LEGAL_DOC_VERSION,
       updatedAt: "Last updated: February 21, 2026",
       sections: [
         {
@@ -2013,7 +2024,7 @@ function App() {
                     { color: activeTheme.textSecondary },
                   ]}
                 >
-                  {activeLegalDoc.updatedAt}
+                  {`${activeLegalDoc.updatedAt}${activeLegalDoc.version ? ` · ${copy.legal.docVersion}: ${activeLegalDoc.version}` : ""}`}
                 </Text>
 
                 {activeLegalDoc.sections.map((section) => (
@@ -2101,6 +2112,15 @@ function App() {
                   ]}
                 >
                   {copy.privacy.title}
+                </Text>
+                <Text
+                  style={[
+                    styles.legalUpdatedText,
+                    tinyLayout ? styles.legalUpdatedTextTiny : null,
+                    { color: activeTheme.textSecondary },
+                  ]}
+                >
+                  {copy.privacy.version}
                 </Text>
                 <Text style={[styles.privacyBody, compactLayout ? styles.privacyBodyCompact : null, tinyLayout ? styles.privacyBodyTiny : null, { color: activeTheme.textSecondary }]}>
                   {copy.privacy.body}
