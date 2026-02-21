@@ -151,6 +151,8 @@ const I18N = {
       openPrivacy: "개인정보처리방침",
       openTerms: "이용약관",
       openCompanyPolicy: "회사 정책",
+      openNotice: "공지사항",
+      openFaq: "자주 묻는 질문",
       docVersion: "문서 버전",
       close: "닫기",
     },
@@ -203,6 +205,8 @@ const I18N = {
     settingsAppearanceHint: "언어와 테마를 즉시 변경할 수 있습니다.",
     settingsLanguageLabel: "언어 선택",
     settingsThemeLabel: "테마 선택",
+    settingsSupportTitle: "공지 및 도움말",
+    settingsSupportHint: "업데이트 공지와 자주 묻는 질문을 앱 내 문서로 확인하세요.",
     privacy: {
       title: "개인정보처리방침 동의",
       version: `정책 버전: ${LEGAL_DOC_VERSION}`,
@@ -315,6 +319,8 @@ const I18N = {
       openPrivacy: "Privacy Policy",
       openTerms: "Terms of Service",
       openCompanyPolicy: "Company Policy",
+      openNotice: "Notices",
+      openFaq: "FAQ",
       docVersion: "Doc version",
       close: "Close",
     },
@@ -367,6 +373,8 @@ const I18N = {
     settingsAppearanceHint: "Change language and theme instantly.",
     settingsLanguageLabel: "Language",
     settingsThemeLabel: "Theme",
+    settingsSupportTitle: "Notices & Help",
+    settingsSupportHint: "Read product updates and frequently asked questions in the in-app document page.",
     privacy: {
       title: "Privacy Policy Consent",
       version: `Policy version: ${LEGAL_DOC_VERSION}`,
@@ -581,6 +589,61 @@ const LEGAL_DOCUMENTS = {
         },
       ],
     },
+    notice: {
+      title: "공지사항",
+      version: LEGAL_DOC_VERSION,
+      updatedAt: "최종 업데이트: 2026년 2월 21일",
+      sections: [
+        {
+          title: "1. 서비스 안정화 안내",
+          body: [
+            "대용량 파일 처리 시 응답 지연이 발생할 수 있으며, 처리 상태는 작업 ID 기준으로 계속 확인할 수 있습니다.",
+            "백엔드 점검이 필요한 경우 앱 내 배너와 웹 공지를 통해 사전 안내합니다.",
+          ],
+        },
+        {
+          title: "2. 정책 문서 개정 안내",
+          body: [
+            "개인정보처리방침/이용약관/회사정책 개정 시 문서 버전과 시행일을 함께 고지합니다.",
+            "중요 변경 사항은 앱 초기 화면 또는 설정 탭에서 확인할 수 있습니다.",
+          ],
+        },
+        {
+          title: "3. 문의 채널",
+          body: [
+            "서비스 관련 문의: ours113814@gmail.com",
+          ],
+        },
+      ],
+    },
+    faq: {
+      title: "자주 묻는 질문 (FAQ)",
+      version: LEGAL_DOC_VERSION,
+      updatedAt: "최종 업데이트: 2026년 2월 21일",
+      sections: [
+        {
+          title: "Q1. 로그인은 되는데 처리 시작이 느립니다.",
+          body: [
+            "네트워크 상태, 백엔드 인스턴스 워밍업, 외부 AI API 응답 시간에 따라 초기 지연이 발생할 수 있습니다.",
+            "잠시 후 다시 시도하거나 앱을 재실행하면 개선되는 경우가 많습니다.",
+          ],
+        },
+        {
+          title: "Q2. 파일 업로드가 실패합니다.",
+          body: [
+            "파일 용량(최대 100MB), 포맷(mp3/wav/m4a/mp4/webm)과 로그인 상태를 먼저 확인해 주세요.",
+            "오류가 반복되면 파일명을 단순화하고 네트워크를 변경해 다시 시도해 주세요.",
+          ],
+        },
+        {
+          title: "Q3. 전사 결과가 기대와 다릅니다.",
+          body: [
+            "배경소음이 적고 화자 구분이 명확한 원본 음성을 권장합니다.",
+            "변환 후 요약/기록본 기능으로 문맥을 재정리하면 정확도를 높일 수 있습니다.",
+          ],
+        },
+      ],
+    },
   },
   en: {
     privacy: {
@@ -704,6 +767,61 @@ const LEGAL_DOCUMENTS = {
           body: [
             "Major policy/feature/incident updates are announced via web or in-app notices.",
             "Contact: ours113814@gmail.com",
+          ],
+        },
+      ],
+    },
+    notice: {
+      title: "Notices",
+      version: LEGAL_DOC_VERSION,
+      updatedAt: "Last updated: February 21, 2026",
+      sections: [
+        {
+          title: "1. Service Stability Notice",
+          body: [
+            "Large files may take longer to process. You can keep tracking status using the task ID.",
+            "If backend maintenance is required, we provide advance notice in-app and on the web.",
+          ],
+        },
+        {
+          title: "2. Policy Revision Notice",
+          body: [
+            "When privacy/terms/company policy changes, we announce both document version and effective date.",
+            "Major changes are highlighted on the app entry flow or in the Settings tab.",
+          ],
+        },
+        {
+          title: "3. Support Channel",
+          body: [
+            "Service inquiries: ours113814@gmail.com",
+          ],
+        },
+      ],
+    },
+    faq: {
+      title: "Frequently Asked Questions (FAQ)",
+      version: LEGAL_DOC_VERSION,
+      updatedAt: "Last updated: February 21, 2026",
+      sections: [
+        {
+          title: "Q1. Login works, but processing starts slowly.",
+          body: [
+            "Initial delays can happen due to network conditions, backend warm-up, or external AI API latency.",
+            "Retrying after a short wait or relaunching the app often helps.",
+          ],
+        },
+        {
+          title: "Q2. Upload keeps failing.",
+          body: [
+            "Check file size (max 100MB), supported formats (mp3/wav/m4a/mp4/webm), and sign-in status.",
+            "If it keeps failing, simplify the file name and retry on a different network.",
+          ],
+        },
+        {
+          title: "Q3. Transcript quality is lower than expected.",
+          body: [
+            "Use cleaner audio with clear speaker separation when possible.",
+            "Post-process with summary/record features to improve final readability and structure.",
           ],
         },
       ],
@@ -2055,7 +2173,27 @@ function App() {
                 </View>
               </FadeInView>
 
-              <FadeInView key="settings-appearance" delay={150}>
+              <FadeInView key="settings-support" delay={150}>
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsSupportTitle}</Text>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsSupportHint}</Text>
+
+                  <NmPressable
+                    style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                    onPress={() => openLegalDocument("notice")}
+                  >
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.legal.openNotice}</Text>
+                  </NmPressable>
+                  <NmPressable
+                    style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                    onPress={() => openLegalDocument("faq")}
+                  >
+                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.legal.openFaq}</Text>
+                  </NmPressable>
+                </View>
+              </FadeInView>
+
+              <FadeInView key="settings-appearance" delay={220}>
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsAppearanceTitle}</Text>
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsAppearanceHint}</Text>
