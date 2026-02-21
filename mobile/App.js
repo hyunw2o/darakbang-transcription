@@ -433,108 +433,125 @@ const LEGAL_DOCUMENTS = {
   ko: {
     privacy: {
       title: "개인정보처리방침",
-      updatedAt: "최종 업데이트: 2026년 2월 20일",
+      updatedAt: "최종 업데이트: 2026년 2월 21일",
       sections: [
         {
-          title: "1. 수집 및 처리 항목",
+          title: "1. 처리 항목",
           body: [
-            "회원 인증(이메일/소셜 로그인), 업로드 음성 파일, 변환 텍스트, 저장 기록본, 접속 로그를 처리할 수 있습니다.",
+            "회원정보(이메일/UID), 소셜로그인 정보, 업로드 음성, 변환 텍스트, 기록본, 접속/오류 로그를 처리할 수 있습니다.",
           ],
         },
         {
           title: "2. 처리 목적",
           body: [
-            "로그인/회원관리, 음성 전사 및 교정, 요약, 기록본 저장, 고객지원 및 보안 대응을 위해 처리합니다.",
+            "로그인/계정보호, 전사·교정·요약·기록본 기능 제공, 서비스 보안 및 고객지원 목적입니다.",
           ],
         },
         {
           title: "3. 보관 및 파기",
           body: [
-            "원본 음성 파일은 처리 목적의 임시 저장 후 지체 없이 삭제합니다.",
-            "변환 결과와 기록본은 서비스 제공 범위 내 보관되며, 삭제 요청 또는 계정 정리 시 파기됩니다.",
+            "원본 음성은 임시 저장 후 처리 완료 시 지체 없이 삭제합니다.",
+            "변환 결과/기록본은 기능 제공 범위 내 보관되며 삭제 요청 또는 계정 종료 시 파기됩니다.",
           ],
         },
         {
-          title: "4. 처리 위탁",
+          title: "4. 위탁 및 국외 처리",
           body: [
-            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini) 등 외부 처리사를 사용합니다.",
+            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini)를 이용하며 API 처리 과정에서 국외 서버 처리가 발생할 수 있습니다.",
           ],
         },
         {
-          title: "5. 문의",
+          title: "5. 이용자 권리",
+          body: [
+            "열람·정정·삭제·처리정지를 요청할 수 있으며, 문의 메일로 접수 시 합리적 기간 내 안내합니다.",
+            "민감정보 업로드는 지양해 주세요.",
+          ],
+        },
+        {
+          title: "6. 문의",
           body: ["문의: ours113814@gmail.com"],
         },
       ],
     },
     terms: {
       title: "이용약관",
-      updatedAt: "시행일: 2026년 2월 20일",
+      updatedAt: "시행일: 2026년 2월 21일",
       sections: [
         {
-          title: "1. 서비스 이용",
+          title: "1. 서비스 범위",
           body: [
-            "mallog24는 음성 파일 전사/교정/요약/기록본 저장 기능을 제공합니다.",
-            "서비스 품질 향상을 위해 기능이 변경될 수 있습니다.",
+            "mallog24는 음성 전사/교정/요약/기록본 저장 기능을 제공합니다.",
+            "외부 API 연동 특성상 처리시간과 결과 품질은 환경에 따라 달라질 수 있습니다.",
           ],
         },
         {
-          title: "2. 계정 관리",
+          title: "2. 계정 및 사용량",
           body: [
-            "계정 및 인증정보 관리 책임은 이용자에게 있습니다.",
-            "보안 위험 또는 약관 위반 시 이용 제한이 적용될 수 있습니다.",
+            "계정·세션 관리 책임은 이용자에게 있으며, 무료 플랜은 월간 사용량 한도가 적용됩니다.",
+            "유료 결제 도입 시 가격/환불/해지 기준을 별도 고지합니다.",
           ],
         },
         {
-          title: "3. 금지 행위",
+          title: "3. 이용자 책임",
           body: [
-            "권리침해/불법 콘텐츠 업로드, 서비스 우회/공격/악용, 무단 재판매를 금지합니다.",
+            "업로드 자료에 대한 적법한 권리를 보유해야 하며, 타인 권리 침해 자료 업로드를 금지합니다.",
           ],
         },
         {
-          title: "4. 면책 및 책임",
+          title: "4. 금지 행위",
           body: [
-            "외부 API 장애, 통신 장애, 불가항력 상황에서 서비스 지연이 발생할 수 있습니다.",
-            "전사 결과의 최종 검토와 활용 책임은 이용자에게 있습니다.",
+            "서비스 우회/공격/비정상 자동화 트래픽, 무단 재판매, 역설계 등 운영을 저해하는 행위를 금지합니다.",
           ],
         },
         {
-          title: "5. 문의",
+          title: "5. 제한 및 면책",
+          body: [
+            "약관 위반 또는 보안위험 시 이용이 제한될 수 있습니다.",
+            "전사 결과는 보조 도구이며 최종 검토 책임은 이용자에게 있습니다.",
+          ],
+        },
+        {
+          title: "6. 문의",
           body: ["문의: ours113814@gmail.com"],
         },
       ],
     },
     companyPolicy: {
       title: "회사 정책",
-      updatedAt: "최종 업데이트: 2026년 2월 20일",
+      updatedAt: "최종 업데이트: 2026년 2월 21일",
       sections: [
         {
           title: "1. 운영 원칙",
           body: [
-            "정확도, 보안, 안정성을 우선순위로 서비스 운영 및 개선을 진행합니다.",
+            "정확도·보안·안정성을 우선으로 제품을 개선합니다.",
+            "사용자가 빠르게 기록을 재활용할 수 있는 단순한 흐름을 유지합니다.",
           ],
         },
         {
-          title: "2. 데이터 최소 처리",
+          title: "2. 데이터/보안 정책",
           body: [
-            "서비스 제공에 필요한 최소 데이터만 처리하며, 불필요한 보관을 지양합니다.",
+            "최소 데이터 처리, 권한 분리, HTTPS, 토큰 검증, 요청 제한을 기본 통제로 적용합니다.",
           ],
         },
         {
-          title: "3. 보안 정책",
+          title: "3. 품질 정책",
           body: [
-            "HTTPS, 토큰 인증, 권한 분리, 요청 제한 등 기본 보안조치를 적용합니다.",
+            "자동 생성 결과의 사용자 최종 검토를 권장하며, 도메인별 용어 사전/프롬프트를 지속 개선합니다.",
           ],
         },
         {
-          title: "4. AI 윤리",
+          title: "4. 책임 있는 AI",
           body: [
-            "업로드 데이터는 서비스 처리 목적에 한정해 사용합니다.",
-            "불법/권리침해 이용 신고 시 내부 기준에 따라 검토 및 제한 조치합니다.",
+            "업로드 데이터는 서비스 목적 내에서만 처리합니다.",
+            "불법/권리침해 신고는 내부 기준으로 검토 후 제한 조치할 수 있습니다.",
           ],
         },
         {
-          title: "5. 문의",
-          body: ["문의: ours113814@gmail.com"],
+          title: "5. 공지 및 지원",
+          body: [
+            "주요 정책/장애/기능 변경은 웹/앱 공지로 안내합니다.",
+            "문의: ours113814@gmail.com",
+          ],
         },
       ],
     },
@@ -542,108 +559,123 @@ const LEGAL_DOCUMENTS = {
   en: {
     privacy: {
       title: "Privacy Policy",
-      updatedAt: "Last updated: February 20, 2026",
+      updatedAt: "Last updated: February 21, 2026",
       sections: [
         {
           title: "1. Data We Process",
           body: [
-            "We may process account credentials, uploaded audio, transcript text, saved records, and access logs.",
+            "We may process account data (email/UID), social-login data, uploaded audio, transcript text, saved records, and access/error logs.",
           ],
         },
         {
           title: "2. Purpose",
           body: [
-            "Data is used for authentication, transcription, correction, summarization, saved records, support, and security operations.",
+            "Used for authentication, account security, transcription/correction/summarization, records, support, and service protection.",
           ],
         },
         {
           title: "3. Retention and Deletion",
           body: [
-            "Source audio is handled in temporary storage and removed promptly after processing.",
-            "Transcript text and records are retained for service features and deleted upon request/account closure.",
+            "Source audio is kept in temporary storage and removed promptly after processing.",
+            "Transcripts/records are kept for service features and removed on request or account closure.",
           ],
         },
         {
-          title: "4. Processors",
+          title: "4. Processors and Overseas Processing",
           body: [
-            "We use Supabase (auth/database), OpenAI (Whisper), and Google (Gemini) for required processing.",
+            "We use Supabase (auth/DB), OpenAI (Whisper), and Google (Gemini). API processing may involve overseas infrastructure.",
           ],
         },
         {
-          title: "5. Contact",
+          title: "5. User Rights",
+          body: [
+            "You may request access, correction, deletion, and restriction via support email. Avoid uploading unnecessary sensitive data.",
+          ],
+        },
+        {
+          title: "6. Contact",
           body: ["Contact: ours113814@gmail.com"],
         },
       ],
     },
     terms: {
       title: "Terms of Service",
-      updatedAt: "Effective date: February 20, 2026",
+      updatedAt: "Effective date: February 21, 2026",
       sections: [
         {
-          title: "1. Service Use",
+          title: "1. Service Scope",
           body: [
             "mallog24 provides speech transcription, correction, summarization, and structured record features.",
-            "Features may change for quality and security improvements.",
+            "Processing time and output quality may vary due to external API dependencies.",
           ],
         },
         {
-          title: "2. Account Responsibility",
+          title: "2. Account and Usage Limits",
           body: [
-            "Users are responsible for account security and credential management.",
-            "Access may be limited for security risks or policy violations.",
+            "Users are responsible for account/session security. Free plans are subject to monthly usage quotas.",
+            "Paid-plan pricing, refund, and cancellation terms are disclosed when billing is enabled.",
           ],
         },
         {
-          title: "3. Prohibited Conduct",
+          title: "3. User Responsibility",
           body: [
-            "Uploading unlawful content, abuse/attacks, bypass attempts, and unauthorized resale are prohibited.",
+            "Users must have lawful rights to uploaded content and must not infringe third-party rights.",
           ],
         },
         {
-          title: "4. Disclaimer",
+          title: "4. Prohibited Conduct",
           body: [
-            "Service delays may occur due to external API outages, network failures, or force majeure events.",
-            "Users are responsible for final review and business use of generated transcripts.",
+            "Abuse, attacks, bypass attempts, abnormal automation traffic, reverse engineering, and unauthorized resale are prohibited.",
           ],
         },
         {
-          title: "5. Contact",
+          title: "5. Restriction and Disclaimer",
+          body: [
+            "Access may be limited for policy violations or security risks.",
+            "Generated outputs are assistive; users are responsible for final review and use.",
+          ],
+        },
+        {
+          title: "6. Contact",
           body: ["Contact: ours113814@gmail.com"],
         },
       ],
     },
     companyPolicy: {
       title: "Company Policy",
-      updatedAt: "Last updated: February 20, 2026",
+      updatedAt: "Last updated: February 21, 2026",
       sections: [
         {
           title: "1. Operating Principles",
           body: [
-            "We prioritize transcript quality, security, and service stability in product operations.",
+            "We prioritize transcript quality, security, and reliability while keeping workflows simple and practical.",
           ],
         },
         {
-          title: "2. Data Minimization",
+          title: "2. Data and Security Standards",
           body: [
-            "Only the minimum data required for service delivery is processed and retained.",
+            "We apply data minimization, role separation, HTTPS, token validation, and request throttling as baseline controls.",
           ],
         },
         {
-          title: "3. Security",
+          title: "3. Quality Policy",
           body: [
-            "HTTPS, token-based auth, access control, and request throttling are applied as baseline controls.",
+            "Machine-generated outputs should be user-reviewed. Domain-specific prompts and dictionaries are continuously refined.",
           ],
         },
         {
           title: "4. Responsible AI Use",
           body: [
-            "Uploaded data is processed for service functionality only.",
-            "Reported abuse or rights-infringing usage is reviewed under internal policy.",
+            "Uploaded data is used only for service functionality.",
+            "Reported illegal or rights-infringing usage may lead to restrictions under internal policy.",
           ],
         },
         {
-          title: "5. Contact",
-          body: ["Contact: ours113814@gmail.com"],
+          title: "5. Notice and Support",
+          body: [
+            "Major policy/feature/incident updates are announced via web or in-app notices.",
+            "Contact: ours113814@gmail.com",
+          ],
         },
       ],
     },
