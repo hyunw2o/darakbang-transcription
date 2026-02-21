@@ -2859,12 +2859,14 @@ async def get_records(
 
 
 @app.post("/api/summarize")
-async def summarize_sermon(
+async def summarize_text(
     text: str = Form(...),
     summary_type: str = Form("short"),
+    transcription_type: str = Form("sermon"),
+    language: str = Form("ko"),
     authorization: str | None = Header(default=None),
 ):
-    """다락방 설교 요약 (Gemini)"""
+    """텍스트 요약 (유형별 프롬프트: 설교/통화/회의)"""
     try:
         _get_current_user(authorization)
         normalized_text = text.strip()
@@ -2872,14 +2874,28 @@ async def summarize_sermon(
             raise HTTPException(status_code=400, detail="요약할 텍스트가 비어 있습니다.")
         if len(normalized_text) > MAX_TEXT_INPUT_CHARS:
             raise HTTPException(status_code=400, detail=f"요약 입력은 {MAX_TEXT_INPUT_CHARS}자 이하여야 합니다.")
+        normalized_transcription_type = (transcription_type or "sermon").strip().lower()
+        if normalized_transcription_type not in ALLOWED_TRANSCRIPTION_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"지원하지 않는 transcription_type: {transcription_type}",
+            )
+        normalized_language = (language or "ko").strip().lower()
+        if normalized_language not in {"ko", "en"}:
+            normalized_language = "ko"
 
         target_model = get_optimal_model()
         model = genai.GenerativeModel(model_name=target_model)
 
-        prompt = get_summary_prompt(summary_type)
+        prompt = get_summary_prompt(
+            summary_type=summary_type,
+            transcription_type=normalized_transcription_type,
+            language=normalized_language,
+        )
+        source_label = "원문" if normalized_language == "ko" else "Source Transcript"
         full_prompt = f"""{prompt}
 
-설교 내용:
+[{source_label}]
 {normalized_text}"""
 
         response = None
@@ -2903,9 +2919,13 @@ async def summarize_sermon(
         return {
             "success": True,
             "summary": response.text,
-            "summary_type": summary_type
+            "summary_type": summary_type,
+            "transcription_type": normalized_transcription_type,
+            "language": normalized_language,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

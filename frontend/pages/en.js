@@ -977,9 +977,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setError(null)
     setNotice(null)
     try {
+      const normalizedType = result?.transcription_type || transcriptionType || 'sermon'
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
       formData.append('summary_type', 'short')
+      formData.append('transcription_type', normalizedType)
+      formData.append('language', language || 'en')
 
       const response = await fetch(`${API_URL}/api/summarize`, {
         method: 'POST',
@@ -987,9 +990,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         body: formData,
       })
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.detail || 'Summary generation failed.')
+      }
       setResult({ ...result, summary: data.summary })
     } catch (err) {
-      setError('Summary generation failed.')
+      setError(err.message || 'Summary generation failed.')
     } finally {
       setLoading(false)
     }
@@ -1078,6 +1084,16 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const typeLabels = { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
+  const summaryActionLabels = {
+    sermon: 'Generate Sermon Summary',
+    phonecall: 'Generate Call Summary',
+    conversation: 'Generate Meeting Summary',
+  }
+  const summaryTitleLabels = {
+    sermon: 'Sermon Summary',
+    phonecall: 'Call Summary',
+    conversation: 'Meeting Summary',
+  }
   const transcriptionTypeHints = {
     sermon: 'Structured by sermon flow (Main Body / Conclusion / Prayer) with stronger homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
     phonecall: 'Separates call speakers (A/B), reinforces clinical wording, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
@@ -1518,8 +1534,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   </div>
                 </div>
 
-                {/* 요약 섹션 (설교 녹취만) */}
-                {(result.transcription_type || 'sermon') === 'sermon' && (
+                {/* Summary section (type-specific) */}
+                {(() => {
+                  const summaryType = result.transcription_type || transcriptionType || 'sermon'
+                  const summaryCopyKey = `summary-${summaryType}`
+                  return (
                   !result.summary ? (
                     <button
                       onClick={handleSummarize}
@@ -1527,17 +1546,19 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                       className="w-full nm-btn p-4 text-sm font-medium text-nm-accent
                     disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading ? 'Generating summary...' : 'Generate Bulletin Summary'}
+                      {loading ? 'Generating summary...' : (summaryActionLabels[summaryType] || summaryActionLabels.sermon)}
                     </button>
                   ) : (
                     <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-nm-text-primary">Bulletin Summary</h3>
+                        <h3 className="text-sm font-bold text-nm-text-primary">
+                          {summaryTitleLabels[summaryType] || summaryTitleLabels.sermon}
+                        </h3>
                         <button
-                          onClick={() => copyToClipboard(result.summary, 'summary')}
+                          onClick={() => copyToClipboard(result.summary, summaryCopyKey)}
                           className="text-xs text-nm-accent hover:opacity-80 font-medium"
                         >
-                          {copied === 'summary' ? 'Copied' : 'Copy'}
+                          {copied === summaryCopyKey ? 'Copied' : 'Copy'}
                         </button>
                       </div>
                       <div className="nm-concave p-4">
@@ -1547,7 +1568,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                       </div>
                     </div>
                   )
-                )}
+                  )
+                })()}
 
                 {/* Record Drafts / Save */}
                 <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">

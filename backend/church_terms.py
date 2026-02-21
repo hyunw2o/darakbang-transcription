@@ -1957,47 +1957,218 @@ def get_claude_context():
 """
     return context
 
-def get_summary_prompt(summary_type: str = "short"):
-    """
-    다락방 설교 요약 프롬프트
-    """
+def _ko_sermon_summary_prompt(summary_type: str = "short") -> str:
     if summary_type == "short":
-        return """다음 설교를 3-5문장으로 요약해주세요.
+        return """다음 설교 기록을 간결하게 요약하세요.
 
-주보에 들어갈 내용입니다.
+출력 형식:
+설교 요약:
+- 핵심 메시지 3~5문장
+- 원문에 성경 구절이 있으면 "성경구절: 책약어장:절" 형태로 한 줄 추가
+- 적용 포인트 1~2개
 
-포함 사항:
-- 본문 말씀 (성경 구절, 책약어장:절 형식. 예: 행1:8, 시23:1)
-- 핵심 메시지
-- 다락방 용어는 그대로 유지 (렘넌트, 237, 7망대 등)
+규칙:
+1) 원문에 없는 사실/용어/단체명/교단명은 추가하지 마세요.
+2) "어떤 용어가 없다/부족하다" 같은 메타 평가 문장을 쓰지 마세요.
+3) 원문 근거가 없는 추측/판단을 하지 마세요.
+4) 요약은 오직 입력 텍스트 내용에만 기반하세요."""
 
-형식:
-본문: (성경 구절, 예: 행1:8)
-메시지: (핵심 내용 2-3문장)"""
-    
+    return """다음 설교 기록을 상세 요약하세요.
+
+출력 형식:
+1. 설교 요약 (4~7문장)
+2. 핵심 포인트 (번호 목록 3~5개)
+3. 성경구절 (원문에 있을 때만 책약어장:절)
+4. 실천 포인트 (번호 목록 2~3개)
+
+규칙:
+1) 원문에 없는 사실/용어/단체명/교단명은 추가하지 마세요.
+2) "특정 용어가 없다" 같은 메타 평가 문장을 쓰지 마세요.
+3) 원문 근거가 없는 추측/판단을 하지 마세요."""
+
+
+def _ko_phonecall_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """다음 통화 기록을 통화 업무 관점으로 요약하세요.
+
+출력 형식:
+통화 요약:
+1) 통화 목적 (1~2문장)
+2) 핵심 쟁점 (번호 목록 2~4개)
+3) 결정/합의 사항 (번호 목록 1~3개)
+4) 후속 조치 (번호 목록, 담당/기한이 있으면 함께)
+
+규칙:
+1) 신학/종교/조직 특화 용어 유무를 평가하거나 언급하지 마세요.
+2) 원문에 없는 해석/판단/추측을 추가하지 마세요.
+3) "없다/부족하다" 같은 메타 코멘트를 쓰지 마세요."""
+
+    return """다음 통화 기록을 상세 요약하세요.
+
+출력 형식:
+1. 통화 배경/목적
+2. 논의 내용 정리 (번호 목록 4~7개)
+3. 결정/합의 사항
+4. 미해결 이슈
+5. 후속 조치 (담당/기한)
+
+규칙:
+1) 신학/종교/조직 특화 용어 유무를 평가하거나 언급하지 마세요.
+2) 원문 근거 없는 해석/추측을 넣지 마세요."""
+
+
+def _ko_conversation_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """다음 회의/대화 기록을 회의록 형식으로 요약하세요.
+
+출력 형식:
+회의 요약:
+1) 회의 목적/배경 (1~2문장)
+2) 주요 안건 (번호 목록 2~5개)
+3) 결정 사항 (번호 목록 1~4개)
+4) 액션 아이템 (번호 목록, 담당/기한 포함 가능)
+
+규칙:
+1) 신학/종교/조직 특화 용어 유무를 평가하거나 언급하지 마세요.
+2) 원문에 없는 해석/추측을 넣지 마세요.
+3) "어떤 용어가 없다" 같은 메타 문장을 쓰지 마세요."""
+
+    return """다음 회의/대화 기록을 상세 회의록 형태로 요약하세요.
+
+출력 형식:
+1. 회의 목적/맥락
+2. 안건별 논의 내용
+3. 결정 사항
+4. 미결 이슈
+5. 액션 아이템(담당/기한)
+
+규칙:
+1) 신학/종교/조직 특화 용어 유무를 평가하거나 언급하지 마세요.
+2) 원문 근거 없는 판단/추측을 넣지 마세요."""
+
+
+def _en_sermon_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize the sermon transcript concisely.
+
+Output format:
+Sermon Summary:
+- Core message in 3-5 sentences
+- Add one line "Scripture: BookChap:Verse" only if scripture appears in source
+- 1-2 practical applications
+
+Rules:
+1) Do not add facts, terms, organization names, or denominations not present in source.
+2) Do not output meta-comments such as "specific terms are missing."
+3) Do not infer beyond source evidence."""
+
+    return """Summarize the sermon transcript in detail.
+
+Output format:
+1. Sermon summary (4-7 sentences)
+2. Key points (3-5 bullets)
+3. Scripture references (only if present in source)
+4. Practical applications (2-3 bullets)
+
+Rules:
+1) Do not add facts/terms/organization names not present in source.
+2) Do not output meta-comments about missing terms or themes.
+3) Avoid unsupported inference."""
+
+
+def _en_phonecall_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize the phone call transcript for operational use.
+
+Output format:
+Call Summary:
+1) Purpose of call (1-2 sentences)
+2) Key issues (2-4 bullets)
+3) Decisions/agreements (1-3 bullets)
+4) Follow-up actions (with owner/deadline if available)
+
+Rules:
+1) Do not mention whether theological/religious/specialized terms are present or absent.
+2) Do not add assumptions not grounded in source.
+3) Avoid meta-comments about vocabulary coverage."""
+
+    return """Provide a detailed summary of the phone call transcript.
+
+Output format:
+1. Context/Purpose
+2. Discussion details
+3. Decisions/agreements
+4. Open issues
+5. Follow-up actions (owner/deadline)
+
+Rules:
+1) Do not mention term-presence/absence evaluations.
+2) Do not add unsupported assumptions."""
+
+
+def _en_conversation_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize the meeting/conversation transcript in meeting-note format.
+
+Output format:
+Meeting Summary:
+1) Purpose/Context (1-2 sentences)
+2) Agenda items (2-5 bullets)
+3) Decisions (1-4 bullets)
+4) Action items (with owner/deadline when available)
+
+Rules:
+1) Do not mention whether theological/religious/specialized terms are present or absent.
+2) Do not add assumptions not grounded in source.
+3) Avoid meta-comments about missing terms."""
+
+    return """Provide a detailed meeting-note summary of the meeting/conversation transcript.
+
+Output format:
+1. Purpose/Context
+2. Agenda discussion by topic
+3. Decisions
+4. Open issues
+5. Action items (owner/deadline)
+
+Rules:
+1) Do not mention term-presence/absence evaluations.
+2) Do not add unsupported assumptions."""
+
+
+def get_summary_prompt(
+    summary_type: str = "short",
+    transcription_type: str = "sermon",
+    language: str = "ko",
+):
+    """
+    유형별(설교/통화/회의) + 언어별(ko/en) 요약 프롬프트
+    """
+    normalized_type = (transcription_type or "sermon").strip().lower()
+    if normalized_type not in {"sermon", "phonecall", "conversation"}:
+        normalized_type = "sermon"
+
+    normalized_summary_type = (summary_type or "short").strip().lower()
+    if normalized_summary_type not in {"short", "detailed"}:
+        normalized_summary_type = "short"
+
+    normalized_lang = (language or "ko").strip().lower()
+    is_en = normalized_lang.startswith("en")
+
+    if is_en:
+        prompt_map = {
+            "sermon": _en_sermon_summary_prompt,
+            "phonecall": _en_phonecall_summary_prompt,
+            "conversation": _en_conversation_summary_prompt,
+        }
     else:
-        return """다음 설교를 상세히 요약해주세요.
+        prompt_map = {
+            "sermon": _ko_sermon_summary_prompt,
+            "phonecall": _ko_phonecall_summary_prompt,
+            "conversation": _ko_conversation_summary_prompt,
+        }
 
-【형식】
-1. 본문 말씀: (성경 구절, 책약어장:절 형식. 예: 시23:1)
-
-2. 핵심 메시지:
-   (한 줄 요약)
-
-3. 주요 내용:
-   (1) 첫 번째 포인트
-   (2) 두 번째 포인트
-   (3) 세 번째 포인트
-
-4. 렘넌트 적용:
-   (실천 사항)
-
-5. 기도 제목:
-   (2-3개)
-
-【주의】
-- 다락방 용어 정확히 유지
-- 숫자/영문 그대로"""
+    return prompt_map[normalized_type](normalized_summary_type)
 
 def print_terms_summary():
     """용어 통계 출력"""

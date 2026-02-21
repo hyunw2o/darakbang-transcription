@@ -1802,9 +1802,12 @@ function App() {
     setSummaryLoading(true);
 
     try {
+      const normalizedType = result?.transcription_type || transcriptionType || "sermon";
       const body = new FormData();
       body.append("text", sourceText);
       body.append("summary_type", "short");
+      body.append("transcription_type", normalizedType);
+      body.append("language", language || "ko");
 
       const data = await requestApi("/api/summarize", {
         method: "POST",

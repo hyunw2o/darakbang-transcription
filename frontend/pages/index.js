@@ -977,9 +977,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setError(null)
     setNotice(null)
     try {
+      const normalizedType = result?.transcription_type || transcriptionType || 'sermon'
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
       formData.append('summary_type', 'short')
+      formData.append('transcription_type', normalizedType)
+      formData.append('language', language || 'ko')
 
       const response = await fetch(`${API_URL}/api/summarize`, {
         method: 'POST',
@@ -987,9 +990,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         body: formData,
       })
       const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.detail || '요약 실패')
+      }
       setResult({ ...result, summary: data.summary })
     } catch (err) {
-      setError('요약 실패')
+      setError(err.message || '요약 실패')
     } finally {
       setLoading(false)
     }
@@ -1078,6 +1084,16 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
+  const summaryActionLabels = {
+    sermon: '설교 기록 요약 생성',
+    phonecall: '통화 기록 요약 생성',
+    conversation: '회의 기록 요약 생성',
+  }
+  const summaryTitleLabels = {
+    sermon: '설교 기록 요약',
+    phonecall: '통화 기록 요약',
+    conversation: '회의 기록 요약',
+  }
   const transcriptionTypeHints = {
     sermon: '설교 흐름(본론/결론/기도) 중심으로 정리합니다.',
     phonecall: '통화 화자를 A/B로 분리하여 정리합니다.',
@@ -1515,25 +1531,30 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   </div>
                 </div>
 
-                {/* 요약 섹션 (설교 녹취만) */}
-                {(result.transcription_type || 'sermon') === 'sermon' && (
+                {/* 요약 섹션 (유형별) */}
+                {(() => {
+                  const summaryType = result.transcription_type || transcriptionType || 'sermon'
+                  const summaryCopyKey = `summary-${summaryType}`
+                  return (
                   !result.summary ? (
                     <button
                       onClick={handleSummarize}
                       disabled={loading}
                       className="w-full nm-btn p-4 text-sm font-medium text-nm-accent disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading ? '요약 생성 중...' : '주보용 요약 생성'}
+                      {loading ? '요약 생성 중...' : (summaryActionLabels[summaryType] || summaryActionLabels.sermon)}
                     </button>
                   ) : (
                     <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-nm-text-primary">주보용 요약</h3>
+                        <h3 className="text-sm font-bold text-nm-text-primary">
+                          {summaryTitleLabels[summaryType] || summaryTitleLabels.sermon}
+                        </h3>
                         <button
-                          onClick={() => copyToClipboard(result.summary, 'summary')}
+                          onClick={() => copyToClipboard(result.summary, summaryCopyKey)}
                           className="text-xs text-nm-accent hover:opacity-80 font-medium"
                         >
-                          {copied === 'summary' ? '복사됨' : '복사'}
+                          {copied === summaryCopyKey ? '복사됨' : '복사'}
                         </button>
                       </div>
                       <div className="nm-concave p-4">
@@ -1543,7 +1564,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                       </div>
                     </div>
                   )
-                )}
+                  )
+                })()}
 
                 {/* 기록본 생성/저장 */}
                 <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
