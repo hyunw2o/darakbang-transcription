@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Clipboard,
   Linking,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -212,6 +214,9 @@ const I18N = {
     settingsThemeLabel: "테마 선택",
     settingsSupportTitle: "공지 및 도움말",
     settingsSupportHint: "업데이트 공지와 자주 묻는 질문을 앱 내 문서로 확인하세요.",
+    clipboardCopy: "클립보드 복사",
+    exportTxt: "TXT 저장/공유",
+    exportDocx: "DOCX 저장/공유",
     privacy: {
       title: "개인정보처리방침 동의",
       version: `정책 버전: ${LEGAL_DOC_VERSION}`,
@@ -241,6 +246,9 @@ const I18N = {
       draftDone: "{label} 초안을 생성했습니다.",
       recordSaved: "기록본을 저장했습니다.",
       privacyAccepted: "개인정보처리방침 동의가 완료되었습니다.",
+      copiedToClipboard: "{label} 내용을 클립보드에 복사했습니다.",
+      openedShareTxt: "TXT 저장/공유 창을 열었습니다.",
+      openedShareDocx: "DOCX 저장/공유 창을 열었습니다.",
     },
     errors: {
       authRequired: "로그인 후 파일 변환을 사용할 수 있습니다.",
@@ -270,6 +278,9 @@ const I18N = {
       saveNeedLogin: "로그인 후 기록본 저장이 가능합니다.",
       saveNoContent: "저장할 기록본 내용이 없습니다.",
       saveFailed: "기록본 저장 실패",
+      noExportContent: "내보낼 내용이 없습니다.",
+      clipboardFailed: "클립보드 복사에 실패했습니다.",
+      shareFailed: "공유 창을 열지 못했습니다.",
       openPrivacyFailed: "개인정보처리방침 페이지를 열 수 없습니다.",
       openPrivacyLinkFailed: "개인정보처리방침 링크를 열 수 없습니다.",
       openTermsFailed: "이용약관 페이지를 열 수 없습니다.",
@@ -385,6 +396,9 @@ const I18N = {
     settingsThemeLabel: "Theme",
     settingsSupportTitle: "Notices & Help",
     settingsSupportHint: "Read product updates and frequently asked questions in the in-app document page.",
+    clipboardCopy: "Copy to Clipboard",
+    exportTxt: "Save/Share TXT",
+    exportDocx: "Save/Share DOCX",
     privacy: {
       title: "Privacy Policy Consent",
       version: `Policy version: ${LEGAL_DOC_VERSION}`,
@@ -414,6 +428,9 @@ const I18N = {
       draftDone: "{label} draft generated.",
       recordSaved: "Record saved.",
       privacyAccepted: "Privacy consent saved.",
+      copiedToClipboard: "{label} copied to clipboard.",
+      openedShareTxt: "TXT save/share sheet opened.",
+      openedShareDocx: "DOCX save/share sheet opened.",
     },
     errors: {
       authRequired: "Please log in to use transcription.",
@@ -443,6 +460,9 @@ const I18N = {
       saveNeedLogin: "Log in to save records.",
       saveNoContent: "No record content to save.",
       saveFailed: "Failed to save record",
+      noExportContent: "No content to export.",
+      clipboardFailed: "Failed to copy to clipboard.",
+      shareFailed: "Unable to open share sheet.",
       openPrivacyFailed: "Unable to open the privacy policy page.",
       openPrivacyLinkFailed: "Unable to open privacy policy link.",
       openTermsFailed: "Unable to open terms of service page.",
@@ -1031,6 +1051,7 @@ function App() {
   const [recordDrafts, setRecordDrafts] = useState({});
   const [draftLoadingCategory, setDraftLoadingCategory] = useState("");
   const [savingCategory, setSavingCategory] = useState("");
+  const [workspaceScrollEnabled, setWorkspaceScrollEnabled] = useState(true);
 
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -1130,6 +1151,12 @@ function App() {
     setOpenSettingsMenu("");
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    if (activeTab !== "transcribe") {
+      setWorkspaceScrollEnabled(true);
+    }
+  }, [activeTab]);
+
   const warmUpBackend = () => {
     requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
   };
@@ -1138,6 +1165,16 @@ function App() {
     setNotice("");
     setError("");
   };
+
+  const updateWorkspaceScrollLock = (locked) => {
+    setWorkspaceScrollEnabled((prev) => {
+      const next = !locked;
+      return prev === next ? prev : next;
+    });
+  };
+
+  const lockWorkspaceScroll = () => updateWorkspaceScrollLock(true);
+  const unlockWorkspaceScroll = () => updateWorkspaceScrollLock(false);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -1654,6 +1691,53 @@ function App() {
     }
   };
 
+  const resolveExportContent = (text) => (text || "").trim();
+
+  const handleCopyToClipboard = (label, text) => {
+    clearMessages();
+    const content = resolveExportContent(text);
+    if (!content) {
+      setError(copy.errors.noExportContent);
+      return;
+    }
+
+    try {
+      if (!Clipboard || typeof Clipboard.setString !== "function") {
+        throw new Error(copy.errors.clipboardFailed);
+      }
+      Clipboard.setString(content);
+      setNotice(copy.notices.copiedToClipboard.replace("{label}", label));
+    } catch (e) {
+      setError(e.message || copy.errors.clipboardFailed);
+    }
+  };
+
+  const handleShareExport = async (label, text, format = "txt") => {
+    clearMessages();
+    const content = resolveExportContent(text);
+    if (!content) {
+      setError(copy.errors.noExportContent);
+      return;
+    }
+
+    const exportFileName = `${label}.${format === "docx" ? "docx" : "txt"}`;
+    const exportText =
+      format === "docx"
+        ? `${label}\n\n${content}`
+        : content;
+
+    try {
+      await Share.share({
+        title: exportFileName,
+        subject: exportFileName,
+        message: exportText,
+      });
+      setNotice(format === "docx" ? copy.notices.openedShareDocx : copy.notices.openedShareTxt);
+    } catch (e) {
+      setError(e.message || copy.errors.shareFailed);
+    }
+  };
+
   const selectedTypeHint = useMemo(() => {
     return copy.selectedTypeHints[transcriptionType] || "";
   }, [copy, transcriptionType]);
@@ -2034,6 +2118,7 @@ function App() {
               contentContainerStyle={styles.scrollContent}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
+              scrollEnabled={workspaceScrollEnabled}
             >
               <FadeInView key="transcribe-settings">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
@@ -2095,11 +2180,39 @@ function App() {
                       ]}
                       contentContainerStyle={styles.resultScrollContent}
                       showsVerticalScrollIndicator
+                      onTouchStart={lockWorkspaceScroll}
+                      onTouchEnd={unlockWorkspaceScroll}
+                      onTouchCancel={unlockWorkspaceScroll}
+                      onScrollBeginDrag={lockWorkspaceScroll}
+                      onScrollEndDrag={unlockWorkspaceScroll}
+                      onMomentumScrollBegin={lockWorkspaceScroll}
+                      onMomentumScrollEnd={unlockWorkspaceScroll}
                     >
                       <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>
                         {result.corrected_text || result.raw_text || ""}
                       </Text>
                     </ScrollView>
+
+                    <View style={styles.exportActionRow}>
+                      <NmPressable
+                        style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        onPress={() => handleCopyToClipboard(copy.correctedText, result.corrected_text || result.raw_text || "")}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                      </NmPressable>
+                      <NmPressable
+                        style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        onPress={() => handleShareExport(copy.correctedText, result.corrected_text || result.raw_text || "", "txt")}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                      </NmPressable>
+                      <NmPressable
+                        style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        onPress={() => handleShareExport(copy.correctedText, result.corrected_text || result.raw_text || "", "docx")}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                      </NmPressable>
+                    </View>
 
                     <NmPressable
                       style={[
@@ -2163,6 +2276,9 @@ function App() {
                           ]}
                           multiline
                           scrollEnabled
+                          onFocus={lockWorkspaceScroll}
+                          onBlur={unlockWorkspaceScroll}
+                          onTouchStart={lockWorkspaceScroll}
                           value={recordDrafts[category.key] || ""}
                           onChangeText={(text) =>
                             setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
@@ -2170,6 +2286,26 @@ function App() {
                           placeholder={copy.recordEditorPlaceholder.replace("{label}", category.label)}
                           placeholderTextColor={activeTheme.textSecondary}
                         />
+                        <View style={styles.exportActionRow}>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleCopyToClipboard(category.label, recordDrafts[category.key] || "")}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                          </NmPressable>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleShareExport(category.label, recordDrafts[category.key] || "", "txt")}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                          </NmPressable>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleShareExport(category.label, recordDrafts[category.key] || "", "docx")}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                          </NmPressable>
+                        </View>
                       </View>
                     ))}
                   </View>
@@ -2227,6 +2363,26 @@ function App() {
                         <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.title || item.category}</Text>
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
                         <Text selectable style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.content || ""}</Text>
+                        <View style={styles.exportActionRow}>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleCopyToClipboard(item.title || item.category || copy.recordsTitle, item.content || "")}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                          </NmPressable>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "txt")}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                          </NmPressable>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "docx")}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                          </NmPressable>
+                        </View>
                       </View>
                     ))
                   )}
@@ -2979,6 +3135,16 @@ const styles = StyleSheet.create({
   recordEditorTiny: {
     fontSize: 10,
     lineHeight: 15,
+  },
+  exportActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
+  },
+  exportTinyButton: {
+    minWidth: 94,
+    justifyContent: "center",
   },
   inlineBetween: {
     flexDirection: "row",
