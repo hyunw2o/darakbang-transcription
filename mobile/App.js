@@ -23,7 +23,7 @@ const AUTH_TOKEN_KEY = "mallog24_access_token";
 const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
-const PRIVACY_POLICY_VERSION = "2026-02-19";
+const PRIVACY_POLICY_VERSION = "2026-02-21";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const MOBILE_THEME_OPTIONS = [
