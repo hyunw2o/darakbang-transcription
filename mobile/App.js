@@ -1050,6 +1050,54 @@ function App() {
     300,
     Math.round(modalViewportHeight * (tinyLayout ? 0.66 : compactLayout ? 0.74 : 0.8))
   );
+  const modalFontShrinkFactor = useMemo(() => {
+    let factor = 1;
+    if (shortestEdge < 390) factor *= 0.96;
+    if (shortestEdge < 360) factor *= 0.9;
+    if (fontScale >= 1.15) factor *= 0.95;
+    if (fontScale >= 1.3) factor *= 0.9;
+    return Math.max(0.82, Math.min(1, factor));
+  }, [shortestEdge, fontScale]);
+  const modalTextStyles = useMemo(() => {
+    const scaled = (value, min) =>
+      Math.max(min, Math.round(value * modalFontShrinkFactor * 10) / 10);
+    return {
+      title: {
+        fontSize: scaled(tinyLayout ? 14 : compactLayout ? 16 : 18, 13),
+        lineHeight: scaled(tinyLayout ? 19 : compactLayout ? 22 : 24, 16),
+      },
+      meta: {
+        fontSize: scaled(tinyLayout ? 10 : 11, 9),
+        lineHeight: scaled(tinyLayout ? 14 : 16, 12),
+      },
+      body: {
+        fontSize: scaled(tinyLayout ? 10 : compactLayout ? 11 : 12, 9.5),
+        lineHeight: scaled(tinyLayout ? 15 : compactLayout ? 16 : 18, 14),
+      },
+      sectionTitle: {
+        fontSize: scaled(tinyLayout ? 12 : 13, 11),
+        lineHeight: scaled(tinyLayout ? 16 : 18, 14),
+      },
+      sectionBody: {
+        fontSize: scaled(tinyLayout ? 10 : 11, 9),
+        lineHeight: scaled(tinyLayout ? 15 : 17, 13),
+      },
+      summaryItem: {
+        fontSize: scaled(tinyLayout ? 9.5 : compactLayout ? 10 : 11, 9),
+        lineHeight: scaled(tinyLayout ? 14 : compactLayout ? 15 : 17, 13),
+      },
+      linkText: {
+        fontSize: scaled(tinyLayout ? 11 : 12, 10),
+      },
+      checkText: {
+        fontSize: scaled(tinyLayout ? 10.5 : 12, 10),
+        lineHeight: scaled(tinyLayout ? 15 : 17, 14),
+      },
+      actionText: {
+        fontSize: scaled(tinyLayout ? 12 : 13, 11),
+      },
+    };
+  }, [compactLayout, tinyLayout, modalFontShrinkFactor]);
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
@@ -1748,6 +1796,7 @@ function App() {
                   styles.privacyTitle,
                   compactLayout ? styles.privacyTitleCompact : null,
                   tinyLayout ? styles.privacyTitleTiny : null,
+                  modalTextStyles.title,
                   { color: activeTheme.textPrimary },
                 ]}
               >
@@ -1769,6 +1818,7 @@ function App() {
                   style={[
                     styles.legalUpdatedText,
                     tinyLayout ? styles.legalUpdatedTextTiny : null,
+                    modalTextStyles.meta,
                     { color: activeTheme.textSecondary },
                   ]}
                 >
@@ -1788,6 +1838,7 @@ function App() {
                       style={[
                         styles.legalSectionTitle,
                         tinyLayout ? styles.legalSectionTitleTiny : null,
+                        modalTextStyles.sectionTitle,
                         { color: activeTheme.textPrimary },
                       ]}
                     >
@@ -1799,6 +1850,7 @@ function App() {
                         style={[
                           styles.legalSectionBody,
                           tinyLayout ? styles.legalSectionBodyTiny : null,
+                          modalTextStyles.sectionBody,
                           { color: activeTheme.textPrimary },
                         ]}
                       >
@@ -2275,6 +2327,7 @@ function App() {
                     styles.privacyTitle,
                     compactLayout ? styles.privacyTitleCompact : null,
                     tinyLayout ? styles.privacyTitleTiny : null,
+                    modalTextStyles.title,
                     { color: activeTheme.textPrimary },
                   ]}
                 >
@@ -2284,26 +2337,27 @@ function App() {
                   style={[
                     styles.legalUpdatedText,
                     tinyLayout ? styles.legalUpdatedTextTiny : null,
+                    modalTextStyles.meta,
                     { color: activeTheme.textSecondary },
                   ]}
                 >
                   {copy.privacy.version}
                 </Text>
-                <Text style={[styles.privacyBody, compactLayout ? styles.privacyBodyCompact : null, tinyLayout ? styles.privacyBodyTiny : null, { color: activeTheme.textSecondary }]}>
+                <Text style={[styles.privacyBody, compactLayout ? styles.privacyBodyCompact : null, tinyLayout ? styles.privacyBodyTiny : null, modalTextStyles.body, { color: activeTheme.textSecondary }]}>
                   {copy.privacy.body}
                 </Text>
 
                 <View style={[styles.privacySummaryBox, tinyLayout ? styles.privacySummaryBoxTiny : null, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryFile}
                   </Text>
-                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryText}
                   </Text>
-                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryVendors}
                   </Text>
-                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summarySocial}
                   </Text>
                 </View>
@@ -2312,21 +2366,21 @@ function App() {
                   style={[styles.privacyLinkButton, tinyLayout ? styles.privacyLinkButtonTiny : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={() => openLegalDocument("privacy")}
                 >
-                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, { color: activeTheme.accent }]}>{copy.privacy.viewPolicy}</Text>
+                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, modalTextStyles.linkText, { color: activeTheme.accent }]}>{copy.privacy.viewPolicy}</Text>
                 </NmPressable>
 
                 <NmPressable
                   style={[styles.privacyLinkButton, tinyLayout ? styles.privacyLinkButtonTiny : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={() => openLegalDocument("terms")}
                 >
-                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, { color: activeTheme.accent }]}>{copy.privacy.viewTerms}</Text>
+                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, modalTextStyles.linkText, { color: activeTheme.accent }]}>{copy.privacy.viewTerms}</Text>
                 </NmPressable>
 
                 <NmPressable
                   style={[styles.privacyLinkButton, tinyLayout ? styles.privacyLinkButtonTiny : null, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={() => openLegalDocument("company-policy")}
                 >
-                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, { color: activeTheme.accent }]}>{copy.privacy.viewCompanyPolicy}</Text>
+                  <Text style={[styles.privacyLinkText, tinyLayout ? styles.privacyLinkTextTiny : null, modalTextStyles.linkText, { color: activeTheme.accent }]}>{copy.privacy.viewCompanyPolicy}</Text>
                 </NmPressable>
 
                 <NmPressable
@@ -2342,7 +2396,7 @@ function App() {
                   >
                     {privacyConsentChecked ? <Text style={styles.privacyCheckMark}>✓</Text> : null}
                   </View>
-                  <Text style={[styles.privacyCheckText, tinyLayout ? styles.privacyCheckTextTiny : null, { color: activeTheme.textPrimary }]}>
+                  <Text style={[styles.privacyCheckText, tinyLayout ? styles.privacyCheckTextTiny : null, modalTextStyles.checkText, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.check}
                   </Text>
                 </NmPressable>
@@ -2357,7 +2411,7 @@ function App() {
                   onPress={handleAcceptPrivacyPolicy}
                   disabled={!privacyConsentChecked || privacyConsentSaving}
                 >
-                  <Text style={[styles.privacyAcceptButtonText, tinyLayout ? styles.privacyAcceptButtonTextTiny : null]}>
+                  <Text style={[styles.privacyAcceptButtonText, tinyLayout ? styles.privacyAcceptButtonTextTiny : null, modalTextStyles.actionText]}>
                     {privacyConsentSaving ? copy.privacy.saving : copy.privacy.accept}
                   </Text>
                 </NmPressable>
