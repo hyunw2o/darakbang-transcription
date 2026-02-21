@@ -177,6 +177,11 @@ const I18N = {
     charCount: "문자 수",
     correctedText: "교정 텍스트",
     generateSummary: "설교 요약 생성",
+    generateSummaryByType: {
+      sermon: "설교 요약 생성",
+      phonecall: "통화 기록 요약 생성",
+      conversation: "회의 요약 생성",
+    },
     generatingSummary: "요약 생성 중...",
     summary: "요약",
     recordGenerateSave: "기록본 생성 및 저장",
@@ -345,6 +350,11 @@ const I18N = {
     charCount: "Characters",
     correctedText: "Corrected Text",
     generateSummary: "Generate Summary",
+    generateSummaryByType: {
+      sermon: "Generate Sermon Summary",
+      phonecall: "Generate Call Summary",
+      conversation: "Generate Meeting Summary",
+    },
     generatingSummary: "Generating summary...",
     summary: "Summary",
     recordGenerateSave: "Generate & Save Records",
@@ -1098,6 +1108,8 @@ function App() {
       },
     };
   }, [compactLayout, tinyLayout, modalFontShrinkFactor]);
+  const resultTextBoxHeight = tinyLayout ? 170 : compactLayout ? 210 : 260;
+  const recordEditorHeight = tinyLayout ? 118 : compactLayout ? 132 : 150;
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
@@ -1645,6 +1657,10 @@ function App() {
   const selectedTypeHint = useMemo(() => {
     return copy.selectedTypeHints[transcriptionType] || "";
   }, [copy, transcriptionType]);
+  const summaryButtonLabel = useMemo(() => {
+    const key = result?.transcription_type || transcriptionType;
+    return copy.generateSummaryByType?.[key] || copy.generateSummary;
+  }, [copy, result, transcriptionType]);
 
   const applyThemeOption = (optionKey) => {
     if (optionKey === "auto") {
@@ -2014,7 +2030,11 @@ function App() {
           </FadeInView>
 
           {activeTab === "transcribe" ? (
-            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
               <FadeInView key="transcribe-settings">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
@@ -2067,11 +2087,19 @@ function App() {
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.charCount}: {result.characters || 0}</Text>
 
                     <Text style={styles.sectionTitle}>{copy.correctedText}</Text>
-                    <View style={[styles.resultBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      style={[
+                        styles.resultBox,
+                        { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, height: resultTextBoxHeight },
+                      ]}
+                      contentContainerStyle={styles.resultScrollContent}
+                      showsVerticalScrollIndicator
+                    >
                       <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>
                         {result.corrected_text || result.raw_text || ""}
                       </Text>
-                    </View>
+                    </ScrollView>
 
                     <NmPressable
                       style={[
@@ -2082,7 +2110,7 @@ function App() {
                       onPress={handleSummarize}
                       disabled={summaryLoading}
                     >
-                      <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{summaryLoading ? copy.generatingSummary : copy.generateSummary}</Text>
+                      <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{summaryLoading ? copy.generatingSummary : summaryButtonLabel}</Text>
                     </NmPressable>
 
                     {result.summary ? (
@@ -2127,8 +2155,14 @@ function App() {
                         </View>
 
                         <TextInput
-                          style={[styles.recordEditor, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                          style={[
+                            styles.recordEditor,
+                            compactLayout ? styles.recordEditorCompact : null,
+                            tinyLayout ? styles.recordEditorTiny : null,
+                            { height: recordEditorHeight, backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary },
+                          ]}
                           multiline
+                          scrollEnabled
                           value={recordDrafts[category.key] || ""}
                           onChangeText={(text) =>
                             setRecordDrafts((prev) => ({ ...prev, [category.key]: text }))
@@ -2145,7 +2179,7 @@ function App() {
           ) : null}
 
           {activeTab === "history" ? (
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} nestedScrollEnabled>
               <FadeInView key="history">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
@@ -2175,7 +2209,7 @@ function App() {
           ) : null}
 
           {activeTab === "records" ? (
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} nestedScrollEnabled>
               <FadeInView key="records">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
@@ -2202,7 +2236,7 @@ function App() {
           ) : null}
 
           {activeTab === "settings" ? (
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} nestedScrollEnabled>
               <FadeInView key="settings-main">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsTitle}</Text>
@@ -2883,10 +2917,12 @@ const styles = StyleSheet.create({
   resultBox: {
     borderRadius: NM.radiusSm,
     backgroundColor: NM.inputBg,
-    padding: 12,
-    maxHeight: 260,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: NM.inputBorder,
+  },
+  resultScrollContent: {
+    padding: 12,
   },
   summaryBox: {
     marginTop: 8,
@@ -2925,7 +2961,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   recordEditor: {
-    minHeight: 90,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -2936,6 +2971,14 @@ const styles = StyleSheet.create({
     backgroundColor: NM.inputBg,
     borderWidth: 1,
     borderColor: NM.inputBorder,
+  },
+  recordEditorCompact: {
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  recordEditorTiny: {
+    fontSize: 10,
+    lineHeight: 15,
   },
   inlineBetween: {
     flexDirection: "row",
