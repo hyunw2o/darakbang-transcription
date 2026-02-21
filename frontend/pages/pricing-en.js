@@ -155,14 +155,14 @@ export default function PricingEnPage() {
           <p className="text-xs font-semibold text-nm-accent mb-2">Pricing</p>
           <h1 className="text-2xl sm:text-3xl font-bold">mallog24 Plans</h1>
           <p className="mt-3 text-sm text-nm-text-secondary leading-relaxed">
-            Free tier includes up to 3 hours each month. In environments with billing keys configured,
+            Free tier includes up to 10 hours each month. In environments with billing keys configured,
             you can start Pro immediately.
           </p>
 
           <div className="grid sm:grid-cols-2 gap-3 mt-6">
             <div className="nm-concave p-4">
               <p className="text-xs text-nm-text-secondary">Free</p>
-              <p className="text-xl font-bold mt-1">3 hours / month</p>
+              <p className="text-xl font-bold mt-1">10 hours / month</p>
               <p className="text-xs text-nm-text-secondary mt-2">Core transcription and structuring features</p>
             </div>
             <div className="nm-concave p-4 border-l-4 border-nm-accent">

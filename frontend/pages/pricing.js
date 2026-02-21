@@ -155,13 +155,13 @@ export default function PricingPage() {
           <p className="text-xs font-semibold text-nm-accent mb-2">Pricing</p>
           <h1 className="text-2xl sm:text-3xl font-bold">mallog24 요금제 안내</h1>
           <p className="mt-3 text-sm text-nm-text-secondary leading-relaxed">
-            무료는 월 3시간까지 사용 가능합니다. 결제 연동이 설정된 환경에서는 Pro 구독을 즉시 시작할 수 있습니다.
+            무료는 월 10시간까지 사용 가능합니다. 결제 연동이 설정된 환경에서는 Pro 구독을 즉시 시작할 수 있습니다.
           </p>
 
           <div className="grid sm:grid-cols-2 gap-3 mt-6">
             <div className="nm-concave p-4">
               <p className="text-xs text-nm-text-secondary">Free</p>
-              <p className="text-xl font-bold mt-1">월 3시간</p>
+              <p className="text-xl font-bold mt-1">월 10시간</p>
               <p className="text-xs text-nm-text-secondary mt-2">기본 음성 인식/구조화 기능</p>
             </div>
             <div className="nm-concave p-4 border-l-4 border-nm-accent">

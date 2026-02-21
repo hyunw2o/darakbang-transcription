@@ -8,7 +8,7 @@ const UI_THEME_OPTIONS = [
   { key: 'light', label: 'Light' },
   { key: 'dark', label: 'Dark' },
 ]
-const FREE_MONTHLY_LIMIT_SECONDS = 10800
+const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const UPGRADE_CONTACT_URL = '/pricing'
 const QUOTA_TOAST_MS = 2600
 
@@ -1361,7 +1361,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   onDragLeave={handleDragLeave}
                   onClick={() => {
                     if (uploadBlockedByQuota) {
-                      showToast('이번 달 무료 제공량(3시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요.')
+                      showToast('이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요.')
                       return
                     }
                     fileInputRef.current?.click()

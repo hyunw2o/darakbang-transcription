@@ -8,7 +8,7 @@ const UI_THEME_OPTIONS = [
   { key: 'light', label: 'Light' },
   { key: 'dark', label: 'Dark' },
 ]
-const FREE_MONTHLY_LIMIT_SECONDS = 10800
+const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const UPGRADE_CONTACT_URL = '/pricing-en'
 const QUOTA_TOAST_MS = 2600
 

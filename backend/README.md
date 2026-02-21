@@ -69,7 +69,7 @@ uvicorn main:app --reload
    - `CORS_ALLOW_ORIGINS`
    - `OAUTH_REDIRECT_ALLOW_HOSTS`
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
-   - `FREE_MONTHLY_LIMIT_SECONDS` (기본 10800, 무료 3시간)
+   - `FREE_MONTHLY_LIMIT_SECONDS` (기본 36000, 무료 10시간)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
    - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회)
    - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준)
@@ -105,7 +105,7 @@ uvicorn main:app --reload
 - `POST /api/auth/login` : 로그인
 - `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=google|kakao`, `redirect_to` 필요)
 - `GET /api/auth/me` : 현재 사용자 조회
-- `GET /api/usage` : 이번 달 사용량 조회 (무료 한도 3시간)
+- `GET /api/usage` : 이번 달 사용량 조회 (무료 한도 10시간)
 - `GET /api/billing/status` : 내 구독 상태 조회
 - `POST /api/billing/checkout` : 결제 체크아웃 생성 (공급자별)
 - `POST /api/billing/portal` : 구독 관리 포털 생성 (공급자별)

@@ -109,8 +109,8 @@ EXPOSE_TERMS_ENDPOINT = (os.getenv("EXPOSE_TERMS_ENDPOINT", "false").strip().low
 
 ALLOWED_LANGUAGES = {"ko", "en"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
-FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "10800")))
-FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(3시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
+FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
+FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
 USAGE_TABLE_NAME = "user_usage_quotas"
 USAGE_FREE_PLAN = "free"
 USAGE_ADMIN_PLAN = "admin"
