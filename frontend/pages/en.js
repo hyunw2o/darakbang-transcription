@@ -1164,6 +1164,10 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     <div className="min-h-screen pb-12">
       <Head>
         <title>mallog24 - AI Speech to Text</title>
+        <meta
+          name="description"
+          content="AI transcription for sermons, calls, and meetings with structured output. Free 10 hours/month, Pro KRW 8,000/month unlimited."
+        />
       </Head>
 
       {/* 헤더 */}
@@ -1192,13 +1196,102 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       </header>
 
       <main className="max-w-2xl mx-auto px-4 pt-6">
+        {!authToken && (
+          <section className="space-y-4 mb-5 animate-nm-card-in">
+            <div className="nm-raised p-5 sm:p-6">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
+                  Free 10h/month
+                </span>
+                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
+                  Pro KRW 8,000/month Unlimited
+                </span>
+                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
+                  Open Beta
+                </span>
+              </div>
+
+              <h1 className="text-xl sm:text-2xl font-bold text-nm-text-primary leading-tight">
+                Upload audio once. Get structured transcripts ready to use.
+              </h1>
+              <p className="mt-2 text-sm text-nm-text-secondary leading-relaxed">
+                For sermons, calls, and meetings, AI listens, corrects, and summarizes.
+                Export as TXT/DOCX and save structured records in one flow.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                <div className="nm-concave p-4">
+                  <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">Before</p>
+                  <p className="text-sm text-nm-text-secondary leading-relaxed">
+                    "Ad budget was 15% over this week, and we need the revised plan by next week."
+                  </p>
+                </div>
+                <div className="nm-concave p-4">
+                  <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">After</p>
+                  <p className="text-sm font-semibold text-nm-text-primary">Meeting Summary</p>
+                  <ul className="mt-2 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+                    <li>- Agenda: Budget overrun (+15%)</li>
+                    <li>- Decision: Share revised plan</li>
+                    <li>- Action: Reassign owner and timeline</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                <Link
+                  href={UPGRADE_CONTACT_URL}
+                  className="nm-btn-primary inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold"
+                >
+                  View Pricing
+                </Link>
+                <a
+                  href={OURS_URL}
+                  className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
+                >
+                  About OURS
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="nm-raised p-4">
+                <p className="text-sm font-semibold text-nm-text-primary">Domain Term Accuracy</p>
+                <p className="text-xs text-nm-text-secondary mt-1">Dictionary + context correction reduces term confusion.</p>
+              </div>
+              <div className="nm-raised p-4">
+                <p className="text-sm font-semibold text-nm-text-primary">Structured Output</p>
+                <p className="text-xs text-nm-text-secondary mt-1">Summaries, key points, and follow-up actions in usable form.</p>
+              </div>
+              <div className="nm-raised p-4">
+                <p className="text-sm font-semibold text-nm-text-primary">Two-stage Engine</p>
+                <p className="text-xs text-nm-text-secondary mt-1">Whisper transcription + Gemini correction for quality and speed.</p>
+              </div>
+            </div>
+
+            <div className="nm-raised p-4">
+              <p className="text-xs font-semibold text-nm-accent mb-2">Early Beta Feedback</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="nm-concave p-3">
+                  <p className="text-xs text-nm-text-primary">"Meeting recap time dropped a lot."</p>
+                </div>
+                <div className="nm-concave p-3">
+                  <p className="text-xs text-nm-text-primary">"Saving sermon summaries is practical and quick."</p>
+                </div>
+                <div className="nm-concave p-3">
+                  <p className="text-xs text-nm-text-primary">"Domain wording breaks less than before."</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Auth Card */}
         <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
           {!authToken ? (
             <>
               <div className="mb-4">
-                <p className="text-base font-bold text-nm-text-primary">Start AI speech notes in seconds.</p>
-                <p className="mt-1 text-xs text-nm-text-secondary">Sign in once and upload your first file right away.</p>
+                <p className="text-base font-bold text-nm-text-primary">Sign in and upload your first file right away.</p>
+                <p className="mt-1 text-xs text-nm-text-secondary">Start in under a minute with email, Google, or Kakao.</p>
                 <div className="nm-segment-group mt-3">
                   <button
                     type="button"
