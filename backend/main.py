@@ -59,6 +59,21 @@ def _parse_csv_env(name: str, default: list[str]) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _parse_csv_env_union(name: str, default: list[str]) -> list[str]:
+    parsed = _parse_csv_env(name, [])
+    if not parsed:
+        return default
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in [*default, *parsed]:
+        key = item.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(item.strip())
+    return merged
+
+
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -88,13 +103,13 @@ DEFAULT_OAUTH_REDIRECT_SCHEMES = [
     "exp",
 ]
 
-CORS_ALLOW_ORIGINS = _parse_csv_env("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ORIGINS)
+CORS_ALLOW_ORIGINS = _parse_csv_env_union("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ORIGINS)
 CORS_ALLOW_ORIGIN_REGEX = (os.getenv("CORS_ALLOW_ORIGIN_REGEX") or "").strip() or None
 ALLOWED_OAUTH_REDIRECT_HOSTS = {
-    host.lower() for host in _parse_csv_env("OAUTH_REDIRECT_ALLOW_HOSTS", DEFAULT_OAUTH_REDIRECT_HOSTS)
+    host.lower() for host in _parse_csv_env_union("OAUTH_REDIRECT_ALLOW_HOSTS", DEFAULT_OAUTH_REDIRECT_HOSTS)
 }
 ALLOWED_OAUTH_REDIRECT_SCHEMES = {
-    scheme.lower() for scheme in _parse_csv_env("OAUTH_REDIRECT_ALLOW_SCHEMES", DEFAULT_OAUTH_REDIRECT_SCHEMES)
+    scheme.lower() for scheme in _parse_csv_env_union("OAUTH_REDIRECT_ALLOW_SCHEMES", DEFAULT_OAUTH_REDIRECT_SCHEMES)
 }
 
 RATE_LIMIT_WINDOW_SECONDS = max(1, int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60")))

@@ -20,6 +20,12 @@ import NmPressable from "./components/NmPressable";
 import FadeInView from "./components/FadeInView";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://api.mallog24.com";
+const API_FALLBACK_URLS = String(
+  process.env.EXPO_PUBLIC_API_FALLBACK_URLS || "https://darakbang-transcription-backend.onrender.com"
+)
+  .split(",")
+  .map((value) => value.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
 const AUTH_TOKEN_KEY = "mallog24_access_token";
 const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
@@ -967,6 +973,16 @@ function isTimeoutErrorMessage(message) {
   return /timed out|timeout|시간 초과/i.test(String(message || ""));
 }
 
+function isNetworkFetchError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("network request failed") ||
+    message.includes("fetch failed") ||
+    message.includes("could not resolve host")
+  );
+}
+
 function getFriendlyAuthError(message, copy) {
   const raw = (message || "").trim();
   const normalized = raw.toLowerCase();
@@ -987,34 +1003,49 @@ function getFriendlyAuthError(message, copy) {
 async function requestApi(path, { method = "GET", token = "", body = undefined, timeoutMs = 20000 } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  const baseCandidates = [API_URL, ...API_FALLBACK_URLS].filter(Boolean).filter((value, idx, arr) => arr.indexOf(value) === idx);
+  let lastError = null;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  for (let idx = 0; idx < baseCandidates.length; idx += 1) {
+    const baseUrl = baseCandidates[idx];
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const response = await fetch(`${API_URL}${path}`, {
-      method,
-      headers,
-      body,
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+      });
 
-    const rawText = await response.text();
-    const data = parseResponseText(rawText);
+      const rawText = await response.text();
+      const data = parseResponseText(rawText);
 
-    if (!response.ok) {
-      throw new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+      if (!response.ok) {
+        throw new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+      }
+
+      return data;
+    } catch (e) {
+      lastError = e;
+      const isTimeout = e?.name === "AbortError" || isTimeoutErrorMessage(e?.message);
+      const canFallback = idx < baseCandidates.length - 1 && (isTimeout || isNetworkFetchError(e));
+      if (!canFallback) {
+        if (isTimeout) {
+          throw new Error("Request timed out. Please check server status.");
+        }
+        throw e;
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return data;
-  } catch (e) {
-    if (e?.name === "AbortError") {
-      throw new Error("Request timed out. Please check server status.");
-    }
-    throw e;
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  if (lastError?.name === "AbortError" || isTimeoutErrorMessage(lastError?.message)) {
+    throw new Error("Request timed out. Please check server status.");
+  }
+  throw lastError || new Error("Request failed.");
 }
 
 function normalizeMimeType(value) {
