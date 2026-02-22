@@ -26,6 +26,7 @@ const API_FALLBACK_URLS = String(
   .split(",")
   .map((value) => value.trim().replace(/\/+$/, ""))
   .filter(Boolean);
+const SUPABASE_URL = String(process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const AUTH_TOKEN_KEY = "mallog24_access_token";
 const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
@@ -37,7 +38,7 @@ const FREE_MONTHLY_LIMIT_SECONDS = 10 * 60 * 60;
 const PRICING_URL = process.env.EXPO_PUBLIC_PRICING_URL || "https://mallog24.com/pricing";
 const AUTH_REQUEST_TIMEOUT_MS = Math.max(
   10000,
-  Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 60000
+  Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 120000
 );
 
 const MOBILE_THEME_OPTIONS = [
@@ -1094,6 +1095,40 @@ function parseAuthParamsFromUrl(url) {
   return { accessToken, oauthError };
 }
 
+function buildDirectOauthUrl(provider, redirectTo) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  if (!SUPABASE_URL || !redirectTo || !["google", "kakao"].includes(normalizedProvider)) {
+    return "";
+  }
+  const query = new URLSearchParams({
+    provider: normalizedProvider,
+    redirect_to: redirectTo,
+  });
+  return `${SUPABASE_URL}/auth/v1/authorize?${query.toString()}`;
+}
+
+function shouldShowOauthConfigHint(message) {
+  const normalized = String(message || "").toLowerCase();
+  return (
+    normalized.includes("redirect_to") ||
+    normalized.includes("redirect uri") ||
+    normalized.includes("redirect_uri") ||
+    normalized.includes("redirect url") ||
+    normalized.includes("허용되지 않은 redirect") ||
+    normalized.includes("지원하지 않는 소셜 로그인") ||
+    normalized.includes("koe205") ||
+    normalized.includes("koe206")
+  );
+}
+
+function buildOauthFallbackUser() {
+  return {
+    id: "oauth_user",
+    email: "",
+    user_metadata: {},
+  };
+}
+
 function formatDate(value) {
   try {
     return new Date(value).toLocaleString();
@@ -1565,7 +1600,7 @@ function App() {
   }, [isLoggedIn, authToken, usage, usageLoading, billingStatus, billingLoading]);
 
   const warmUpBackend = () => {
-    requestApi("/health", { timeoutMs: 4000 }).catch(() => { });
+    requestApi("/health", { timeoutMs: 15000 }).catch(() => { });
   };
 
   const clearMessages = () => {
@@ -1610,14 +1645,21 @@ function App() {
   };
 
   const requestApiWithTimeoutRetry = async (path, options = {}, retryDelayMs = 1200) => {
+    const initialTimeoutMs = Math.max(
+      10000,
+      Number(options?.timeoutMs) || AUTH_REQUEST_TIMEOUT_MS
+    );
     try {
-      return await requestApi(path, options);
+      return await requestApi(path, { ...options, timeoutMs: initialTimeoutMs });
     } catch (e) {
-      if (!isTimeoutErrorMessage(e?.message || "")) {
+      const retryable =
+        isTimeoutErrorMessage(e?.message || "") || isNetworkFetchError(e);
+      if (!retryable) {
         throw e;
       }
       await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-      return requestApi(path, options);
+      const retryTimeoutMs = Math.max(initialTimeoutMs, Math.round(initialTimeoutMs * 1.5));
+      return requestApi(path, { ...options, timeoutMs: retryTimeoutMs });
     }
   };
 
@@ -1802,9 +1844,11 @@ function App() {
     if (!accessToken) return;
 
     try {
+      const userHint = buildOauthFallbackUser();
       await hydrateWithToken(accessToken, {
         successMessage: copy.notices.socialLoginDone,
-        verifyUser: true,
+        userHint,
+        verifyUser: false,
         loadWorkspace: true,
       });
     } catch (e) {
@@ -1936,18 +1980,34 @@ function App() {
     try {
       const redirectTo = ExpoLinking.createURL("auth-callback");
       const path = `/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
-      const data = await requestApiWithTimeoutRetry(path, { timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
-      if (!data?.auth_url) throw new Error(copy.errors.oauthUrlCreate);
+      const directOauthUrl = buildDirectOauthUrl(provider, redirectTo);
+      let oauthUrl = "";
+      try {
+        const data = await requestApiWithTimeoutRetry(path, { timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+        oauthUrl = data?.auth_url || "";
+      } catch (oauthUrlError) {
+        if (
+          directOauthUrl &&
+          (isTimeoutErrorMessage(oauthUrlError?.message || "") || isNetworkFetchError(oauthUrlError))
+        ) {
+          oauthUrl = directOauthUrl;
+        } else {
+          throw oauthUrlError;
+        }
+      }
+      if (!oauthUrl) throw new Error(copy.errors.oauthUrlCreate);
 
-      const supported = await Linking.canOpenURL(data.auth_url);
+      const supported = await Linking.canOpenURL(oauthUrl);
       if (!supported) throw new Error(copy.errors.openLoginUrl);
 
-      await Linking.openURL(data.auth_url);
+      await Linking.openURL(oauthUrl);
       setSocialLoading("");
     } catch (e) {
-      setError(
-        `${e.message || copy.errors.socialStartFailed}\n(backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL check required)`
-      );
+      const rawMessage = e?.message || copy.errors.socialStartFailed;
+      const withHint = shouldShowOauthConfigHint(rawMessage)
+        ? `${rawMessage}\n(backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL check required)`
+        : rawMessage;
+      setError(withHint);
       setSocialLoading("");
     }
   };

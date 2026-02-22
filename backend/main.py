@@ -246,8 +246,8 @@ mock_checkout_sessions: dict[str, dict] = {}
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
 MODEL_CACHE_TTL = 3600
-AUTH_TIMEOUT = max(1, int(os.getenv("AUTH_TIMEOUT", "12")))
-AUTH_CONNECT_TIMEOUT = max(1, int(os.getenv("AUTH_CONNECT_TIMEOUT", "4")))
+AUTH_TIMEOUT = max(1, int(os.getenv("AUTH_TIMEOUT", "20")))
+AUTH_CONNECT_TIMEOUT = max(1, int(os.getenv("AUTH_CONNECT_TIMEOUT", "8")))
 AUTH_USER_CACHE_TTL_SECONDS = max(0, int(os.getenv("AUTH_USER_CACHE_TTL_SECONDS", "20")))
 ALLOWED_RECORD_CATEGORIES = {
     "meeting_keywords",

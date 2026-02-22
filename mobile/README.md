@@ -19,11 +19,14 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 
 ```bash
 EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
+EXPO_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
+EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS=120000
 EXPO_PUBLIC_LEGAL_DOC_VERSION=v2026.02.21
 ```
 
 기본값은 `https://api.mallog24.com` 입니다.
 법률 문서 버전을 개정할 때는 `EXPO_PUBLIC_LEGAL_DOC_VERSION` 값만 올리면 앱 내 표기가 함께 갱신됩니다.
+소셜 로그인 시작 API가 지연될 때를 대비해 `EXPO_PUBLIC_SUPABASE_URL` 설정을 권장합니다.
 
 ## 설치/실행
 ```bash
