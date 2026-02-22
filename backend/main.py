@@ -1626,6 +1626,70 @@ def _enforce_speaker_separation(text: str, transcription_type: str, language: st
         return f"{body_text}\n\n{tail_text}".strip()
     return body_text
 
+
+def _layout_line_role(line: str) -> str:
+    stripped = (line or "").strip()
+    if not stripped:
+        return "blank"
+    if _parse_speaker_line(stripped):
+        return "speaker"
+    if stripped in STRUCTURED_SUMMARY_HEADERS or stripped in {"서론", "본론", "결론", "기도"}:
+        return "heading"
+    if re.match(r"^(?:[-*•]|(?:\d+)[\.\)])\s+", stripped):
+        return "list"
+    return "text"
+
+
+def _normalize_transcript_line_breaks(text: str) -> str:
+    """
+    STT/LLM 출력에서 발생하는 과도한 소프트 줄바꿈을 정리한다.
+    - 문장 중간 개행은 병합
+    - 화자 라벨/섹션 헤더/목록 개행은 유지
+    """
+    if not text:
+        return text
+
+    normalized_source = text.replace("\r\n", "\n").replace("\r", "\n")
+    output_lines: list[str] = []
+
+    for raw_line in normalized_source.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            if output_lines and output_lines[-1] != "":
+                output_lines.append("")
+            continue
+
+        current_role = _layout_line_role(line)
+        if not output_lines:
+            output_lines.append(line)
+            continue
+        if output_lines[-1] == "":
+            output_lines.append(line)
+            continue
+
+        previous = output_lines[-1]
+        previous_role = _layout_line_role(previous)
+
+        # 새 블록 시작(화자/헤더/목록)은 개행 유지
+        if current_role in {"speaker", "heading", "list"}:
+            output_lines.append(line)
+            continue
+
+        # 헤더 다음 첫 줄은 문단 시작으로 유지
+        if previous_role == "heading":
+            output_lines.append(line)
+            continue
+
+        # 일반 텍스트/목록 이어쓰기/화자 라벨 뒤 줄바꿈은 병합
+        output_lines[-1] = f"{previous} {line}".strip()
+
+    while output_lines and output_lines[-1] == "":
+        output_lines.pop()
+
+    cleaned = "\n".join(output_lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned
+
 def get_optimal_model():
     """Gemini 모델 동적 선택"""
     if _model_cache["model"] and (time.time() - _model_cache["cached_at"]) < MODEL_CACHE_TTL:
@@ -1779,13 +1843,13 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     else:
         # ===== 한국어 프롬프트 =====
         if transcription_type == "sermon":
-            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 앉은뱅이, 뉴에이지, 프리메이슨, REA, 알리(무하마드 알리, 알리익스프레스), TCK, CCK, NCK, 성회, 전도대회, 수련회, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터, 올해(연도), 오래(기간), 결재(승인), 결제(지불), 낫다(회복), 낳다(출산), 낮다(높이 반대), 안/않, 되/돼, 웬/왠지, 드로에게 교회/드로우게 교회=드로아교회, 베드로에게는(조사)=유지, 알리/REA 문맥 구분(일반 인명·브랜드는 알리 유지, 약어 맥락에서만 REA), 초고속 발화(120BPM+), 랩처럼 빠른 단독 화자, 음절 경계 복원, 조사/어미 유지"
+            whisper_prompt = "다락방, 렘넌트, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS, 앗수르, 네피림, 바벨탑, 앉은뱅이, 뉴에이지, 프리메이슨, REA, 알리(무하마드 알리, 알리익스프레스), TCK, CCK, NCK, 성회, 전도대회, 수련회, 수련의, 노회, 노예, 유초등부, 유초동부, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터, 올해(연도), 오래(기간), 결재(승인), 결제(지불), 낫다(회복), 낳다(출산), 낮다(높이 반대), 안/않, 되/돼, 웬/왠지, 드로에게 교회/드로우게 교회=드로아교회, 베드로에게는(조사)=유지, 알리/REA 문맥 구분(일반 인명·브랜드는 알리 유지, 약어 맥락에서만 REA), 수련의/수련회 문맥 구분(의료 인력 vs 교회 집회), 노회/노예 문맥 구분(교단 회의 vs 일반 의미), 초고속 발화(120BPM+), 랩처럼 빠른 단독 화자, 음절 경계 복원, 조사/어미 유지"
         elif transcription_type == "phonecall":
             whisper_prompt = (
                 "전화 통화 녹음입니다. 두 명의 화자가 대화합니다. "
                 "음질이 낮거나 불명확한 부분은 문맥에 맞게 추정하세요. "
                 "한 화자가 매우 빠르게(대략 120BPM 이상, 랩처럼) 말해도 음절 경계를 문맥으로 복원하고 누락 없이 기록하세요. "
-                "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)'는 문맥으로 구분하세요. "
+                "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 수련의/수련회, 노회/노예, 유초등부/유초동부'는 문맥으로 구분하세요. "
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
                 "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
@@ -1797,7 +1861,7 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
                 "회의 또는 대화 녹음입니다. 여러 참석자가 있습니다. "
                 "음질이 낮거나 겹치는 목소리가 있을 수 있으며, 문맥에 맞게 추정하세요. "
                 "특정 화자가 매우 빠르게(대략 120BPM 이상, 랩처럼) 말해도 음절 경계를 문맥으로 복원하고 누락 없이 기록하세요. "
-                "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지)'는 문맥으로 구분하세요. "
+                "'올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 수련의/수련회, 노회/노예, 유초등부/유초동부'는 문맥으로 구분하세요. "
                 "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
                 "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
                 "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
@@ -1939,6 +2003,7 @@ def _process_transcription_sync(
             # 3단계: 규칙 기반 후처리
             corrected_text = correct_text(corrected_text, transcription_type, language)
             corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
+            corrected_text = _normalize_transcript_line_breaks(corrected_text)
 
             engine = "whisper+gemini"
 
@@ -1984,6 +2049,7 @@ def _process_transcription_sync(
 
             corrected_text = correct_text(raw_text, transcription_type, language)
             corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
+            corrected_text = _normalize_transcript_line_breaks(corrected_text)
             engine = "gemini-only"
 
         # 결과 저장
