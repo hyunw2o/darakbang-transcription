@@ -356,15 +356,25 @@ export default function PricingPage() {
             )}
             <a
               href={CONTACT_URL}
-              className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary"
+              className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary text-center leading-tight whitespace-normal break-keep"
+              style={{ wordBreak: 'keep-all' }}
             >
-              구독 문의 메일 보내기
+              <span>
+                구독 문의 메일
+                <br />
+                보내기
+              </span>
             </a>
             <Link
               href="/"
-              className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary"
+              className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary text-center leading-tight whitespace-normal break-keep"
+              style={{ wordBreak: 'keep-all' }}
             >
-              mallog24로 돌아가기
+              <span>
+                mallog24로
+                <br />
+                돌아가기
+              </span>
             </Link>
           </div>
 
