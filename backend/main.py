@@ -194,14 +194,29 @@ if not GEMINI_API_KEY:
     print("Error: GEMINI_API_KEY is not set.")
 genai.configure(api_key=GEMINI_API_KEY)
 
+# Whisper 파일 크기 제한 (25MB)
+WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 약간 여유
+WHISPER_CHUNK_TIMEOUT_SECONDS = max(30, int(os.getenv("WHISPER_CHUNK_TIMEOUT_SECONDS", "240")))
+WHISPER_CHUNK_MAX_RETRIES = max(1, int(os.getenv("WHISPER_CHUNK_MAX_RETRIES", "2")))
+WHISPER_FALLBACK_TO_GEMINI_ON_ERROR = (
+    os.getenv("WHISPER_FALLBACK_TO_GEMINI_ON_ERROR", "true").strip().lower() == "true"
+)
+WHISPER_MAX_PIPELINE_AUDIO_SECONDS = max(
+    0,
+    int(os.getenv("WHISPER_MAX_PIPELINE_AUDIO_SECONDS", "2400")),
+)
+
+# 외부 프로세스/LLM 타임아웃
+FFMPEG_PROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("FFMPEG_PROCESS_TIMEOUT_SECONDS", "300")))
+FFPROBE_PROCESS_TIMEOUT_SECONDS = max(10, int(os.getenv("FFPROBE_PROCESS_TIMEOUT_SECONDS", "30")))
+GEMINI_REQUEST_TIMEOUT_SECONDS = max(60, int(os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "600")))
+GEMINI_MAX_OUTPUT_TOKENS = max(4096, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "32768")))
+
 # OpenAI (Whisper) 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     print("Warning: OPENAI_API_KEY is not set. Whisper STT unavailable, falling back to Gemini.")
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
-
-# Whisper 파일 크기 제한 (25MB)
-WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 약간 여유
 
 # 시작 시 용어 로딩 확인
 @app.on_event("startup")
@@ -404,6 +419,11 @@ def _set_task_runtime_state(task_id: str, status: str, owner_id: str | None = No
     if owner_id is not None:
         task_owner[task_id] = owner_id
     task_updated_at[task_id] = time.time()
+
+
+def _touch_task_runtime_state(task_id: str) -> None:
+    if task_id in task_status:
+        task_updated_at[task_id] = time.time()
 
 
 def _clear_task_runtime_state(task_id: str) -> None:
@@ -1677,6 +1697,7 @@ def _extract_duration_with_ffprobe(file_path: str) -> float:
             capture_output=True,
             text=True,
             check=True,
+            timeout=FFPROBE_PROCESS_TIMEOUT_SECONDS,
         )
         raw = (proc.stdout or "").strip()
         if not raw:
@@ -2073,6 +2094,7 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=True,
+            timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
         )
     except Exception as exc:
         print(f"ffmpeg preprocessing failed, using original file: {exc}")
@@ -2105,6 +2127,7 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=True,
+            timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
         )
     except Exception as exc:
         print(f"ffmpeg segmentation failed, using prepared file: {exc}")
@@ -2143,11 +2166,19 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
     return chunks
 
 
-def whisper_transcribe(file_path: str, language: str = "ko", transcription_type: str = "sermon") -> str:
+def whisper_transcribe(
+    file_path: str,
+    language: str = "ko",
+    transcription_type: str = "sermon",
+    task_id: str | None = None,
+) -> str:
     """
     OpenAI Whisper API로 오디오 → 텍스트 변환.
-    25MB 초과 시 자동 분할 처리.
+    25MB 초과 시 자동 분할 처리 + 청크 재시도/타임아웃 보호.
     """
+    if openai_client is None:
+        raise RuntimeError("Whisper client is not configured.")
+
     # Whisper prompt: 언어별 + 유형별 컨텍스트 힌트
     # 음질이 낮을 때 올바른 단어를 추정하는 데 도움이 되는 역할
     if language == "en":
@@ -2213,7 +2244,7 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
             )
 
     chunks = split_audio_file(file_path, transcription_type)
-    all_text = []
+    all_text: list[str] = []
 
     rapid_retry_prompt = (
         "초고속 발화 또는 랩처럼 빠른 한국어 발화가 포함될 수 있습니다. "
@@ -2226,34 +2257,62 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
 
     for i, (chunk_path, chunk_duration_sec) in enumerate(chunks):
         print(f"  Whisper transcribing chunk {i+1}/{len(chunks)}...")
+        if task_id:
+            _touch_task_runtime_state(task_id)
 
-        with open(chunk_path, "rb") as audio_file:
-            response = openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language=language,
-                prompt=whisper_prompt,
-                response_format="text",
-            )
+        best_text = ""
+        last_error: Exception | None = None
 
-        chunk_text = response.strip()
+        for attempt in range(WHISPER_CHUNK_MAX_RETRIES):
+            use_rapid_hint = attempt > 0
+            prompt_text = f"{whisper_prompt} {rapid_retry_prompt}" if use_rapid_hint else whisper_prompt
+            try:
+                with open(chunk_path, "rb") as audio_file:
+                    response = openai_client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        language=language,
+                        prompt=prompt_text,
+                        response_format="text",
+                        timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
+                    )
 
-        # 빠른 발화/랩 구간에서 지나치게 짧게 인식된 경우 보수적으로 1회 재시도
-        if chunk_duration_sec >= 45 and len(chunk_text) < 25:
-            print(f"  Chunk {i+1}: sparse transcript detected, retrying with rapid-speech prompt...")
-            with open(chunk_path, "rb") as audio_file:
-                retry_response = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    language=language,
-                    prompt=f"{whisper_prompt} {rapid_retry_prompt}",
-                    response_format="text",
-                )
-            retry_text = retry_response.strip()
-            if len(retry_text) > len(chunk_text):
-                chunk_text = retry_text
+                chunk_text = (response or "").strip()
+                if chunk_text:
+                    if len(chunk_text) > len(best_text):
+                        best_text = chunk_text
+                else:
+                    raise RuntimeError("Whisper returned empty text.")
 
-        all_text.append(chunk_text)
+                if chunk_duration_sec >= 45 and len(chunk_text) < 25 and attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
+                    print(f"  Chunk {i+1}: sparse transcript detected, retrying with rapid-speech hint...")
+                    continue
+
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
+                    wait_time = (2 ** attempt) + random.uniform(0.2, 1.0)
+                    print(
+                        f"  Chunk {i+1}: whisper attempt {attempt+1}/{WHISPER_CHUNK_MAX_RETRIES} failed "
+                        f"({exc}). Retrying in {wait_time:.1f}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    break
+            finally:
+                if task_id:
+                    _touch_task_runtime_state(task_id)
+
+        if not best_text and last_error:
+            raise RuntimeError(
+                f"Whisper chunk {i+1}/{len(chunks)} failed after {WHISPER_CHUNK_MAX_RETRIES} attempts: {last_error}"
+            ) from last_error
+        if not best_text:
+            raise RuntimeError(f"Whisper chunk {i+1}/{len(chunks)} returned no transcript.")
+
+        all_text.append(best_text)
 
         # 청크 파일 삭제 (원본 제외)
         if chunk_path != file_path:
@@ -2297,7 +2356,7 @@ async def gemini_correct_and_structure(
     model = genai.GenerativeModel(
         target_model,
         generation_config=genai.types.GenerationConfig(
-            max_output_tokens=65536,
+            max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
         )
     )
 
@@ -2311,7 +2370,7 @@ async def gemini_correct_and_structure(
         try:
             response = model.generate_content(
                 prompt_parts,
-                request_options={"timeout": 600}
+                request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS}
             )
             break
         except Exception as e:
@@ -2323,6 +2382,80 @@ async def gemini_correct_and_structure(
                 raise e
 
     return (response.text or "").strip()
+
+
+def _is_retryable_gemini_error(error: Exception) -> bool:
+    message = str(error).lower()
+    retry_markers = (
+        "429",
+        "resourceexhausted",
+        "quota",
+        "timed out",
+        "timeout",
+        "deadline",
+        "unavailable",
+        "internal",
+    )
+    return any(marker in message for marker in retry_markers)
+
+
+def _transcribe_with_gemini_only(
+    *,
+    task_id: str,
+    temp_file_path: str,
+    source_mime_type: str,
+    transcription_type: str,
+    language: str,
+    correction_mode: str,
+) -> tuple[str, str]:
+    mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
+    audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
+    try:
+        target_model = get_optimal_model()
+        model = genai.GenerativeModel(
+            target_model,
+            system_instruction=get_gemini_prompt(),
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+            ),
+        )
+        content_prompt = get_gemini_content_prompt()
+
+        response = None
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                _touch_task_runtime_state(task_id)
+                response = model.generate_content(
+                    [content_prompt, audio_file],
+                    request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
+                )
+                _touch_task_runtime_state(task_id)
+                break
+            except Exception as e:
+                if _is_retryable_gemini_error(e) and attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                    print(
+                        f"[{task_id}] Gemini-only retry in {wait_time:.1f}s "
+                        f"(attempt {attempt+1}/{max_retries}): {e}"
+                    )
+                    time.sleep(wait_time)
+                    continue
+                raise
+
+        raw_text = (response.text or "").strip()
+        corrected_text = _postprocess_transcript(
+            raw_text,
+            transcription_type,
+            language,
+            correction_mode,
+        )
+        return raw_text, corrected_text
+    finally:
+        try:
+            audio_file.delete()
+        except Exception:
+            pass
 
 
 def _postprocess_transcript(
@@ -2370,94 +2503,98 @@ def _process_transcription_sync(
         })
         _log_stage_memory(task_id, "start")
 
-        if _should_use_whisper_pipeline():
+        use_whisper_pipeline = _should_use_whisper_pipeline()
+        if (
+            use_whisper_pipeline
+            and WHISPER_MAX_PIPELINE_AUDIO_SECONDS > 0
+            and audio_seconds > WHISPER_MAX_PIPELINE_AUDIO_SECONDS
+        ):
+            use_whisper_pipeline = False
+            print(
+                f"[{task_id}] Skip Whisper for long audio "
+                f"({audio_seconds}s > {WHISPER_MAX_PIPELINE_AUDIO_SECONDS}s); using Gemini-only."
+            )
+
+        if use_whisper_pipeline:
             # ===== 2단계 방식: Whisper + Gemini =====
             engine = "whisper+gemini"
+            try:
+                # 1단계: Whisper로 완전 녹취
+                print(f"[{task_id}] Step 1: Whisper STT...")
+                raw_text = whisper_transcribe(
+                    temp_file_path,
+                    language,
+                    transcription_type,
+                    task_id=task_id,
+                )
+                print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
+                _log_stage_memory(task_id, "after_whisper")
 
-            # 1단계: Whisper로 완전 녹취
-            print(f"[{task_id}] Step 1: Whisper STT...")
-            raw_text = whisper_transcribe(temp_file_path, language, transcription_type)
-            print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
-            _log_stage_memory(task_id, "after_whisper")
+                # 임시 파일 삭제
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                    temp_file_path = ""
 
-            # 임시 파일 삭제
-            if os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
-                temp_file_path = ""
+                # 2단계: Gemini로 교정 + 구조화
+                print(f"[{task_id}] Step 2: Gemini correction...")
+                _touch_task_runtime_state(task_id)
+                corrected_text = asyncio.run(
+                    gemini_correct_and_structure(
+                        raw_text,
+                        task_id,
+                        transcription_type,
+                        language,
+                        correction_mode=correction_mode,
+                    )
+                )
+                _touch_task_runtime_state(task_id)
+                print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
+                _log_stage_memory(task_id, "after_gemini_correction")
 
-            # 2단계: Gemini로 교정 + 구조화
-            print(f"[{task_id}] Step 2: Gemini correction...")
-            corrected_text = asyncio.run(
-                gemini_correct_and_structure(
-                    raw_text,
-                    task_id,
+                # 3단계: 규칙 기반 후처리
+                corrected_text = _postprocess_transcript(
+                    corrected_text,
                     transcription_type,
                     language,
+                    correction_mode,
+                )
+                _log_stage_memory(task_id, "after_postprocess")
+            except Exception as whisper_error:
+                if not WHISPER_FALLBACK_TO_GEMINI_ON_ERROR:
+                    raise
+                print(
+                    f"[{task_id}] Whisper pipeline failed, fallback to Gemini-only: {whisper_error}"
+                )
+                engine = "gemini-only-fallback"
+                raw_text, corrected_text = _transcribe_with_gemini_only(
+                    task_id=task_id,
+                    temp_file_path=temp_file_path,
+                    source_mime_type=source_mime_type,
+                    transcription_type=transcription_type,
+                    language=language,
                     correction_mode=correction_mode,
                 )
-            )
-            print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
-            _log_stage_memory(task_id, "after_gemini_correction")
-
-            # 3단계: 규칙 기반 후처리
-            corrected_text = _postprocess_transcript(
-                corrected_text,
-                transcription_type,
-                language,
-                correction_mode,
-            )
-            _log_stage_memory(task_id, "after_postprocess")
+                _log_stage_memory(task_id, "after_gemini_fallback")
 
         else:
             # ===== 폴백: Gemini 단일 방식 (기존) =====
             mode = _resolved_engine_mode()
-            reason = "openai unavailable" if openai_client is None else "mode forced"
+            if openai_client is None:
+                reason = "openai unavailable"
+            elif WHISPER_MAX_PIPELINE_AUDIO_SECONDS > 0 and audio_seconds > WHISPER_MAX_PIPELINE_AUDIO_SECONDS:
+                reason = "long audio guard"
+            else:
+                reason = "mode forced"
             print(f"[{task_id}] Gemini-only mode ({reason}, mode={mode})")
             engine = "gemini-only"
 
-            mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
-            audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
-            target_model = get_optimal_model()
-            model = genai.GenerativeModel(
-                target_model,
-                system_instruction=get_gemini_prompt(),
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=65536,
-                )
-            )
-            content_prompt = get_gemini_content_prompt()
-
-            response = None
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    response = model.generate_content(
-                        [content_prompt, audio_file],
-                        request_options={"timeout": 600}
-                    )
-                    break
-                except Exception as e:
-                    if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
-                        wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
-                        time.sleep(wait_time)
-                    else:
-                        raise e
-
-            raw_text = response.text
-            _log_stage_memory(task_id, "after_gemini_transcribe")
-            if os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
-                temp_file_path = ""
-            try:
-                audio_file.delete()
-            except:
-                pass
-
-            corrected_text = _postprocess_transcript(
-                raw_text,
-                transcription_type,
-                language,
-                correction_mode,
+            raw_text, corrected_text = _transcribe_with_gemini_only(
+                task_id=task_id,
+                temp_file_path=temp_file_path,
+                source_mime_type=source_mime_type,
+                transcription_type=transcription_type,
+                language=language,
+                correction_mode=correction_mode,
             )
             _log_stage_memory(task_id, "after_postprocess")
 
