@@ -36,6 +36,7 @@ const LEGAL_DOC_VERSION = process.env.EXPO_PUBLIC_LEGAL_DOC_VERSION || "v2026.02
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const FREE_MONTHLY_LIMIT_SECONDS = 10 * 60 * 60;
 const PRICING_URL = process.env.EXPO_PUBLIC_PRICING_URL || "https://mallog24.com/pricing";
+const OURS_URL = process.env.EXPO_PUBLIC_OURS_URL || "https://ours.mallog24.com";
 const AUTH_REQUEST_TIMEOUT_MS = Math.max(
   10000,
   Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 120000
@@ -143,6 +144,46 @@ const I18N = {
     loadingApp: "앱 초기화 중...",
     authIntro: "AI 음성 기록, 지금 시작하세요.",
     authSubcopy: "로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.",
+    authLanding: {
+      badges: {
+        free: "무료 월 10시간",
+        pro: "Pro 월 8,000원 무제한",
+        beta: "오픈 베타",
+      },
+      hero: "녹음만 올리세요. 바로 쓰는 구조화 녹취 문서가 나옵니다.",
+      subcopy: "설교, 통화, 회의에 맞춰 AI가 듣고 교정하고 요약합니다. 결과는 TXT/DOCX와 기록본으로 바로 저장할 수 있습니다.",
+      beforeLabel: "Before",
+      beforeExample: "\"이번 주 광고 예산이 15% 초과됐고, 다음 주 수정안을 다시 공유해 주세요.\"",
+      afterLabel: "After",
+      afterTitle: "회의 기록 요약",
+      afterBullets: [
+        "안건: 예산 초과 15%",
+        "결정: 수정안 재공유",
+        "후속 조치: 일정/담당 재배정",
+      ],
+      pricingCta: "요금제 보기",
+      oursCta: "OURS 소개 보기",
+      featureCards: [
+        {
+          title: "전문 용어 정확도",
+          body: "도메인 용어 사전 + 문맥 교정으로 오인식을 줄입니다.",
+        },
+        {
+          title: "구조화된 문서 출력",
+          body: "요약, 핵심 포인트, 후속 조치까지 바로 쓰는 형태로 제공합니다.",
+        },
+        {
+          title: "2단계 엔진",
+          body: "Whisper 전사 + Gemini 교정으로 속도와 품질을 함께 확보합니다.",
+        },
+      ],
+      testimonialLabel: "베타 사용자 피드백",
+      testimonials: [
+        "\"회의록 정리 시간이 훨씬 단축됐어요.\"",
+        "\"설교 요약본을 바로 저장할 수 있어 편합니다.\"",
+        "\"전문 용어가 이전보다 덜 깨집니다.\"",
+      ],
+    },
     login: "로그인",
     signup: "회원가입",
     namePlaceholder: "이름",
@@ -370,6 +411,46 @@ const I18N = {
     loadingApp: "Initializing app...",
     authIntro: "Start AI speech records now.",
     authSubcopy: "Sign in to upload files and start transcription.",
+    authLanding: {
+      badges: {
+        free: "Free 10h/mo",
+        pro: "Pro KRW 8,000 unlimited",
+        beta: "Open beta",
+      },
+      hero: "Upload your recording. Get a structured transcript you can use right away.",
+      subcopy: "For sermons, calls, and meetings, AI listens, corrects, and summarizes. Save outputs instantly as TXT/DOCX and reusable records.",
+      beforeLabel: "Before",
+      beforeExample: "\"This week’s ad budget exceeded by 15%. Please share the revised plan again next week.\"",
+      afterLabel: "After",
+      afterTitle: "Meeting Record Summary",
+      afterBullets: [
+        "Agenda: Budget overspent by 15%",
+        "Decision: Revised plan will be shared",
+        "Next action: Reassign timeline/owner",
+      ],
+      pricingCta: "View pricing",
+      oursCta: "About OURS",
+      featureCards: [
+        {
+          title: "Accurate domain terms",
+          body: "Domain dictionaries + context correction reduce misrecognitions.",
+        },
+        {
+          title: "Structured output",
+          body: "Get summaries, key points, and follow-up actions in a ready-to-use format.",
+        },
+        {
+          title: "Two-stage engine",
+          body: "Whisper transcription + Gemini correction balances speed and quality.",
+        },
+      ],
+      testimonialLabel: "Beta user feedback",
+      testimonials: [
+        "\"Meeting-note cleanup time dropped significantly.\"",
+        "\"It’s convenient to save sermon summaries right away.\"",
+        "\"Domain terms break less than before.\"",
+      ],
+    },
     login: "Log In",
     signup: "Sign Up",
     namePlaceholder: "Name",
@@ -2032,6 +2113,14 @@ function App() {
     }
   };
 
+  const handleOpenOurs = async () => {
+    try {
+      await openExternalUrl(OURS_URL);
+    } catch (e) {
+      setError(e.message || copy.errors.openExternalFailed);
+    }
+  };
+
   const handleBillingCheckout = async () => {
     clearMessages();
     if (!isLoggedIn) {
@@ -2676,7 +2765,107 @@ function App() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <FadeInView duration={420}>
+          <FadeInView duration={280}>
+            <View
+              style={[
+                styles.card,
+                styles.authCard,
+                compactLayout ? styles.authCardCompact : null,
+                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+              ]}
+            >
+              <View style={styles.authLandingBadgeRow}>
+                <View style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{copy.authLanding.badges.free}</Text>
+                </View>
+                <View style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{copy.authLanding.badges.pro}</Text>
+                </View>
+                <View style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{copy.authLanding.badges.beta}</Text>
+                </View>
+              </View>
+
+              <Text style={[styles.authLandingHeroTitle, { color: activeTheme.textPrimary }]}>
+                {copy.authLanding.hero}
+              </Text>
+              <Text style={[styles.authLandingHeroSubcopy, { color: activeTheme.textSecondary }]}>
+                {copy.authLanding.subcopy}
+              </Text>
+
+              <View style={styles.authLandingExampleGrid}>
+                <View style={[styles.authLandingExampleCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.authLandingExampleLabel, { color: activeTheme.textSecondary }]}>{copy.authLanding.beforeLabel}</Text>
+                  <Text style={[styles.authLandingExampleBody, { color: activeTheme.textSecondary }]}>{copy.authLanding.beforeExample}</Text>
+                </View>
+                <View style={[styles.authLandingExampleCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.authLandingExampleLabel, { color: activeTheme.textSecondary }]}>{copy.authLanding.afterLabel}</Text>
+                  <Text style={[styles.authLandingAfterTitle, { color: activeTheme.textPrimary }]}>{copy.authLanding.afterTitle}</Text>
+                  <View style={styles.authLandingAfterList}>
+                    {copy.authLanding.afterBullets.map((line) => (
+                      <Text key={`after-${line}`} style={[styles.authLandingAfterItem, { color: activeTheme.textSecondary }]}>
+                        - {line}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.authLandingActionRow, compactLayout ? styles.authLandingActionRowCompact : null]}>
+                <NmPressable
+                  style={[styles.primaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
+                  onPress={handleOpenPricing}
+                >
+                  <Text style={styles.primaryButtonText}>{copy.authLanding.pricingCta}</Text>
+                </NmPressable>
+                <NmPressable
+                  style={[styles.secondaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                  onPress={handleOpenOurs}
+                >
+                  <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.authLanding.oursCta}</Text>
+                </NmPressable>
+              </View>
+            </View>
+          </FadeInView>
+
+          <FadeInView delay={60} duration={280}>
+            <View style={[styles.authLandingFeatureGrid, styles.authCard, compactLayout ? styles.authCardCompact : null]}>
+              {copy.authLanding.featureCards.map((feature) => (
+                <View
+                  key={`feature-${feature.title}`}
+                  style={[styles.card, styles.authLandingFeatureCard, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                >
+                  <Text style={[styles.authLandingFeatureTitle, { color: activeTheme.textPrimary }]}>{feature.title}</Text>
+                  <Text style={[styles.authLandingFeatureBody, { color: activeTheme.textSecondary }]}>{feature.body}</Text>
+                </View>
+              ))}
+            </View>
+          </FadeInView>
+
+          <FadeInView delay={110} duration={280}>
+            <View
+              style={[
+                styles.card,
+                styles.authCard,
+                compactLayout ? styles.authCardCompact : null,
+                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+              ]}
+            >
+              <Text style={[styles.authLandingTestimonialLabel, { color: activeTheme.accent }]}>{copy.authLanding.testimonialLabel}</Text>
+              <View style={styles.authLandingTestimonialGrid}>
+                {copy.authLanding.testimonials.map((quote) => (
+                  <View
+                    key={`quote-${quote}`}
+                    style={[styles.authLandingTestimonialCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
+                  >
+                    <Text style={[styles.authLandingTestimonialText, { color: activeTheme.textPrimary }]}>{quote}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </FadeInView>
+
+          <FadeInView delay={150} duration={320}>
             <View
               style={[
                 styles.card,
@@ -3606,6 +3795,109 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 6,
+  },
+  authLandingBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  authLandingBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  authLandingBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  authLandingHeroTitle: {
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+    marginTop: 2,
+  },
+  authLandingHeroSubcopy: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  authLandingExampleGrid: {
+    gap: 10,
+  },
+  authLandingExampleCard: {
+    borderRadius: NM.radiusSm,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 6,
+  },
+  authLandingExampleLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  authLandingExampleBody: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  authLandingAfterTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  authLandingAfterList: {
+    gap: 3,
+  },
+  authLandingAfterItem: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  authLandingActionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  authLandingActionRowCompact: {
+    flexDirection: "column",
+  },
+  authLandingActionButton: {
+    flex: 1,
+  },
+  authLandingFeatureGrid: {
+    width: "100%",
+    alignSelf: "center",
+    gap: 10,
+  },
+  authLandingFeatureCard: {
+    paddingVertical: 14,
+    gap: 6,
+  },
+  authLandingFeatureTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  authLandingFeatureBody: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  authLandingTestimonialLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  authLandingTestimonialGrid: {
+    gap: 8,
+  },
+  authLandingTestimonialCard: {
+    borderRadius: NM.radiusSm,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+  },
+  authLandingTestimonialText: {
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "600",
   },
   banner: {
     marginHorizontal: 16,
