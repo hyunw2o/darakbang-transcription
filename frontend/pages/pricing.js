@@ -310,13 +310,26 @@ export default function PricingPage() {
                 type="button"
                 onClick={openBillingPortal}
                 disabled={!portalSupported || actionLoading !== ''}
-                className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
+                className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-center leading-tight whitespace-normal disabled:opacity-50"
+                style={{ wordBreak: 'keep-all' }}
               >
                 {actionLoading === 'portal'
                   ? '이동 중...'
                   : portalSupported
-                    ? '구독 관리하기'
-                    : '국내 PG 관리페이지 준비 중'}
+                    ? (
+                      <span>
+                        구독
+                        <br />
+                        관리하기
+                      </span>
+                    )
+                    : (
+                      <span>
+                        국내 PG 관리자 페이지
+                        <br />
+                        준비중
+                      </span>
+                    )}
               </button>
             ) : (
               <button
@@ -339,9 +352,18 @@ export default function PricingPage() {
                 type="button"
                 onClick={cancelSubscription}
                 disabled={actionLoading !== ''}
-                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary text-center leading-tight whitespace-normal disabled:opacity-50"
+                style={{ wordBreak: 'keep-all' }}
               >
-                {actionLoading === 'cancel' ? '처리 중...' : '구독 취소하기'}
+                {actionLoading === 'cancel'
+                  ? '처리 중...'
+                  : (
+                    <span>
+                      구독
+                      <br />
+                      취소하기
+                    </span>
+                  )}
               </button>
             )}
             {isPaid && (
@@ -349,9 +371,18 @@ export default function PricingPage() {
                 type="button"
                 onClick={requestRefund}
                 disabled={actionLoading !== ''}
-                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary text-center leading-tight whitespace-normal disabled:opacity-50"
+                style={{ wordBreak: 'keep-all' }}
               >
-                {actionLoading === 'refund' ? '처리 중...' : '환불 요청하기'}
+                {actionLoading === 'refund'
+                  ? '처리 중...'
+                  : (
+                    <span>
+                      환불
+                      <br />
+                      요청하기
+                    </span>
+                  )}
               </button>
             )}
             <a
