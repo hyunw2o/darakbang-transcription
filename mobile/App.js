@@ -281,6 +281,8 @@ const I18N = {
     usageRefresh: "사용량 새로고침",
     usageUpgrade: "구독 업그레이드",
     usageManageSubscription: "구독 관리",
+    usageCancelSubscription: "구독 취소",
+    usageRequestRefund: "환불 요청",
     usageOpenPricing: "요금제 안내 보기",
     billingUnsupported: "현재 결제 설정에서는 앱 내 결제 호출이 비활성화되어 있습니다.",
     planLabels: {
@@ -296,6 +298,8 @@ const I18N = {
       checkout_pending: "결제 대기",
       checkout_canceled: "결제 취소",
       canceled: "해지",
+      refund_requested: "환불 요청",
+      refunded: "환불 완료",
       past_due: "미납",
       unpaid: "미납",
       incomplete: "미완료",
@@ -340,6 +344,8 @@ const I18N = {
       usageLoaded: "사용량 정보를 업데이트했습니다.",
       checkoutOpened: "결제 페이지를 열었습니다.",
       portalOpened: "구독 관리 페이지를 열었습니다.",
+      subscriptionCancelDone: "구독 취소 요청이 접수되었습니다.",
+      refundRequestDone: "환불 요청이 접수되었습니다.",
     },
     errors: {
       authRequired: "로그인 후 파일 변환을 사용할 수 있습니다.",
@@ -385,6 +391,8 @@ const I18N = {
       billingStatusReadFailed: "구독 상태를 불러오지 못했습니다.",
       billingCheckoutFailed: "결제 페이지를 열지 못했습니다.",
       billingPortalFailed: "구독 관리 페이지를 열지 못했습니다.",
+      billingCancelFailed: "구독 취소 요청에 실패했습니다.",
+      billingRefundFailed: "환불 요청에 실패했습니다.",
       openExternalFailed: "외부 페이지를 열 수 없습니다.",
       requestFailedPrefix: "요청 실패",
       timeout: "요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.",
@@ -548,6 +556,8 @@ const I18N = {
     usageRefresh: "Refresh usage",
     usageUpgrade: "Upgrade subscription",
     usageManageSubscription: "Manage subscription",
+    usageCancelSubscription: "Cancel subscription",
+    usageRequestRefund: "Request refund",
     usageOpenPricing: "Open pricing page",
     billingUnsupported: "In-app checkout is currently disabled for this billing setup.",
     planLabels: {
@@ -563,6 +573,8 @@ const I18N = {
       checkout_pending: "Checkout pending",
       checkout_canceled: "Checkout canceled",
       canceled: "Canceled",
+      refund_requested: "Refund requested",
+      refunded: "Refunded",
       past_due: "Past due",
       unpaid: "Unpaid",
       incomplete: "Incomplete",
@@ -607,6 +619,8 @@ const I18N = {
       usageLoaded: "Usage information updated.",
       checkoutOpened: "Checkout page opened.",
       portalOpened: "Subscription portal opened.",
+      subscriptionCancelDone: "Subscription cancellation request submitted.",
+      refundRequestDone: "Refund request submitted.",
     },
     errors: {
       authRequired: "Please log in to use transcription.",
@@ -652,6 +666,8 @@ const I18N = {
       billingStatusReadFailed: "Failed to load subscription status.",
       billingCheckoutFailed: "Failed to open checkout page.",
       billingPortalFailed: "Failed to open subscription portal.",
+      billingCancelFailed: "Failed to cancel subscription.",
+      billingRefundFailed: "Failed to request refund.",
       openExternalFailed: "Unable to open external page.",
       requestFailedPrefix: "Request failed",
       timeout: "Request timed out. Please check server status.",
@@ -1137,6 +1153,9 @@ function getFriendlyAuthError(message, copy) {
 async function requestApi(path, { method = "GET", token = "", body = undefined, timeoutMs = 20000 } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (typeof body === "string" && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   const baseCandidates = [API_URL, ...API_FALLBACK_URLS].filter(Boolean).filter((value, idx, arr) => arr.indexOf(value) === idx);
   let lastError = null;
 
@@ -1684,6 +1703,16 @@ function App() {
   const billingCheckoutSupported = Boolean(billingStatus?.checkout_supported);
   const billingPortalSupported = Boolean(billingStatus?.portal_supported);
   const billingManageSupported = Boolean(billingStatus?.can_manage_subscription);
+  const canRunBillingAction = Boolean(
+    isLoggedIn &&
+    (
+      usagePlan !== "free"
+      || billingState === "active"
+      || billingState === "trialing"
+      || billingState === "canceled"
+      || billingState === "refund_requested"
+    )
+  );
   const planLabel = copy.planLabels?.[usagePlan] || usagePlan;
   const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
 
@@ -2230,6 +2259,59 @@ function App() {
       setNotice(copy.notices.portalOpened);
     } catch (e) {
       setError(e.message || copy.errors.billingPortalFailed);
+    } finally {
+      setBillingActionLoading("");
+    }
+  };
+
+  const handleBillingCancel = async () => {
+    clearMessages();
+    if (!isLoggedIn) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    setBillingActionLoading("cancel");
+    try {
+      const data = await requestApi("/api/billing/cancel", {
+        method: "POST",
+        token: authToken,
+        body: JSON.stringify({
+          immediate: false,
+          reason: "user_requested_from_mobile_app",
+        }),
+      });
+      setNotice(data?.message || copy.notices.subscriptionCancelDone);
+      await fetchBillingStatus(authToken, { quiet: true });
+      await fetchUsage(authToken, { quiet: true });
+    } catch (e) {
+      setError(e.message || copy.errors.billingCancelFailed);
+    } finally {
+      setBillingActionLoading("");
+    }
+  };
+
+  const handleBillingRefund = async () => {
+    clearMessages();
+    if (!isLoggedIn) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    setBillingActionLoading("refund");
+    try {
+      const data = await requestApi("/api/billing/refund", {
+        method: "POST",
+        token: authToken,
+        body: JSON.stringify({
+          reason: "user_requested_from_mobile_app",
+        }),
+      });
+      setNotice(data?.message || copy.notices.refundRequestDone);
+      await fetchBillingStatus(authToken, { quiet: true });
+      await fetchUsage(authToken, { quiet: true });
+    } catch (e) {
+      setError(e.message || copy.errors.billingRefundFailed);
     } finally {
       setBillingActionLoading("");
     }
@@ -3456,6 +3538,41 @@ function App() {
                       }}
                     >
                       <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.usageOpenPricing}</Text>
+                    </NmPressable>
+                  </View>
+
+                  <View style={styles.billingActionRow}>
+                    <NmPressable
+                      style={[
+                        styles.tinyButton,
+                        styles.billingActionButton,
+                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                        !canRunBillingAction || !!billingActionLoading
+                          ? styles.buttonDisabled
+                          : null,
+                      ]}
+                      onPress={handleBillingCancel}
+                      disabled={!canRunBillingAction || !!billingActionLoading}
+                    >
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                        {billingActionLoading === "cancel" ? copy.processing : copy.usageCancelSubscription}
+                      </Text>
+                    </NmPressable>
+                    <NmPressable
+                      style={[
+                        styles.tinyButton,
+                        styles.billingActionButton,
+                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                        !canRunBillingAction || !!billingActionLoading
+                          ? styles.buttonDisabled
+                          : null,
+                      ]}
+                      onPress={handleBillingRefund}
+                      disabled={!canRunBillingAction || !!billingActionLoading}
+                    >
+                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                        {billingActionLoading === "refund" ? copy.processing : copy.usageRequestRefund}
+                      </Text>
                     </NmPressable>
                   </View>
                 </View>

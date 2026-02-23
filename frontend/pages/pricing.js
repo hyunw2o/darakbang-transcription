@@ -15,6 +15,34 @@ export default function PricingPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  const refreshBillingStatus = async (token, { quiet = false } = {}) => {
+    if (!token) {
+      setStatus(null)
+      return
+    }
+
+    if (!quiet) {
+      setStatusLoading(true)
+    }
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}/api/billing/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || '구독 상태를 불러오지 못했습니다.')
+      }
+      setStatus(data)
+    } catch (err) {
+      setError(err.message || '구독 상태 조회 실패')
+    } finally {
+      if (!quiet) {
+        setStatusLoading(false)
+      }
+    }
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     setAuthToken(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || '')
@@ -32,27 +60,7 @@ export default function PricingPage() {
       setStatus(null)
       return
     }
-
-    const fetchStatus = async () => {
-      setStatusLoading(true)
-      setError('')
-      try {
-        const res = await fetch(`${API_URL}/api/billing/status`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          throw new Error(data.detail || '구독 상태를 불러오지 못했습니다.')
-        }
-        setStatus(data)
-      } catch (err) {
-        setError(err.message || '구독 상태 조회 실패')
-      } finally {
-        setStatusLoading(false)
-      }
-    }
-
-    fetchStatus()
+    refreshBillingStatus(authToken)
   }, [authToken])
 
   const withAuthHeaders = (token) => ({
@@ -130,6 +138,81 @@ export default function PricingPage() {
       window.location.href = data.portal_url
     } catch (err) {
       setError(err.message || '구독 관리 페이지 요청 실패')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const cancelSubscription = async () => {
+    if (!authToken) {
+      setError('로그인 후 구독 취소를 진행할 수 있습니다.')
+      return
+    }
+
+    if (!window.confirm('구독을 취소하시겠습니까? 결제 주기 종료 시점에 해지됩니다.')) {
+      return
+    }
+
+    setActionLoading('cancel')
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`${API_URL}/api/billing/cancel`, {
+        method: 'POST',
+        headers: {
+          ...withAuthHeaders(authToken),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          immediate: false,
+          reason: 'user_requested_from_pricing_page',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || '구독 취소 요청에 실패했습니다.')
+      }
+      setMessage(data.message || '구독 취소 요청이 완료되었습니다.')
+      await refreshBillingStatus(authToken, { quiet: true })
+    } catch (err) {
+      setError(err.message || '구독 취소 요청 실패')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const requestRefund = async () => {
+    if (!authToken) {
+      setError('로그인 후 환불 요청을 진행할 수 있습니다.')
+      return
+    }
+
+    if (!window.confirm('환불을 요청하시겠습니까? (기본 조건: 결제 후 7일 이내 + 사용량 0초)')) {
+      return
+    }
+
+    setActionLoading('refund')
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`${API_URL}/api/billing/refund`, {
+        method: 'POST',
+        headers: {
+          ...withAuthHeaders(authToken),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: 'user_requested_from_pricing_page',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || '환불 요청에 실패했습니다.')
+      }
+      setMessage(data.message || '환불 요청이 접수되었습니다.')
+      await refreshBillingStatus(authToken, { quiet: true })
+    } catch (err) {
+      setError(err.message || '환불 요청 실패')
     } finally {
       setActionLoading('')
     }
@@ -251,6 +334,26 @@ export default function PricingPage() {
                     : '결제 준비 중'}
               </button>
             )}
+            {isPaid && (
+              <button
+                type="button"
+                onClick={cancelSubscription}
+                disabled={actionLoading !== ''}
+                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+              >
+                {actionLoading === 'cancel' ? '처리 중...' : '구독 취소하기'}
+              </button>
+            )}
+            {isPaid && (
+              <button
+                type="button"
+                onClick={requestRefund}
+                disabled={actionLoading !== ''}
+                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+              >
+                {actionLoading === 'refund' ? '처리 중...' : '환불 요청하기'}
+              </button>
+            )}
             <a
               href={CONTACT_URL}
               className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary"
@@ -278,6 +381,11 @@ export default function PricingPage() {
           {checkoutSupported && isMockCheckout && (
             <p className="text-xs text-nm-text-secondary mt-3">
               현재는 테스트 결제 모드입니다. 실제 과금 없이 성공/취소 플로우를 확인할 수 있습니다.
+            </p>
+          )}
+          {isPaid && (
+            <p className="text-xs text-nm-text-secondary mt-3">
+              환불 자동 처리 기본 조건: 결제 후 7일 이내 + 사용 이력 0초 (그 외는 수동 심사)
             </p>
           )}
           {message && <p className="text-xs text-blue-600 mt-3">{message}</p>}

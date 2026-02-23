@@ -10,7 +10,7 @@ import json
 import base64
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -138,6 +138,7 @@ ADMIN_BYPASS_EMAILS = {
     value.lower() for value in _parse_csv_env("ADMIN_BYPASS_EMAILS", []) if value
 }
 BILLING_TABLE_NAME = "billing_subscriptions"
+BILLING_REFUND_TABLE_NAME = "billing_refund_requests"
 BILLING_PROVIDER = (os.getenv("BILLING_PROVIDER") or "portone").strip().lower()
 SUPPORTED_BILLING_PROVIDERS = {"portone", "tosspayments", "stripe"}
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
@@ -154,6 +155,10 @@ BILLING_CANCEL_URL = (os.getenv("BILLING_CANCEL_URL") or "").strip()
 BILLING_PORTAL_RETURN_URL = (os.getenv("BILLING_PORTAL_RETURN_URL") or "").strip()
 PAID_PLAN_TIER = (os.getenv("PAID_PLAN_TIER") or "pro").strip().lower() or "pro"
 STRIPE_ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
+BILLING_REFUND_WINDOW_DAYS = min(
+    30,
+    max(1, int(os.getenv("BILLING_REFUND_WINDOW_DAYS", "7"))),
+)
 BILLING_TEST_MODE = os.getenv("BILLING_TEST_MODE", "false").strip().lower() == "true"
 MOCK_CHECKOUT_SESSION_TTL_SECONDS = max(60, int(os.getenv("MOCK_CHECKOUT_SESSION_TTL_SECONDS", "1800")))
 
@@ -258,6 +263,7 @@ ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
 TRANSCRIPTION_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
 BILLING_SCOPE_VALIDATED = False
+BILLING_REFUND_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -992,6 +998,36 @@ def _ensure_billing_scope_ready() -> None:
         raise
 
 
+def _ensure_billing_refund_scope_ready() -> None:
+    global BILLING_REFUND_SCOPE_VALIDATED
+    if BILLING_REFUND_SCOPE_VALIDATED:
+        return
+
+    try:
+        _get_supabase_client().table(BILLING_REFUND_TABLE_NAME).select("id").limit(1).execute()
+        BILLING_REFUND_SCOPE_VALIDATED = True
+    except Exception as e:
+        error_text = str(e).lower()
+        if (
+            BILLING_REFUND_TABLE_NAME in error_text
+            and (
+                "does not exist" in error_text
+                or "relation" in error_text
+                or "schema cache" in error_text
+                or "could not find the table" in error_text
+                or "pgrst205" in error_text
+            )
+        ):
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Supabase 설정 필요: backend/sql/billing_refund_requests.sql 을 실행한 뒤 "
+                    "SQL Editor에서 `NOTIFY pgrst, 'reload schema';` 를 실행하세요."
+                ),
+            )
+        raise
+
+
 def _normalize_billing_row(row: dict, user_id: str | None = None) -> dict:
     return {
         "user_id": row.get("user_id") or user_id,
@@ -1007,6 +1043,70 @@ def _normalize_billing_row(row: dict, user_id: str | None = None) -> dict:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    normalized = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo:
+            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+    except Exception:
+        return None
+
+
+def _resolve_billing_reference_datetime(row: dict | None) -> datetime | None:
+    row_data = row or {}
+    return (
+        _parse_iso_datetime(row_data.get("checkout_completed_at"))
+        or _parse_iso_datetime(row_data.get("created_at"))
+    )
+
+
+def _is_refund_window_open(row: dict | None) -> bool:
+    reference_dt = _resolve_billing_reference_datetime(row)
+    if not reference_dt:
+        return False
+    return (datetime.utcnow() - reference_dt) <= timedelta(days=BILLING_REFUND_WINDOW_DAYS)
+
+
+def _insert_refund_request(
+    *,
+    user_id: str,
+    provider: str,
+    subscription_id: str = "",
+    payment_reference: str = "",
+    reason: str = "",
+    status: str = "requested",
+    decision_note: str = "",
+    refund_id: str = "",
+    metadata: dict | None = None,
+) -> dict | None:
+    _ensure_billing_refund_scope_ready()
+
+    payload = {
+        "user_id": user_id,
+        "provider": provider,
+        "subscription_id": subscription_id or None,
+        "payment_reference": payment_reference or None,
+        "request_reason": (reason or "").strip()[:500] or None,
+        "status": status,
+        "decision_note": (decision_note or "").strip()[:1000] or None,
+        "refund_id": refund_id or None,
+        "metadata": metadata or {},
+        "processed_at": datetime.utcnow().isoformat()
+        if status in {"refunded", "rejected", "failed"}
+        else None,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    response = _get_supabase_client().table(BILLING_REFUND_TABLE_NAME).insert(payload).execute()
+    if response.data:
+        return response.data[0]
+    return None
 
 
 def _fetch_billing_row_by_user_id(user_id: str) -> dict | None:
@@ -1091,6 +1191,54 @@ def _to_iso_datetime_from_unix(unix_ts: int | float | None) -> str | None:
         return datetime.utcfromtimestamp(int(unix_ts)).isoformat()
     except Exception:
         return None
+
+
+def _to_bool_from_payload(value, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _extract_stripe_charge_id(invoice_obj: dict | None) -> str:
+    invoice = invoice_obj or {}
+    charge = invoice.get("charge")
+    if isinstance(charge, dict):
+        return str(charge.get("id") or "")
+    return str(charge or "")
+
+
+def _resolve_latest_paid_invoice_and_charge(
+    subscription_id: str,
+    customer_id: str,
+) -> tuple[str, str, int]:
+    try:
+        if subscription_id:
+            invoices = stripe.Invoice.list(subscription=subscription_id, limit=10)
+        elif customer_id:
+            invoices = stripe.Invoice.list(customer=customer_id, limit=10)
+        else:
+            return "", "", 0
+    except Exception:
+        return "", "", 0
+
+    for invoice in (invoices.data or []):
+        if not bool(invoice.get("paid")):
+            continue
+        charge_id = _extract_stripe_charge_id(invoice)
+        if not charge_id:
+            continue
+        invoice_id = str(invoice.get("id") or "")
+        amount_paid = int(invoice.get("amount_paid") or 0)
+        return charge_id, invoice_id, amount_paid
+
+    return "", "", 0
 
 
 def _extract_primary_price_id(subscription_obj: dict) -> str:
@@ -2684,6 +2832,360 @@ async def create_portal_session(
     return {
         "success": True,
         "portal_url": portal_session.url,
+    }
+
+
+@app.post("/api/billing/cancel")
+async def cancel_billing_subscription(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """구독 취소 요청 (자동/수동 처리)"""
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    user = await _get_current_user(authorization)
+    payload = await _read_optional_json_payload(request)
+    immediate = _to_bool_from_payload(payload.get("immediate"), default=False)
+
+    user_id = user["id"]
+    billing_row = _fetch_billing_row_by_user_id(user_id)
+    if not billing_row:
+        raise HTTPException(status_code=404, detail="취소 가능한 구독 정보가 없습니다.")
+
+    normalized = _normalize_billing_row(billing_row, user_id=user_id)
+    subscription_id = normalized["subscription_id"]
+    customer_id = normalized["customer_id"]
+    provider = _get_billing_provider_or_raise()
+    checkout_mode = _get_checkout_mode(provider)
+    current_status = str(normalized["status"] or "").strip().lower()
+
+    if (
+        normalized["plan_tier"] == USAGE_FREE_PLAN
+        and current_status not in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES
+        and not normalized["cancel_at_period_end"]
+    ):
+        raise HTTPException(status_code=409, detail="현재 활성화된 구독이 없습니다.")
+
+    if checkout_mode == "mock" or subscription_id.startswith("mock_sub_"):
+        if immediate:
+            canceled_at = datetime.utcnow().isoformat()
+            _upsert_billing_row(
+                user_id,
+                {
+                    "provider": provider,
+                    "status": "canceled",
+                    "plan_tier": USAGE_FREE_PLAN,
+                    "cancel_at_period_end": False,
+                    "current_period_end": canceled_at,
+                },
+            )
+            _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+            return {
+                "success": True,
+                "provider": provider,
+                "mode": "mock",
+                "status": "canceled",
+                "plan_tier": USAGE_FREE_PLAN,
+                "message": "테스트 구독이 즉시 해지되었습니다.",
+            }
+
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": provider,
+                "cancel_at_period_end": True,
+            },
+        )
+        return {
+            "success": True,
+            "provider": provider,
+            "mode": "mock",
+            "status": current_status or "active",
+            "cancel_at_period_end": True,
+            "message": "테스트 구독이 결제 주기 종료 시 해지되도록 설정되었습니다.",
+        }
+
+    if provider != "stripe" or checkout_mode != "live":
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": provider,
+                "cancel_at_period_end": True,
+            },
+        )
+        return {
+            "success": True,
+            "provider": provider,
+            "mode": "manual",
+            "manual_required": True,
+            "status": current_status or "active",
+            "cancel_at_period_end": True,
+            "message": "구독 취소 요청이 접수되었습니다. 결제대행사 정책에 따라 순차 처리됩니다.",
+        }
+
+    _require_stripe_billing_enabled()
+
+    stripe_subscription_id = subscription_id
+    if not stripe_subscription_id and customer_id:
+        try:
+            subscription_list = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+            for sub in (subscription_list.data or []):
+                sub_status = str(sub.get("status") or "").strip().lower()
+                if sub_status in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES or bool(sub.get("cancel_at_period_end")):
+                    stripe_subscription_id = str(sub.get("id") or "")
+                    if stripe_subscription_id:
+                        break
+        except Exception:
+            stripe_subscription_id = ""
+
+    if not stripe_subscription_id:
+        raise HTTPException(status_code=400, detail="Stripe 구독 ID를 찾을 수 없습니다.")
+
+    if not immediate and normalized["cancel_at_period_end"]:
+        return {
+            "success": True,
+            "provider": "stripe",
+            "mode": "live",
+            "status": current_status or "active",
+            "cancel_at_period_end": True,
+            "message": "이미 결제 주기 종료 시 해지로 설정된 구독입니다.",
+        }
+
+    try:
+        if immediate:
+            subscription_obj = stripe.Subscription.delete(stripe_subscription_id)
+        else:
+            subscription_obj = stripe.Subscription.modify(
+                stripe_subscription_id,
+                cancel_at_period_end=True,
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"구독 취소 처리 실패: {str(e)}")
+
+    next_status = str(subscription_obj.get("status") or ("canceled" if immediate else current_status or "active"))
+    next_cancel_at_period_end = bool(subscription_obj.get("cancel_at_period_end") or False)
+    next_period_end = _to_iso_datetime_from_unix(subscription_obj.get("current_period_end"))
+    next_plan_tier = (
+        USAGE_FREE_PLAN
+        if immediate or next_status not in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES
+        else PAID_PLAN_TIER
+    )
+
+    _upsert_billing_row(
+        user_id,
+        {
+            "provider": "stripe",
+            "subscription_id": stripe_subscription_id,
+            "status": next_status,
+            "plan_tier": next_plan_tier,
+            "current_period_end": next_period_end or normalized["current_period_end"],
+            "cancel_at_period_end": next_cancel_at_period_end if not immediate else False,
+        },
+    )
+    _set_user_plan_tier(user_id, next_plan_tier)
+
+    return {
+        "success": True,
+        "provider": "stripe",
+        "mode": "live",
+        "status": next_status,
+        "plan_tier": next_plan_tier,
+        "cancel_at_period_end": next_cancel_at_period_end if not immediate else False,
+        "current_period_end": next_period_end or normalized["current_period_end"],
+        "message": "구독 취소가 처리되었습니다." if immediate else "구독이 결제 주기 종료 시 해지되도록 설정되었습니다.",
+    }
+
+
+@app.post("/api/billing/refund")
+async def request_billing_refund(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """환불 요청 (무사용 + 기간 내 자동 처리, 그 외 수동 검토)"""
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    _ensure_billing_refund_scope_ready()
+    user = await _get_current_user(authorization)
+    payload = await _read_optional_json_payload(request)
+
+    user_id = user["id"]
+    reason = str(payload.get("reason") or "").strip()[:500]
+    if not reason:
+        reason = "user_requested_refund"
+
+    billing_row = _fetch_billing_row_by_user_id(user_id)
+    if not billing_row:
+        raise HTTPException(status_code=404, detail="환불 가능한 결제 이력이 없습니다.")
+
+    normalized = _normalize_billing_row(billing_row, user_id=user_id)
+    current_status = str(normalized["status"] or "").strip().lower()
+    if current_status in {"inactive", "checkout_pending", "checkout_canceled", "refunded"}:
+        raise HTTPException(status_code=409, detail="환불 가능한 활성 결제 상태가 아닙니다.")
+
+    if not _is_refund_window_open(normalized):
+        raise HTTPException(
+            status_code=409,
+            detail=f"환불 가능 기간({BILLING_REFUND_WINDOW_DAYS}일)이 지나 자동 환불 대상이 아닙니다.",
+        )
+
+    usage_row = _get_or_create_usage_row(user_id)
+    used_audio_seconds = int(usage_row.get("used_audio_seconds") or 0)
+    if used_audio_seconds > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="사용 이력이 있어 자동 환불 대상이 아닙니다. 문의 메일로 별도 심사를 요청해 주세요.",
+        )
+
+    provider = _get_billing_provider_or_raise()
+    checkout_mode = _get_checkout_mode(provider)
+    subscription_id = normalized["subscription_id"]
+    customer_id = normalized["customer_id"]
+
+    if checkout_mode == "mock" or subscription_id.startswith("mock_sub_"):
+        refund_id = f"mock_ref_{uuid.uuid4().hex[:18]}"
+        refunded_at = datetime.utcnow().isoformat()
+        _insert_refund_request(
+            user_id=user_id,
+            provider=provider,
+            subscription_id=subscription_id,
+            payment_reference=refund_id,
+            reason=reason,
+            status="refunded",
+            decision_note="테스트 결제 환불 완료",
+            refund_id=refund_id,
+            metadata={"mode": "mock"},
+        )
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": provider,
+                "status": "refunded",
+                "plan_tier": USAGE_FREE_PLAN,
+                "cancel_at_period_end": False,
+                "current_period_end": refunded_at,
+            },
+        )
+        _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+        return {
+            "success": True,
+            "provider": provider,
+            "mode": "mock",
+            "status": "refunded",
+            "refund_id": refund_id,
+            "message": "테스트 결제 환불이 완료되었습니다.",
+        }
+
+    if provider != "stripe" or checkout_mode != "live":
+        _insert_refund_request(
+            user_id=user_id,
+            provider=provider,
+            subscription_id=subscription_id,
+            payment_reference=normalized["customer_id"],
+            reason=reason,
+            status="manual_review",
+            decision_note="국내 PG 환불은 운영자 수동 심사가 필요합니다.",
+            metadata={"mode": "manual", "checkout_mode": checkout_mode},
+        )
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": provider,
+                "status": "refund_requested",
+                "cancel_at_period_end": True,
+            },
+        )
+        return {
+            "success": True,
+            "provider": provider,
+            "mode": "manual",
+            "status": "refund_requested",
+            "manual_required": True,
+            "message": "환불 요청이 접수되었습니다. 운영 검토 후 결제대행사 정책에 따라 처리됩니다.",
+        }
+
+    _require_stripe_billing_enabled()
+
+    charge_id, invoice_id, amount_paid = _resolve_latest_paid_invoice_and_charge(
+        subscription_id=subscription_id,
+        customer_id=customer_id,
+    )
+    if not charge_id:
+        raise HTTPException(status_code=409, detail="환불 가능한 결제 건(청구서/결제)을 찾지 못했습니다.")
+
+    try:
+        refund_obj = stripe.Refund.create(
+            charge=charge_id,
+            reason="requested_by_customer",
+            metadata={
+                "user_id": user_id,
+                "subscription_id": subscription_id,
+                "source": "mallog24-refund-endpoint",
+            },
+        )
+    except Exception as e:
+        _insert_refund_request(
+            user_id=user_id,
+            provider="stripe",
+            subscription_id=subscription_id,
+            payment_reference=charge_id,
+            reason=reason,
+            status="failed",
+            decision_note=f"Stripe 환불 생성 실패: {str(e)}",
+            metadata={"invoice_id": invoice_id, "amount_paid": amount_paid},
+        )
+        raise HTTPException(status_code=500, detail=f"Stripe 환불 요청 실패: {str(e)}")
+
+    refund_id = str(refund_obj.get("id") or "")
+    refund_status = str(refund_obj.get("status") or "pending")
+
+    if subscription_id:
+        try:
+            stripe.Subscription.delete(subscription_id)
+        except Exception as sub_cancel_err:
+            print(f"[billing] failed to cancel subscription after refund request: {sub_cancel_err}")
+
+    internal_refund_status = (
+        "refunded" if refund_status == "succeeded" else "processing"
+    )
+    _insert_refund_request(
+        user_id=user_id,
+        provider="stripe",
+        subscription_id=subscription_id,
+        payment_reference=charge_id,
+        reason=reason,
+        status=internal_refund_status,
+        decision_note=f"Stripe refund status: {refund_status}",
+        refund_id=refund_id,
+        metadata={"invoice_id": invoice_id, "amount_paid": amount_paid},
+    )
+
+    _upsert_billing_row(
+        user_id,
+        {
+            "provider": "stripe",
+            "status": "refunded" if refund_status == "succeeded" else "refund_requested",
+            "plan_tier": USAGE_FREE_PLAN,
+            "cancel_at_period_end": False,
+            "current_period_end": datetime.utcnow().isoformat(),
+        },
+    )
+    _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+
+    return {
+        "success": True,
+        "provider": "stripe",
+        "mode": "live",
+        "status": "refunded" if refund_status == "succeeded" else "refund_requested",
+        "refund_id": refund_id,
+        "refund_status": refund_status,
+        "charge_id": charge_id,
+        "invoice_id": invoice_id,
+        "amount_paid": amount_paid,
+        "message": (
+            "환불이 완료되었습니다."
+            if refund_status == "succeeded"
+            else "환불 요청이 접수되었습니다. 결제사 처리 상태를 확인해 주세요."
+        ),
     }
 
 

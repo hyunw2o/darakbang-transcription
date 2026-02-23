@@ -15,6 +15,34 @@ export default function PricingEnPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  const refreshBillingStatus = async (token, { quiet = false } = {}) => {
+    if (!token) {
+      setStatus(null)
+      return
+    }
+
+    if (!quiet) {
+      setStatusLoading(true)
+    }
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}/api/billing/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to load billing status.')
+      }
+      setStatus(data)
+    } catch (err) {
+      setError(err.message || 'Failed to load billing status.')
+    } finally {
+      if (!quiet) {
+        setStatusLoading(false)
+      }
+    }
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     setAuthToken(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || '')
@@ -32,27 +60,7 @@ export default function PricingEnPage() {
       setStatus(null)
       return
     }
-
-    const fetchStatus = async () => {
-      setStatusLoading(true)
-      setError('')
-      try {
-        const res = await fetch(`${API_URL}/api/billing/status`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          throw new Error(data.detail || 'Failed to load billing status.')
-        }
-        setStatus(data)
-      } catch (err) {
-        setError(err.message || 'Failed to load billing status.')
-      } finally {
-        setStatusLoading(false)
-      }
-    }
-
-    fetchStatus()
+    refreshBillingStatus(authToken)
   }, [authToken])
 
   const withAuthHeaders = (token) => ({
@@ -130,6 +138,81 @@ export default function PricingEnPage() {
       window.location.href = data.portal_url
     } catch (err) {
       setError(err.message || 'Failed to open billing portal.')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const cancelSubscription = async () => {
+    if (!authToken) {
+      setError('Please log in before canceling your subscription.')
+      return
+    }
+
+    if (!window.confirm('Cancel subscription at period end?')) {
+      return
+    }
+
+    setActionLoading('cancel')
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`${API_URL}/api/billing/cancel`, {
+        method: 'POST',
+        headers: {
+          ...withAuthHeaders(authToken),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          immediate: false,
+          reason: 'user_requested_from_pricing_page_en',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to request cancellation.')
+      }
+      setMessage(data.message || 'Cancellation request submitted.')
+      await refreshBillingStatus(authToken, { quiet: true })
+    } catch (err) {
+      setError(err.message || 'Failed to request cancellation.')
+    } finally {
+      setActionLoading('')
+    }
+  }
+
+  const requestRefund = async () => {
+    if (!authToken) {
+      setError('Please log in before requesting a refund.')
+      return
+    }
+
+    if (!window.confirm('Request refund now? (Default auto criteria: within 7 days and zero usage)')) {
+      return
+    }
+
+    setActionLoading('refund')
+    setError('')
+    setMessage('')
+    try {
+      const res = await fetch(`${API_URL}/api/billing/refund`, {
+        method: 'POST',
+        headers: {
+          ...withAuthHeaders(authToken),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: 'user_requested_from_pricing_page_en',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to request refund.')
+      }
+      setMessage(data.message || 'Refund request submitted.')
+      await refreshBillingStatus(authToken, { quiet: true })
+    } catch (err) {
+      setError(err.message || 'Failed to request refund.')
     } finally {
       setActionLoading('')
     }
@@ -252,6 +335,26 @@ export default function PricingEnPage() {
                     : 'Checkout unavailable'}
               </button>
             )}
+            {isPaid && (
+              <button
+                type="button"
+                onClick={cancelSubscription}
+                disabled={actionLoading !== ''}
+                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+              >
+                {actionLoading === 'cancel' ? 'Processing...' : 'Cancel Subscription'}
+              </button>
+            )}
+            {isPaid && (
+              <button
+                type="button"
+                onClick={requestRefund}
+                disabled={actionLoading !== ''}
+                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+              >
+                {actionLoading === 'refund' ? 'Processing...' : 'Request Refund'}
+              </button>
+            )}
             <a
               href={CONTACT_URL}
               className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary"
@@ -279,6 +382,11 @@ export default function PricingEnPage() {
           {checkoutSupported && isMockCheckout && (
             <p className="text-xs text-nm-text-secondary mt-3">
               Mock checkout mode is enabled. You can validate success/cancel flow without real charges.
+            </p>
+          )}
+          {isPaid && (
+            <p className="text-xs text-nm-text-secondary mt-3">
+              Default auto-refund criteria: within 7 days after payment and zero monthly usage.
             </p>
           )}
           {message && <p className="text-xs text-blue-600 mt-3">{message}</p>}
