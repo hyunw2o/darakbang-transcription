@@ -1868,7 +1868,12 @@ def get_correction_prompt_by_type(transcription_type: str = "sermon", language: 
             return get_gemini_correction_prompt()
 
 
-def correct_text(text: str, transcription_type: str = "sermon", language: str = "ko") -> str:
+def correct_text(
+    text: str,
+    transcription_type: str = "sermon",
+    language: str = "ko",
+    correction_mode: str = "normal",
+) -> str:
     """
     1차 텍스트 교정 (규칙 기반)
     transcription_type: "sermon" | "phonecall" | "conversation"
@@ -1876,6 +1881,11 @@ def correct_text(text: str, transcription_type: str = "sermon", language: str = 
     """
     corrected = text
     import re
+    normalized_mode = (correction_mode or "normal").strip().lower()
+    if normalized_mode not in {"strict", "normal", "raw"}:
+        normalized_mode = "normal"
+    if normalized_mode == "raw":
+        return re.sub(r"\n{3,}", "\n\n", corrected)
 
     if language == "en":
         # ===== 영어 교정 =====
@@ -1902,9 +1912,14 @@ def correct_text(text: str, transcription_type: str = "sermon", language: str = 
     else:
         # ===== 한국어 교정 =====
         if transcription_type == "sermon":
-            # 설교: 전체 교정 (교회 용어 + 일반)
-            for wrong, right in COMMON_MISTAKES.items():
-                corrected = corrected.replace(wrong, right)
+            # 설교: strict 모드에서만 전체 교정(강한 치환)을 적용
+            if normalized_mode == "strict":
+                for wrong, right in COMMON_MISTAKES.items():
+                    corrected = corrected.replace(wrong, right)
+            else:
+                # normal 모드: 과교정을 피하기 위해 일반/안전 치환만 적용
+                for wrong, right in GENERAL_CORRECTIONS.items():
+                    corrected = corrected.replace(wrong, right)
 
             # 숫자 패턴 교정 (교회 전용)
             corrected = re.sub(r'이\s*삼\s*칠', '237', corrected)

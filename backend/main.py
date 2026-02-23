@@ -128,6 +128,7 @@ LOG_GEMINI_MODELS_ON_STARTUP = (os.getenv("LOG_GEMINI_MODELS_ON_STARTUP", "false
 
 ALLOWED_LANGUAGES = {"ko", "en"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
+ALLOWED_CORRECTION_MODES = {"strict", "normal", "raw"}
 FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
 FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
 USAGE_TABLE_NAME = "user_usage_quotas"
@@ -2250,7 +2251,13 @@ def whisper_transcribe(file_path: str, language: str = "ko", transcription_type:
     return "\n\n".join(all_text)
 
 
-async def gemini_correct_and_structure(raw_text: str, task_id: str, transcription_type: str = "sermon", language: str = "ko") -> str:
+async def gemini_correct_and_structure(
+    raw_text: str,
+    task_id: str,
+    transcription_type: str = "sermon",
+    language: str = "ko",
+    correction_mode: str = "normal",
+) -> str:
     """
     Gemini로 텍스트 교정 + 구조화 (2단계).
     유형별 + 언어별 프롬프트 선택.
@@ -2259,6 +2266,22 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
     print(f"[{task_id}] Gemini correction model: {target_model}, type: {transcription_type}, lang: {language}")
 
     correction_prompt = get_correction_prompt_by_type(transcription_type, language)
+    normalized_mode = (correction_mode or "normal").strip().lower()
+    if normalized_mode != "strict":
+        if language == "en":
+            correction_prompt += (
+                "\n\n[Over-correction Guard]\n"
+                "- Prefer preserving the original wording and tone.\n"
+                "- Do not replace terms unless confidence is high from context.\n"
+                "- If uncertain, keep the original token as-is."
+            )
+        else:
+            correction_prompt += (
+                "\n\n[과교정 방지 규칙]\n"
+                "- 원문 어휘와 표현을 최대한 유지하라.\n"
+                "- 문맥 확신이 낮은 단어는 임의로 다른 고유명사/전문용어로 치환하지 마라.\n"
+                "- 확신이 없으면 원문 표기를 유지하라."
+            )
 
     model = genai.GenerativeModel(
         target_model,
@@ -2291,13 +2314,35 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
     return (response.text or "").strip()
 
 
+def _postprocess_transcript(
+    text: str,
+    transcription_type: str,
+    language: str,
+    correction_mode: str,
+) -> str:
+    normalized_mode = (correction_mode or "normal").strip().lower()
+    if normalized_mode == "raw":
+        return _normalize_transcript_line_breaks(text)
+
+    corrected = correct_text(
+        text,
+        transcription_type,
+        language,
+        correction_mode=normalized_mode,
+    )
+    if normalized_mode == "strict":
+        corrected = _enforce_speaker_separation(corrected, transcription_type, language)
+    return _normalize_transcript_line_breaks(corrected)
+
+
 def _process_transcription_sync(
     task_id: str,
     user_id: str,
     temp_file_path: str,
     language: str,
     correct: bool,
-    transcription_type: str = "sermon",
+    transcription_type: str = "conversation",
+    correction_mode: str = "normal",
     source_mime_type: str = "",
     audio_seconds: int = 0,
 ):
@@ -2331,14 +2376,25 @@ def _process_transcription_sync(
 
             # 2단계: Gemini로 교정 + 구조화
             print(f"[{task_id}] Step 2: Gemini correction...")
-            corrected_text = asyncio.run(gemini_correct_and_structure(raw_text, task_id, transcription_type, language))
+            corrected_text = asyncio.run(
+                gemini_correct_and_structure(
+                    raw_text,
+                    task_id,
+                    transcription_type,
+                    language,
+                    correction_mode=correction_mode,
+                )
+            )
             print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
             _log_stage_memory(task_id, "after_gemini_correction")
 
             # 3단계: 규칙 기반 후처리
-            corrected_text = correct_text(corrected_text, transcription_type, language)
-            corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
-            corrected_text = _normalize_transcript_line_breaks(corrected_text)
+            corrected_text = _postprocess_transcript(
+                corrected_text,
+                transcription_type,
+                language,
+                correction_mode,
+            )
             _log_stage_memory(task_id, "after_postprocess")
 
         else:
@@ -2386,9 +2442,12 @@ def _process_transcription_sync(
             except:
                 pass
 
-            corrected_text = correct_text(raw_text, transcription_type, language)
-            corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
-            corrected_text = _normalize_transcript_line_breaks(corrected_text)
+            corrected_text = _postprocess_transcript(
+                raw_text,
+                transcription_type,
+                language,
+                correction_mode,
+            )
             _log_stage_memory(task_id, "after_postprocess")
 
         # 결과 저장
@@ -2445,7 +2504,8 @@ async def process_transcription(
     temp_file_path: str,
     language: str,
     correct: bool,
-    transcription_type: str = "sermon",
+    transcription_type: str = "conversation",
+    correction_mode: str = "normal",
     source_mime_type: str = "",
     audio_seconds: int = 0,
 ):
@@ -2459,6 +2519,7 @@ async def process_transcription(
             language,
             correct,
             transcription_type,
+            correction_mode,
             source_mime_type,
             audio_seconds,
         )
@@ -2470,7 +2531,8 @@ async def transcribe_audio(
     file: UploadFile = File(...),
     language: str = Form("ko"),
     correct: bool = Form(True),
-    transcription_type: str = Form("sermon"),
+    transcription_type: str = Form("conversation"),
+    correction_mode: str = Form("normal"),
     authorization: str | None = Header(default=None),
 ):
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
@@ -2487,9 +2549,15 @@ async def transcribe_audio(
         if normalized_language not in ALLOWED_LANGUAGES:
             raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko 또는 en만 가능합니다.")
 
-        normalized_transcription_type = (transcription_type or "sermon").strip().lower()
+        normalized_transcription_type = (transcription_type or "conversation").strip().lower()
         if normalized_transcription_type not in ALLOWED_TRANSCRIPTION_TYPES:
             raise HTTPException(status_code=400, detail="지원하지 않는 녹취 유형입니다.")
+        normalized_correction_mode = (correction_mode or "normal").strip().lower()
+        if normalized_correction_mode not in ALLOWED_CORRECTION_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail="지원하지 않는 교정 모드입니다. strict/normal/raw 중에서 선택하세요.",
+            )
 
         max_size_mb = int(MAX_UPLOAD_BYTES / 1024 / 1024)
         file_signature = b""
@@ -2541,6 +2609,7 @@ async def transcribe_audio(
             normalized_language,
             correct,
             normalized_transcription_type,
+            normalized_correction_mode,
             source_mime_type,
             audio_seconds,
         )
@@ -2555,6 +2624,7 @@ async def transcribe_audio(
             "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환 작업이 시작되었습니다.",
             "engine": "whisper+gemini" if openai_client else "gemini-only",
             "transcription_type": normalized_transcription_type,
+            "correction_mode": normalized_correction_mode,
             "audio_seconds": audio_seconds,
             "quota": usage_snapshot,
         }
@@ -3756,7 +3826,7 @@ async def get_records(
 async def summarize_text(
     text: str = Form(...),
     summary_type: str = Form("short"),
-    transcription_type: str = Form("sermon"),
+    transcription_type: str = Form("conversation"),
     language: str = Form("ko"),
     authorization: str | None = Header(default=None),
 ):
@@ -3768,7 +3838,7 @@ async def summarize_text(
             raise HTTPException(status_code=400, detail="요약할 텍스트가 비어 있습니다.")
         if len(normalized_text) > MAX_TEXT_INPUT_CHARS:
             raise HTTPException(status_code=400, detail=f"요약 입력은 {MAX_TEXT_INPUT_CHARS}자 이하여야 합니다.")
-        normalized_transcription_type = (transcription_type or "sermon").strip().lower()
+        normalized_transcription_type = (transcription_type or "conversation").strip().lower()
         if normalized_transcription_type not in ALLOWED_TRANSCRIPTION_TYPES:
             raise HTTPException(
                 status_code=400,

@@ -1570,7 +1570,7 @@ function App() {
   const [activeTab, setActiveTab] = useState("transcribe");
 
   const [language, setLanguage] = useState("ko");
-  const [transcriptionType, setTranscriptionType] = useState("sermon");
+  const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -2431,6 +2431,7 @@ function App() {
       body.append("language", language);
       body.append("correct", "true");
       body.append("transcription_type", transcriptionType);
+      body.append("correction_mode", "normal");
 
       const data = await requestApi("/api/transcribe", {
         method: "POST",
@@ -2499,7 +2500,7 @@ function App() {
     setSummaryLoading(true);
 
     try {
-      const normalizedType = result?.transcription_type || transcriptionType || "sermon";
+      const normalizedType = result?.transcription_type || transcriptionType || "conversation";
       const body = new FormData();
       body.append("text", sourceText);
       body.append("summary_type", "short");
@@ -3364,7 +3365,7 @@ function App() {
                   ) : (
                     history.map((item) => (
                       <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                        <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.transcription_type || "sermon"} · {item.status}</Text>
+                        <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.transcription_type || "conversation"} · {item.status}</Text>
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>
                           {item.summary_preview || (language === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}

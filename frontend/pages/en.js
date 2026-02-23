@@ -429,7 +429,7 @@ function StepIndicator({ currentStep }) {
 export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThemeMode, setUiThemeMode }) {
   const [file, setFile] = useState(null)
   const [language, setLanguage] = useState('en')
-  const [transcriptionType, setTranscriptionType] = useState('sermon')
+  const [transcriptionType, setTranscriptionType] = useState('conversation')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -823,6 +823,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       formData.append('language', language)
       formData.append('correct', 'true')
       formData.append('transcription_type', transcriptionType)
+      formData.append('correction_mode', 'normal')
 
       const response = await fetch(`${API_URL}/api/transcribe`, {
         method: 'POST',
@@ -1021,7 +1022,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setError(null)
     setNotice(null)
     try {
-      const normalizedType = result?.transcription_type || transcriptionType || 'sermon'
+      const normalizedType = result?.transcription_type || transcriptionType || 'conversation'
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
       formData.append('summary_type', 'short')
@@ -1673,7 +1674,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
                 {/* Summary section (type-specific) */}
                 {(() => {
-                  const summaryType = result.transcription_type || transcriptionType || 'sermon'
+                  const summaryType = result.transcription_type || transcriptionType || 'conversation'
                   const summaryCopyKey = `summary-${summaryType}`
                   return (
                   !result.summary ? (
