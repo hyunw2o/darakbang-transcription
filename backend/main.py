@@ -10,6 +10,7 @@ import json
 import base64
 import asyncio
 import random
+import gc
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
@@ -24,6 +25,7 @@ import wave
 import urllib.parse
 import subprocess
 import shutil
+import resource
 from collections import defaultdict, deque
 
 try:
@@ -166,6 +168,9 @@ TASK_STATUS_TTL_SECONDS = max(300, int(os.getenv("TASK_STATUS_TTL_SECONDS", "360
 MAX_AUTH_USER_CACHE_SIZE = max(100, int(os.getenv("MAX_AUTH_USER_CACHE_SIZE", "2000")))
 MAX_RATE_LIMIT_BUCKETS = max(100, int(os.getenv("MAX_RATE_LIMIT_BUCKETS", "2000")))
 MAX_CONCURRENT_TRANSCRIPTIONS = max(1, int(os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS", "1")))
+TRANSCRIPTION_ENGINE_MODE = (os.getenv("TRANSCRIPTION_ENGINE_MODE", "auto").strip().lower() or "auto")
+ENABLE_MEMORY_STAGE_LOG = (os.getenv("ENABLE_MEMORY_STAGE_LOG", "false").strip().lower() == "true")
+FORCE_GC_AFTER_TRANSCRIPTION = (os.getenv("FORCE_GC_AFTER_TRANSCRIPTION", "true").strip().lower() == "true")
 
 app = FastAPI(title="말로그24 API")
 
@@ -254,6 +259,11 @@ task_owner = {}
 task_updated_at: dict[str, float] = {}
 mock_checkout_sessions: dict[str, dict] = {}
 transcription_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTIONS)
+if TRANSCRIPTION_ENGINE_MODE not in {"auto", "whisper_gemini", "gemini_only"}:
+    print(
+        "Warning: TRANSCRIPTION_ENGINE_MODE is invalid. "
+        "Use one of auto, whisper_gemini, gemini_only. Falling back to auto."
+    )
 
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
@@ -419,6 +429,51 @@ def _cleanup_auth_user_cache() -> None:
     overflow = len(_auth_user_cache) - MAX_AUTH_USER_CACHE_SIZE
     for token, _ in sortable[:overflow]:
         _auth_user_cache.pop(token, None)
+
+
+def _resolved_engine_mode() -> str:
+    if TRANSCRIPTION_ENGINE_MODE in {"auto", "whisper_gemini", "gemini_only"}:
+        return TRANSCRIPTION_ENGINE_MODE
+    return "auto"
+
+
+def _should_use_whisper_pipeline() -> bool:
+    mode = _resolved_engine_mode()
+    if mode == "gemini_only":
+        return False
+    if mode == "whisper_gemini":
+        return openai_client is not None
+    # auto
+    return openai_client is not None
+
+
+def _current_rss_mb() -> float:
+    try:
+        if os.path.exists("/proc/self/statm"):
+            with open("/proc/self/statm", "r", encoding="utf-8") as fp:
+                parts = (fp.read() or "").strip().split()
+            if len(parts) >= 2:
+                rss_pages = int(parts[1])
+                page_size = os.sysconf("SC_PAGE_SIZE")
+                return (rss_pages * page_size) / (1024 * 1024)
+    except Exception:
+        pass
+
+    try:
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # Linux: KB, macOS: bytes
+        if usage > 10_000_000:
+            return usage / (1024 * 1024)
+        return usage / 1024
+    except Exception:
+        return 0.0
+
+
+def _log_stage_memory(task_id: str, stage: str) -> None:
+    if not ENABLE_MEMORY_STAGE_LOG:
+        return
+    rss_mb = _current_rss_mb()
+    print(f"[{task_id}] [mem] {stage}: {rss_mb:.1f}MB")
 
 
 def _normalize_content_type(content_type: str | None) -> str:
@@ -2213,10 +2268,7 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
     )
 
     label = "Original Text" if language == "en" else "원본 텍스트"
-    full_prompt = f"""{correction_prompt}
-
-[{label}]
-{raw_text}"""
+    prompt_parts = [correction_prompt, f"[{label}]", raw_text]
 
     response = None
     max_retries = 5
@@ -2224,7 +2276,7 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
     for attempt in range(max_retries):
         try:
             response = model.generate_content(
-                full_prompt,
+                prompt_parts,
                 request_options={"timeout": 600}
             )
             break
@@ -2236,7 +2288,7 @@ async def gemini_correct_and_structure(raw_text: str, task_id: str, transcriptio
             else:
                 raise e
 
-    return response.text
+    return (response.text or "").strip()
 
 
 def _process_transcription_sync(
@@ -2250,6 +2302,9 @@ def _process_transcription_sync(
     audio_seconds: int = 0,
 ):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
+    raw_text = ""
+    corrected_text = ""
+    engine = "gemini-only"
     try:
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
         _upsert_transcription_state(task_id, user_id, {
@@ -2257,34 +2312,41 @@ def _process_transcription_sync(
             "language": language,
             "transcription_type": transcription_type,
         })
+        _log_stage_memory(task_id, "start")
 
-        if openai_client:
+        if _should_use_whisper_pipeline():
             # ===== 2단계 방식: Whisper + Gemini =====
+            engine = "whisper+gemini"
 
             # 1단계: Whisper로 완전 녹취
             print(f"[{task_id}] Step 1: Whisper STT...")
             raw_text = whisper_transcribe(temp_file_path, language, transcription_type)
             print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
+            _log_stage_memory(task_id, "after_whisper")
 
             # 임시 파일 삭제
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
+                temp_file_path = ""
 
             # 2단계: Gemini로 교정 + 구조화
             print(f"[{task_id}] Step 2: Gemini correction...")
             corrected_text = asyncio.run(gemini_correct_and_structure(raw_text, task_id, transcription_type, language))
             print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
+            _log_stage_memory(task_id, "after_gemini_correction")
 
             # 3단계: 규칙 기반 후처리
             corrected_text = correct_text(corrected_text, transcription_type, language)
             corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
             corrected_text = _normalize_transcript_line_breaks(corrected_text)
-
-            engine = "whisper+gemini"
+            _log_stage_memory(task_id, "after_postprocess")
 
         else:
             # ===== 폴백: Gemini 단일 방식 (기존) =====
-            print(f"[{task_id}] Fallback: Gemini-only mode")
+            mode = _resolved_engine_mode()
+            reason = "openai unavailable" if openai_client is None else "mode forced"
+            print(f"[{task_id}] Gemini-only mode ({reason}, mode={mode})")
+            engine = "gemini-only"
 
             mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
             audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
@@ -2315,8 +2377,10 @@ def _process_transcription_sync(
                         raise e
 
             raw_text = response.text
+            _log_stage_memory(task_id, "after_gemini_transcribe")
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
+                temp_file_path = ""
             try:
                 audio_file.delete()
             except:
@@ -2325,25 +2389,14 @@ def _process_transcription_sync(
             corrected_text = correct_text(raw_text, transcription_type, language)
             corrected_text = _enforce_speaker_separation(corrected_text, transcription_type, language)
             corrected_text = _normalize_transcript_line_breaks(corrected_text)
-            engine = "gemini-only"
+            _log_stage_memory(task_id, "after_postprocess")
 
         # 결과 저장
-        result_data = {
-            "task_id": task_id,
-            "status": "completed",
-            "created_at": datetime.now().isoformat(),
-            "language": language,
-            "raw_text": raw_text,
-            "corrected_text": corrected_text,
-            "characters": len(corrected_text),
-            "darakbang_optimized": transcription_type == "sermon",
-            "engine": engine,
-            "transcription_type": transcription_type,
-        }
+        created_at = datetime.now().isoformat()
 
         _upsert_transcription_state(task_id, user_id, {
             "status": "completed",
-            "created_at": result_data["created_at"],
+            "created_at": created_at,
             "language": language,
             "raw_text": raw_text,
             "corrected_text": corrected_text,
@@ -2357,6 +2410,7 @@ def _process_transcription_sync(
         _increment_user_usage_seconds(user_id, audio_seconds)
 
         _clear_task_runtime_state(task_id)
+        _log_stage_memory(task_id, "completed")
 
     except Exception as e:
         print(f"Transcription error: {e}")
@@ -2373,12 +2427,16 @@ def _process_transcription_sync(
             })
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
+        _log_stage_memory(task_id, "error")
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
             except Exception:
                 pass
+        if FORCE_GC_AFTER_TRANSCRIPTION:
+            gc.collect()
+            _log_stage_memory(task_id, "after_gc")
 
 
 async def process_transcription(
