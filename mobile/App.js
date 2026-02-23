@@ -41,6 +41,10 @@ const AUTH_REQUEST_TIMEOUT_MS = Math.max(
   10000,
   Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 120000
 );
+const TRANSCRIBE_POLL_TIMEOUT_MS = Math.max(
+  120000,
+  Number(process.env.EXPO_PUBLIC_TRANSCRIBE_POLL_TIMEOUT_MS) || 45 * 60 * 1000
+);
 
 const MOBILE_THEME_OPTIONS = [
   { key: "auto", label: "System", targetTheme: "" },
@@ -396,6 +400,7 @@ const I18N = {
       openExternalFailed: "외부 페이지를 열 수 없습니다.",
       requestFailedPrefix: "요청 실패",
       timeout: "요청 시간이 초과되었습니다. 서버 상태를 확인해주세요.",
+      transcribeLongRunning: "처리 시간이 길어지고 있습니다. 잠시 후 히스토리에서 다시 확인해주세요.",
     },
     taskState: {
       waiting: "변환 작업 대기 중...",
@@ -671,6 +676,7 @@ const I18N = {
       openExternalFailed: "Unable to open external page.",
       requestFailedPrefix: "Request failed",
       timeout: "Request timed out. Please check server status.",
+      transcribeLongRunning: "This task is taking longer than expected. Please check it again from History shortly.",
     },
     taskState: {
       waiting: "Waiting for transcription task...",
@@ -1543,6 +1549,7 @@ function Banner({ type = "notice", text }) {
 
 function App() {
   const pollRef = useRef(null);
+  const pollStartedAtRef = useRef(0);
   const scrollUnlockTimerRef = useRef(null);
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
@@ -1804,6 +1811,7 @@ function App() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+    pollStartedAtRef.current = 0;
   };
 
   const requestApiWithTimeoutRetry = async (path, options = {}, retryDelayMs = 1200) => {
@@ -2353,10 +2361,21 @@ function App() {
 
   const startPollingTask = (taskId) => {
     stopPolling();
+    pollStartedAtRef.current = Date.now();
     setTaskStateText(copy.taskState.waiting);
 
     pollRef.current = setInterval(async () => {
       try {
+        const elapsed = Date.now() - (pollStartedAtRef.current || Date.now());
+        if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
+          stopPolling();
+          setSubmitting(false);
+          setTaskStateText("");
+          setError(copy.errors.transcribeLongRunning);
+          setNotice(`${copy.taskId}: ${taskId}`);
+          return;
+        }
+
         const data = await requestApi(`/api/status/${taskId}`, { token: authToken });
 
         if (data.status === "queued") {

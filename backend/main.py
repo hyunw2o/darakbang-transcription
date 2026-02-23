@@ -169,6 +169,10 @@ TASK_STATUS_TTL_SECONDS = max(300, int(os.getenv("TASK_STATUS_TTL_SECONDS", "360
 MAX_AUTH_USER_CACHE_SIZE = max(100, int(os.getenv("MAX_AUTH_USER_CACHE_SIZE", "2000")))
 MAX_RATE_LIMIT_BUCKETS = max(100, int(os.getenv("MAX_RATE_LIMIT_BUCKETS", "2000")))
 MAX_CONCURRENT_TRANSCRIPTIONS = max(1, int(os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS", "1")))
+TASK_STUCK_TIMEOUT_SECONDS = max(900, int(os.getenv("TASK_STUCK_TIMEOUT_SECONDS", "7200")))
+TASK_STUCK_ERROR_MESSAGE = (
+    "처리 시간이 비정상적으로 길어 작업이 자동 종료되었습니다. 다시 시도해 주세요."
+)
 TRANSCRIPTION_ENGINE_MODE = (os.getenv("TRANSCRIPTION_ENGINE_MODE", "auto").strip().lower() or "auto")
 ENABLE_MEMORY_STAGE_LOG = (os.getenv("ENABLE_MEMORY_STAGE_LOG", "false").strip().lower() == "true")
 FORCE_GC_AFTER_TRANSCRIPTION = (os.getenv("FORCE_GC_AFTER_TRANSCRIPTION", "true").strip().lower() == "true")
@@ -1195,6 +1199,13 @@ def _resolve_billing_reference_datetime(row: dict | None) -> datetime | None:
         _parse_iso_datetime(row_data.get("checkout_completed_at"))
         or _parse_iso_datetime(row_data.get("created_at"))
     )
+
+
+def _has_task_exceeded_timeout(created_at_value: str | None) -> bool:
+    created_dt = _parse_iso_datetime(created_at_value)
+    if not created_dt:
+        return False
+    return (datetime.utcnow() - created_dt) > timedelta(seconds=TASK_STUCK_TIMEOUT_SECONDS)
 
 
 def _is_refund_window_open(row: dict | None) -> bool:
@@ -2649,6 +2660,7 @@ async def get_task_status(
     user = await _get_current_user(authorization)
     user_id = user["id"]
     _cleanup_stale_task_states()
+    runtime_status: str | None = None
 
     if task_id in task_status:
         status = task_status[task_id]
@@ -2656,7 +2668,16 @@ async def get_task_status(
         if owner_id is not None and owner_id != user_id:
             return {"task_id": task_id, "status": "not_found"}
         if status == "processing" or status == "queued":
-            return {"task_id": task_id, "status": status}
+            updated_ts = float(task_updated_at.get(task_id) or 0)
+            if updated_ts and (time.time() - updated_ts) > TASK_STUCK_TIMEOUT_SECONDS:
+                _clear_task_runtime_state(task_id)
+                return {
+                    "task_id": task_id,
+                    "status": "error",
+                    "error": TASK_STUCK_ERROR_MESSAGE,
+                    "transcription_type": "conversation",
+                }
+            runtime_status = status
 
     response = (
         _get_supabase_client().table("transcriptions")
@@ -2667,10 +2688,25 @@ async def get_task_status(
     )
     if response.data:
         row = response.data[0]
-        if row["status"] == "completed":
+        row_status = str(row.get("status") or runtime_status or "")
+        if row_status in {"queued", "processing"} and _has_task_exceeded_timeout(row.get("created_at")):
+            _clear_task_runtime_state(task_id)
+            _upsert_transcription_state(task_id, user_id, {
+                "status": "error",
+                "error": TASK_STUCK_ERROR_MESSAGE,
+            })
+            return {
+                "task_id": row.get("task_id", task_id),
+                "status": "error",
+                "error": TASK_STUCK_ERROR_MESSAGE,
+                "created_at": row.get("created_at"),
+                "transcription_type": row.get("transcription_type", "conversation"),
+            }
+
+        if row_status == "completed":
             return {
                 "task_id": row["task_id"],
-                "status": row["status"],
+                "status": row_status,
                 "created_at": row["created_at"],
                 "language": row["language"],
                 "raw_text": row["raw_text"],
@@ -2678,16 +2714,19 @@ async def get_task_status(
                 "characters": row["characters"],
                 "darakbang_optimized": row["darakbang_optimized"],
                 "engine": row["engine"],
-                "transcription_type": row.get("transcription_type", "sermon"),
+                "transcription_type": row.get("transcription_type", "conversation"),
             }
         else:
             return {
                 "task_id": row["task_id"],
-                "status": row["status"],
+                "status": row_status,
                 "error": row["error"],
                 "created_at": row["created_at"],
-                "transcription_type": row.get("transcription_type", "sermon"),
+                "transcription_type": row.get("transcription_type", "conversation"),
             }
+
+    if runtime_status in {"queued", "processing"}:
+        return {"task_id": task_id, "status": runtime_status}
 
     return {"task_id": task_id, "status": "not_found"}
 
@@ -2728,7 +2767,7 @@ async def get_history(authorization: str | None = Header(default=None)):
             "characters": row.get("characters") or 0,
             "engine": row.get("engine") or "unknown",
             "summary_preview": "",
-            "transcription_type": row.get("transcription_type", "sermon"),
+            "transcription_type": row.get("transcription_type", "conversation"),
         })
 
     return history

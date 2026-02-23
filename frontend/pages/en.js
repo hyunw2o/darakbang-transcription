@@ -473,6 +473,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000
+  const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
 
   const isJwtExpired = (token) => {
     try {
@@ -762,6 +763,14 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       try {
         const elapsed = Date.now() - pollStartTime.current
         if (elapsed > 3000) setCurrentStep(prev => Math.max(prev, 2))
+        if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
+          stopPolling()
+          setLoading(false)
+          setCurrentStep(0)
+          setError('This task is taking longer than expected. Please check it again from History shortly.')
+          setNotice(`Task ID: ${taskId}`)
+          return
+        }
 
         const res = await fetch(`${API_URL}/api/status/${taskId}`, {
           headers: getAuthHeaders(),
