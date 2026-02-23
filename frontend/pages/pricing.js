@@ -157,6 +157,9 @@ export default function PricingPage() {
           <p className="mt-3 text-sm text-nm-text-secondary leading-relaxed">
             무료는 월 10시간까지 사용 가능합니다. 결제 연동이 설정된 환경에서는 Pro 구독을 즉시 시작할 수 있습니다.
           </p>
+          <p className="mt-2 text-xs text-nm-text-secondary leading-relaxed">
+            시행일: 2026-02-23 / 문서 버전: v2026.02.23
+          </p>
 
           <div className="grid sm:grid-cols-2 gap-3 mt-6">
             <div className="nm-concave p-4">
@@ -166,9 +169,40 @@ export default function PricingPage() {
             </div>
             <div className="nm-concave p-4 border-l-4 border-nm-accent">
               <p className="text-xs text-nm-text-secondary">Pro</p>
-              <p className="text-xl font-bold mt-1">고한도/우선 처리</p>
-              <p className="text-xs text-nm-text-secondary mt-2">결제 연동 시 바로 구독 가능</p>
+              <p className="text-xl font-bold mt-1">월 8,000원</p>
+              <p className="text-xs text-nm-text-secondary mt-2">고한도/우선 처리 · 월간 자동갱신</p>
             </div>
+          </div>
+
+          <div className="mt-5 nm-concave p-4">
+            <p className="text-sm font-semibold">상품 정보</p>
+            <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+              <li>상품명: mallog24 Pro 월간 구독</li>
+              <li>이용기간: 결제 승인 시점부터 1개월 단위 자동 갱신</li>
+              <li>이용요금: 월 8,000원 (결제창 표시 금액 기준)</li>
+              <li>제공기능: 무료 플랜 대비 상향 사용량 및 우선 처리, 구독 관리 기능</li>
+            </ul>
+          </div>
+
+          <div className="mt-4 nm-concave p-4">
+            <p className="text-sm font-semibold">결제 및 구독 절차</p>
+            <ol className="mt-2 list-decimal pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+              <li>로그인 후 요금제 페이지에서 Pro 상품을 선택합니다.</li>
+              <li>결제 대행사 체크아웃에서 상품명/금액/결제수단/약관을 확인합니다.</li>
+              <li>결제 승인 시 구독이 즉시 활성화되며, 결제 내역 기준으로 이용기간이 시작됩니다.</li>
+              <li>다음 결제일부터 중단하려면 결제 주기 종료 전 구독 관리 메뉴에서 해지합니다.</li>
+            </ol>
+          </div>
+
+          <div className="mt-4 nm-concave p-4">
+            <p className="text-sm font-semibold">환불 규정</p>
+            <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+              <li>결제 후 7일 이내, 사용 이력이 없는 경우 전액 환불을 요청할 수 있습니다.</li>
+              <li>결제 후 사용 이력이 있는 경우 당월 이용분에 대한 부분 환불은 제한될 수 있으며, 해지는 다음 결제일부터 반영됩니다.</li>
+              <li>중복 결제, 시스템 오류, 결제 실패 후 과금 등 명백한 과오금은 확인 후 전액 환불합니다.</li>
+              <li>환불 처리일/지급수단은 결제사 및 카드사 정책에 따라 달라질 수 있습니다.</li>
+              <li>전자상거래법 등 관련 법령이 본 규정보다 우선 적용됩니다.</li>
+            </ul>
           </div>
 
           <div className="mt-5 nm-concave p-4">

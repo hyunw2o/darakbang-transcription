@@ -158,6 +158,9 @@ export default function PricingEnPage() {
             Free tier includes up to 10 hours each month. In environments with billing keys configured,
             you can start Pro immediately.
           </p>
+          <p className="mt-2 text-xs text-nm-text-secondary leading-relaxed">
+            Effective date: 2026-02-23 / Document version: v2026.02.23
+          </p>
 
           <div className="grid sm:grid-cols-2 gap-3 mt-6">
             <div className="nm-concave p-4">
@@ -167,9 +170,40 @@ export default function PricingEnPage() {
             </div>
             <div className="nm-concave p-4 border-l-4 border-nm-accent">
               <p className="text-xs text-nm-text-secondary">Pro</p>
-              <p className="text-xl font-bold mt-1">Higher quota / priority</p>
-              <p className="text-xs text-nm-text-secondary mt-2">Instant activation when payment is enabled</p>
+              <p className="text-xl font-bold mt-1">KRW 8,000 / month</p>
+              <p className="text-xs text-nm-text-secondary mt-2">Higher quota / priority · auto-renew monthly</p>
             </div>
+          </div>
+
+          <div className="mt-5 nm-concave p-4">
+            <p className="text-sm font-semibold">Product Information</p>
+            <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+              <li>Product name: mallog24 Pro Monthly Subscription</li>
+              <li>Service period: 1-month auto-renew cycle from payment approval time</li>
+              <li>Price: KRW 8,000 per month (final amount shown at checkout)</li>
+              <li>Included: higher usage limits, prioritized processing, and subscription management</li>
+            </ul>
+          </div>
+
+          <div className="mt-4 nm-concave p-4">
+            <p className="text-sm font-semibold">Checkout and Subscription Flow</p>
+            <ol className="mt-2 list-decimal pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+              <li>Log in and select Pro from this pricing page.</li>
+              <li>Review product name, amount, payment method, and terms in the payment provider checkout.</li>
+              <li>After payment approval, subscription is activated immediately and billing period starts.</li>
+              <li>To stop renewal, cancel from the subscription management page before the next billing date.</li>
+            </ol>
+          </div>
+
+          <div className="mt-4 nm-concave p-4">
+            <p className="text-sm font-semibold">Refund Policy</p>
+            <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
+              <li>Full refund may be requested within 7 days after payment if no usage has occurred.</li>
+              <li>If usage exists, partial refunds for the current billing cycle may be limited; cancellation is applied from the next cycle.</li>
+              <li>Duplicate charges, payment errors, or confirmed overcharges are refunded in full after verification.</li>
+              <li>Refund completion timing and payout rails depend on payment provider/card issuer policies.</li>
+              <li>Applicable consumer protection laws take precedence where required.</li>
+            </ul>
           </div>
 
           <div className="mt-5 nm-concave p-4">

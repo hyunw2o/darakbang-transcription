@@ -32,7 +32,7 @@ const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
 const PRIVACY_POLICY_VERSION = "2026-02-21";
-const LEGAL_DOC_VERSION = process.env.EXPO_PUBLIC_LEGAL_DOC_VERSION || "v2026.02.21";
+const LEGAL_DOC_VERSION = process.env.EXPO_PUBLIC_LEGAL_DOC_VERSION || "v2026.02.23";
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const FREE_MONTHLY_LIMIT_SECONDS = 10 * 60 * 60;
 const PRICING_URL = process.env.EXPO_PUBLIC_PRICING_URL || "https://mallog24.com/pricing";
@@ -721,7 +721,7 @@ const LEGAL_DOCUMENTS = {
     terms: {
       title: "이용약관",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "시행일: 2026년 2월 21일",
+      updatedAt: "시행일: 2026년 2월 23일",
       sections: [
         {
           title: "1. 서비스 범위",
@@ -731,33 +731,50 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "2. 계정 및 사용량",
+          title: "2. 요금제 및 상품 정보",
           body: [
             "계정·세션 관리 책임은 이용자에게 있으며, 무료 플랜은 월간 사용량 한도가 적용됩니다.",
-            "유료 결제 도입 시 가격/환불/해지 기준을 별도 고지합니다.",
+            "유료 상품은 상품명, 월 이용요금, 이용기간, 제공기능을 서비스 화면에 명시합니다.",
+            "현재 기준 유료 상품은 mallog24 Pro 월간 구독(월 8,000원)이며 결제 승인 시점부터 1개월 단위 자동 갱신됩니다.",
           ],
         },
         {
-          title: "3. 이용자 책임",
+          title: "3. 결제 및 구독 등록 절차",
+          body: [
+            "로그인 후 요금제 화면에서 상품 선택 → 결제대행사 체크아웃에서 상품명/금액/결제주기/약관 확인 → 결제 승인 순서로 진행됩니다.",
+            "결제 승인 즉시 구독이 활성화되며, 다음 결제일부터 중단하려면 결제 주기 종료 전에 구독 관리에서 해지해야 합니다.",
+          ],
+        },
+        {
+          title: "4. 환불 규정",
+          body: [
+            "결제 후 7일 이내, 사용 이력이 없는 경우 전액 환불을 요청할 수 있습니다.",
+            "사용 이력이 있는 경우 당월 부분 환불은 제한될 수 있으며, 해지는 다음 결제일부터 반영됩니다.",
+            "중복 결제·시스템 오류 등 확인된 과오금은 전액 환불합니다.",
+            "전자상거래법 등 관련 법령이 본 규정보다 우선하는 경우 해당 법령을 따릅니다.",
+          ],
+        },
+        {
+          title: "5. 이용자 책임",
           body: [
             "업로드 자료에 대한 적법한 권리를 보유해야 하며, 타인 권리 침해 자료 업로드를 금지합니다.",
           ],
         },
         {
-          title: "4. 금지 행위",
+          title: "6. 금지 행위",
           body: [
             "서비스 우회/공격/비정상 자동화 트래픽, 무단 재판매, 역설계 등 운영을 저해하는 행위를 금지합니다.",
           ],
         },
         {
-          title: "5. 제한 및 면책",
+          title: "7. 제한 및 면책",
           body: [
             "약관 위반 또는 보안위험 시 이용이 제한될 수 있습니다.",
             "전사 결과는 보조 도구이며 최종 검토 책임은 이용자에게 있습니다.",
           ],
         },
         {
-          title: "6. 문의",
+          title: "8. 문의",
           body: ["문의: ours113814@gmail.com"],
         },
       ],
@@ -765,7 +782,7 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "회사 정책",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 2월 21일",
+      updatedAt: "최종 업데이트: 2026년 2월 23일",
       sections: [
         {
           title: "1. 운영 원칙",
@@ -794,7 +811,16 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "5. 공지 및 지원",
+          title: "5. 유료상품 등록·변경 거버넌스",
+          body: [
+            "유료상품 신설/변경 시 상품명, 가격, 결제주기, 환불기준, 문의처를 표준 항목으로 확정합니다.",
+            "결제대행사 콘솔 등록값과 서비스 화면(요금제/약관) 노출값을 교차 검증합니다.",
+            "테스트 결제(승인/취소/실패/환불) 검증 완료 후 실결제를 활성화합니다.",
+            "변경 시 문서 버전·적용일을 포함해 공지하고 주요 변경은 사전 안내합니다.",
+          ],
+        },
+        {
+          title: "6. 공지 및 지원",
           body: [
             "주요 정책/장애/기능 변경은 웹/앱 공지로 안내합니다.",
             "문의: ours113814@gmail.com",
@@ -904,7 +930,7 @@ const LEGAL_DOCUMENTS = {
     terms: {
       title: "Terms of Service",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Effective date: February 21, 2026",
+      updatedAt: "Effective date: February 23, 2026",
       sections: [
         {
           title: "1. Service Scope",
@@ -914,33 +940,50 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "2. Account and Usage Limits",
+          title: "2. Plans and Product Information",
           body: [
             "Users are responsible for account/session security. Free plans are subject to monthly usage quotas.",
-            "Paid-plan pricing, refund, and cancellation terms are disclosed when billing is enabled.",
+            "Paid products disclose product name, monthly fee, service period, and included features in the UI.",
+            "Current baseline paid product is mallog24 Pro Monthly Subscription (KRW 8,000/month), auto-renewed every month after payment approval.",
           ],
         },
         {
-          title: "3. User Responsibility",
+          title: "3. Checkout and Subscription Registration Flow",
+          body: [
+            "Flow: login and plan selection -> payment-provider checkout review (product/amount/cycle/terms) -> payment approval.",
+            "Subscription activates immediately after approval. To stop renewal, cancel before next billing date.",
+          ],
+        },
+        {
+          title: "4. Refund Policy",
+          body: [
+            "Full refund may be requested within 7 days after payment if no usage has occurred.",
+            "If usage exists, partial refund for the current cycle may be limited; cancellation applies to the next cycle.",
+            "Duplicate charges or confirmed billing errors are refunded in full.",
+            "Mandatory consumer protection laws prevail where applicable.",
+          ],
+        },
+        {
+          title: "5. User Responsibility",
           body: [
             "Users must have lawful rights to uploaded content and must not infringe third-party rights.",
           ],
         },
         {
-          title: "4. Prohibited Conduct",
+          title: "6. Prohibited Conduct",
           body: [
             "Abuse, attacks, bypass attempts, abnormal automation traffic, reverse engineering, and unauthorized resale are prohibited.",
           ],
         },
         {
-          title: "5. Restriction and Disclaimer",
+          title: "7. Restriction and Disclaimer",
           body: [
             "Access may be limited for policy violations or security risks.",
             "Generated outputs are assistive; users are responsible for final review and use.",
           ],
         },
         {
-          title: "6. Contact",
+          title: "8. Contact",
           body: ["Contact: ours113814@gmail.com"],
         },
       ],
@@ -948,7 +991,7 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "Company Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: February 21, 2026",
+      updatedAt: "Last updated: February 23, 2026",
       sections: [
         {
           title: "1. Operating Principles",
@@ -976,7 +1019,16 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "5. Notice and Support",
+          title: "5. Paid Product Registration and Change Governance",
+          body: [
+            "Before launch/change, product name, price, billing cycle, refund rules, and support contact are finalized as mandatory fields.",
+            "Payment-provider dashboard values are cross-checked against pricing and legal pages.",
+            "Live checkout is enabled only after test transactions (success/cancel/failure/refund) and log verification pass.",
+            "Material changes are announced with reason, effective date, and document version.",
+          ],
+        },
+        {
+          title: "6. Notice and Support",
           body: [
             "Major policy/feature/incident updates are announced via web or in-app notices.",
             "Contact: ours113814@gmail.com",
