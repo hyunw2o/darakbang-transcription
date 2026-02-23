@@ -22,8 +22,9 @@ import mimetypes
 import re
 import wave
 import urllib.parse
+import subprocess
+import shutil
 from collections import defaultdict, deque
-from pydub import AudioSegment
 
 try:
     from mutagen import File as MutagenFile
@@ -161,6 +162,10 @@ BILLING_REFUND_WINDOW_DAYS = min(
 )
 BILLING_TEST_MODE = os.getenv("BILLING_TEST_MODE", "false").strip().lower() == "true"
 MOCK_CHECKOUT_SESSION_TTL_SECONDS = max(60, int(os.getenv("MOCK_CHECKOUT_SESSION_TTL_SECONDS", "1800")))
+TASK_STATUS_TTL_SECONDS = max(300, int(os.getenv("TASK_STATUS_TTL_SECONDS", "3600")))
+MAX_AUTH_USER_CACHE_SIZE = max(100, int(os.getenv("MAX_AUTH_USER_CACHE_SIZE", "2000")))
+MAX_RATE_LIMIT_BUCKETS = max(100, int(os.getenv("MAX_RATE_LIMIT_BUCKETS", "2000")))
+MAX_CONCURRENT_TRANSCRIPTIONS = max(1, int(os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS", "1")))
 
 app = FastAPI(title="말로그24 API")
 
@@ -246,7 +251,9 @@ else:
 # 인메모리 상태 추적
 task_status = {}
 task_owner = {}
+task_updated_at: dict[str, float] = {}
 mock_checkout_sessions: dict[str, dict] = {}
+transcription_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTIONS)
 
 # 모델 캐시
 _model_cache = {"model": None, "cached_at": 0}
@@ -361,6 +368,59 @@ _auth_user_cache: dict[str, dict] = {}
 _auth_http_client: httpx.AsyncClient | None = None
 
 
+def _cleanup_stale_task_states() -> None:
+    if not task_updated_at:
+        return
+    now_ts = time.time()
+    stale_ids = [
+        task_id
+        for task_id, updated_ts in task_updated_at.items()
+        if now_ts - float(updated_ts or 0) > TASK_STATUS_TTL_SECONDS
+    ]
+    for task_id in stale_ids:
+        task_status.pop(task_id, None)
+        task_owner.pop(task_id, None)
+        task_updated_at.pop(task_id, None)
+
+
+def _set_task_runtime_state(task_id: str, status: str, owner_id: str | None = None) -> None:
+    _cleanup_stale_task_states()
+    task_status[task_id] = status
+    if owner_id is not None:
+        task_owner[task_id] = owner_id
+    task_updated_at[task_id] = time.time()
+
+
+def _clear_task_runtime_state(task_id: str) -> None:
+    task_status.pop(task_id, None)
+    task_owner.pop(task_id, None)
+    task_updated_at.pop(task_id, None)
+
+
+def _cleanup_auth_user_cache() -> None:
+    if not _auth_user_cache:
+        return
+    now_ts = time.time()
+    stale_tokens = [
+        token
+        for token, payload in _auth_user_cache.items()
+        if float((payload or {}).get("expires_at") or 0) <= now_ts
+    ]
+    for token in stale_tokens:
+        _auth_user_cache.pop(token, None)
+
+    if len(_auth_user_cache) <= MAX_AUTH_USER_CACHE_SIZE:
+        return
+
+    sortable = sorted(
+        _auth_user_cache.items(),
+        key=lambda item: float((item[1] or {}).get("expires_at") or 0),
+    )
+    overflow = len(_auth_user_cache) - MAX_AUTH_USER_CACHE_SIZE
+    for token, _ in sortable[:overflow]:
+        _auth_user_cache.pop(token, None)
+
+
 def _normalize_content_type(content_type: str | None) -> str:
     if not content_type:
         return ""
@@ -472,6 +532,18 @@ def _check_rate_limit(bucket_key: str, limit: int) -> tuple[bool, int]:
         return True, retry_after
 
     bucket.append(now)
+
+    if len(_request_counters) > MAX_RATE_LIMIT_BUCKETS:
+        removable = []
+        for key, values in _request_counters.items():
+            if not values:
+                removable.append(key)
+                continue
+            if values[-1] <= window_start:
+                removable.append(key)
+        for key in removable:
+            _request_counters.pop(key, None)
+
     return False, 0
 
 
@@ -626,6 +698,7 @@ def _decode_jwt_exp_unverified(token: str) -> int | None:
 def _get_cached_user_by_token(token: str) -> dict | None:
     if AUTH_USER_CACHE_TTL_SECONDS <= 0:
         return None
+    _cleanup_auth_user_cache()
     cached = _auth_user_cache.get(token)
     if not cached:
         return None
@@ -643,6 +716,7 @@ def _get_cached_user_by_token(token: str) -> dict | None:
 def _cache_user_by_token(token: str, user: dict) -> None:
     if AUTH_USER_CACHE_TTL_SECONDS <= 0:
         return
+    _cleanup_auth_user_cache()
     ttl = AUTH_USER_CACHE_TTL_SECONDS
     token_exp = _decode_jwt_exp_unverified(token)
     if token_exp:
@@ -1510,16 +1584,39 @@ def _extract_audio_duration_seconds(file_path: str) -> int:
             pass
 
     if duration_seconds <= 0:
-        try:
-            segment = AudioSegment.from_file(file_path)
-            duration_seconds = len(segment) / 1000.0
-        except Exception:
-            pass
+        duration_seconds = _extract_duration_with_ffprobe(file_path)
 
     if duration_seconds <= 0:
         raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없는 파일입니다.")
 
     return max(1, int(math.ceil(duration_seconds)))
+
+
+def _extract_duration_with_ffprobe(file_path: str) -> float:
+    if not shutil.which("ffprobe"):
+        return 0.0
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                file_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        raw = (proc.stdout or "").strip()
+        if not raw:
+            return 0.0
+        return max(0.0, float(raw))
+    except Exception:
+        return 0.0
 
 
 def _resolve_audio_mime_type(file_path: str) -> str:
@@ -1870,81 +1967,111 @@ def get_optimal_model():
     return "gemini-2.5-flash"
 
 
-def _prepare_audio_for_whisper(audio, transcription_type: str):
-    """
-    Whisper 인식용 오디오 전처리:
-    - 무손실 PCM(16kHz mono)로 통일
-    - 저역/고역 노이즈를 얕게 컷
-    - 동적 범위 압축 + 정규화로 빠른 발화 가독성 개선
-    """
-    from pydub import effects
-
-    prepared = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
-    prepared = prepared.high_pass_filter(80).low_pass_filter(7600)
-
-    # 설교/강의는 배경음(반주, 잔향) 영향이 잦아 저역 컷을 조금 더 강하게 적용
-    if transcription_type == "sermon":
-        prepared = prepared.high_pass_filter(100)
-
-    prepared = effects.compress_dynamic_range(
-        prepared,
-        threshold=-24.0,
-        ratio=3.0,
-        attack=5,
-        release=90,
-    )
-    prepared = effects.normalize(prepared, headroom=0.8)
-    return prepared
-
-
 def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list[tuple[str, float]]:
     """
-    Whisper 전처리 + 청크 분할.
-    모든 입력을 16kHz mono WAV로 변환해 재압축 손실을 줄이고,
-    8분 단위로 분할해 25MB 제한을 안정적으로 회피한다.
+    Whisper 전처리 + 청크 분할 (메모리 최적화 버전).
+    ffmpeg/ffprobe 기반으로 디스크 처리하여 대용량 오디오에서도
+    Python 프로세스 메모리 사용량을 최소화한다.
     반환값: [(chunk_path, duration_sec), ...]
     """
-    from pydub import AudioSegment
+    ffmpeg_bin = shutil.which("ffmpeg")
+    ffprobe_bin = shutil.which("ffprobe")
+    if not ffmpeg_bin or not ffprobe_bin:
+        print("ffmpeg/ffprobe not found. Falling back to original file without preprocessing.")
+        return [(file_path, _extract_duration_with_ffprobe(file_path))]
 
-    # 파일 확장자 확인
-    ext = pathlib.Path(file_path).suffix.lower()
-    format_map = {".mp3": "mp3", ".wav": "wav", ".m4a": "mp4", ".ogg": "ogg", ".flac": "flac", ".webm": "webm"}
-    fmt = format_map.get(ext, "mp3")
+    # 1) Whisper 업로드용 저용량 mp3로 전처리
+    prepared_path = f"{file_path}_whisper.mp3"
+    highpass_freq = "100" if transcription_type == "sermon" else "80"
+    filter_expr = f"highpass=f={highpass_freq},lowpass=f=7600"
 
     try:
-        audio = AudioSegment.from_file(file_path, format=fmt)
-        audio = _prepare_audio_for_whisper(audio, transcription_type)
+        subprocess.run(
+            [
+                ffmpeg_bin,
+                "-y",
+                "-i",
+                file_path,
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-af",
+                filter_expr,
+                "-b:a",
+                "32k",
+                prepared_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
     except Exception as exc:
-        print(f"Audio preprocessing failed, using original file: {exc}")
-        return [(file_path, 0.0)]
+        print(f"ffmpeg preprocessing failed, using original file: {exc}")
+        return [(file_path, _extract_duration_with_ffprobe(file_path))]
 
-    duration_ms = len(audio)
-    chunk_duration = 8 * 60 * 1000  # 8분 (16k mono WAV 기준 약 15MB)
-    overlap = 2000  # 2초 겹침 (문장 끊김 방지)
+    prepared_size = os.path.getsize(prepared_path) if os.path.exists(prepared_path) else 0
+    prepared_duration = _extract_duration_with_ffprobe(prepared_path)
+    if prepared_size <= WHISPER_MAX_SIZE:
+        return [(prepared_path, prepared_duration)]
+
+    # 2) 8분 단위로 분할 (복사 기반 분할로 메모리 절약)
+    chunk_pattern = f"{prepared_path}_chunk_%03d.mp3"
+    try:
+        subprocess.run(
+            [
+                ffmpeg_bin,
+                "-y",
+                "-i",
+                prepared_path,
+                "-f",
+                "segment",
+                "-segment_time",
+                "480",
+                "-reset_timestamps",
+                "1",
+                "-c",
+                "copy",
+                chunk_pattern,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+    except Exception as exc:
+        print(f"ffmpeg segmentation failed, using prepared file: {exc}")
+        return [(prepared_path, prepared_duration)]
+
+    chunk_paths = sorted(
+        str(path_obj)
+        for path_obj in pathlib.Path(prepared_path).parent.glob(f"{pathlib.Path(prepared_path).name}_chunk_*.mp3")
+        if path_obj.is_file()
+    )
+    if not chunk_paths:
+        return [(prepared_path, prepared_duration)]
+
+    # 분할 성공 시 중간 파일 삭제
+    try:
+        os.unlink(prepared_path)
+    except Exception:
+        pass
 
     chunks: list[tuple[str, float]] = []
-    start = 0
-    chunk_idx = 0
+    for chunk_path in chunk_paths:
+        chunk_size = os.path.getsize(chunk_path)
+        if chunk_size > WHISPER_MAX_SIZE:
+            # 극단 케이스: 여전히 제한 초과면 안전하게 단일 파일 폴백
+            print(f"Chunk still exceeds Whisper limit ({chunk_path}). Falling back to original file.")
+            for created in chunk_paths:
+                try:
+                    os.unlink(created)
+                except Exception:
+                    pass
+            return [(file_path, _extract_duration_with_ffprobe(file_path))]
 
-    while start < duration_ms:
-        end = min(start + chunk_duration, duration_ms)
-        chunk = audio[start:end]
-        chunk_path = f"{file_path}_chunk{chunk_idx}.wav"
-        chunk.export(chunk_path, format="wav")
-
-        chunk_seconds = len(chunk) / 1000.0
-        chunk_size_mb = os.path.getsize(chunk_path) / 1024 / 1024
-        print(f"  Chunk {chunk_idx}: {start/1000:.0f}s ~ {end/1000:.0f}s ({chunk_size_mb:.1f}MB)")
-
-        # 안전장치: 혹시라도 제한을 넘으면 원본으로 폴백
-        if os.path.getsize(chunk_path) > WHISPER_MAX_SIZE:
-            print(f"  Chunk {chunk_idx} exceeds Whisper size limit, fallback to original file")
-            os.unlink(chunk_path)
-            return [(file_path, 0.0)]
-
-        chunks.append((chunk_path, chunk_seconds))
-        chunk_idx += 1
-        start = end - overlap if end < duration_ms else end
+        chunk_duration = _extract_duration_with_ffprobe(chunk_path)
+        chunks.append((chunk_path, chunk_duration))
 
     return chunks
 
@@ -2124,7 +2251,7 @@ def _process_transcription_sync(
 ):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     try:
-        task_status[task_id] = "processing"
+        _set_task_runtime_state(task_id, "processing", owner_id=user_id)
         _upsert_transcription_state(task_id, user_id, {
             "status": "processing",
             "language": language,
@@ -2229,14 +2356,13 @@ def _process_transcription_sync(
 
         _increment_user_usage_seconds(user_id, audio_seconds)
 
-        task_status[task_id] = "completed"
-        task_owner.pop(task_id, None)
+        _clear_task_runtime_state(task_id)
 
     except Exception as e:
         print(f"Transcription error: {e}")
         import traceback
         traceback.print_exc()
-        task_status[task_id] = "error"
+        _set_task_runtime_state(task_id, "error", owner_id=user_id)
         try:
             _upsert_transcription_state(task_id, user_id, {
                 "status": "error",
@@ -2247,8 +2373,6 @@ def _process_transcription_sync(
             })
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
-        finally:
-            task_owner.pop(task_id, None)
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
@@ -2268,17 +2392,18 @@ async def process_transcription(
     audio_seconds: int = 0,
 ):
     """이벤트 루프를 막지 않도록 변환 로직을 별도 스레드에서 실행한다."""
-    await asyncio.to_thread(
-        _process_transcription_sync,
-        task_id,
-        user_id,
-        temp_file_path,
-        language,
-        correct,
-        transcription_type,
-        source_mime_type,
-        audio_seconds,
-    )
+    async with transcription_semaphore:
+        await asyncio.to_thread(
+            _process_transcription_sync,
+            task_id,
+            user_id,
+            temp_file_path,
+            language,
+            correct,
+            transcription_type,
+            source_mime_type,
+            audio_seconds,
+        )
 
 
 @app.post("/api/transcribe")
@@ -2308,23 +2433,35 @@ async def transcribe_audio(
         if normalized_transcription_type not in ALLOWED_TRANSCRIPTION_TYPES:
             raise HTTPException(status_code=400, detail="지원하지 않는 녹취 유형입니다.")
 
-        contents = await file.read()
-        if len(contents) > MAX_UPLOAD_BYTES:
-            size_mb = int(MAX_UPLOAD_BYTES / 1024 / 1024)
-            raise HTTPException(status_code=400, detail=f"파일 크기는 {size_mb}MB 이하")
+        max_size_mb = int(MAX_UPLOAD_BYTES / 1024 / 1024)
+        file_signature = b""
+        total_bytes = 0
+        chunk_size = 1024 * 1024  # 1MB
 
-        original_ext, source_mime_type = _validate_uploaded_audio_payload(file, contents)
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=original_ext) as temp_file:
-            temp_file.write(contents)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".upload") as temp_file:
             temp_file_path = temp_file.name
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=400, detail=f"파일 크기는 {max_size_mb}MB 이하")
+                if len(file_signature) < 4096:
+                    remain = 4096 - len(file_signature)
+                    file_signature += chunk[:remain]
+                temp_file.write(chunk)
+
+        original_ext, source_mime_type = _validate_uploaded_audio_payload(file, file_signature)
+        normalized_temp_path = f"{temp_file_path}{original_ext}"
+        os.replace(temp_file_path, normalized_temp_path)
+        temp_file_path = normalized_temp_path
 
         audio_seconds = _extract_audio_duration_seconds(temp_file_path)
         usage_snapshot = _enforce_upload_quota_or_raise(user, audio_seconds)
 
         task_id = str(uuid.uuid4())
-        task_status[task_id] = "queued"
-        task_owner[task_id] = user_id
+        _set_task_runtime_state(task_id, "queued", owner_id=user_id)
         _upsert_transcription_state(task_id, user_id, {
             "status": "queued",
             "created_at": datetime.now().isoformat(),
@@ -2383,6 +2520,7 @@ async def get_task_status(
     _ensure_transcriptions_user_scope_ready()
     user = await _get_current_user(authorization)
     user_id = user["id"]
+    _cleanup_stale_task_states()
 
     if task_id in task_status:
         status = task_status[task_id]
