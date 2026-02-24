@@ -463,6 +463,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
   const pollStartTime = useRef(null)
+  const pollTokenRef = useRef(0)
+  const activeTaskIdRef = useRef('')
+  const pollResultCommitTimerRef = useRef(null)
   const toastTimerRef = useRef(null)
   const fileDurationProbeRef = useRef(0)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
@@ -538,7 +541,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`)
     }
     return () => {
-      stopPolling()
+      invalidatePollingSession()
       if (toastTimerRef.current) {
         window.clearTimeout(toastTimerRef.current)
       }
@@ -683,11 +686,26 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     fetchSavedRecords(authToken)
   }, [authToken, showRecords, recordsLoaded, recordsLoading])
 
+  const clearPollResultCommitTimer = () => {
+    if (pollResultCommitTimerRef.current) {
+      window.clearTimeout(pollResultCommitTimerRef.current)
+      pollResultCommitTimerRef.current = null
+    }
+  }
+
   const stopPolling = () => {
     if (pollInterval.current) {
       clearInterval(pollInterval.current)
       pollInterval.current = null
     }
+    pollStartTime.current = null
+    clearPollResultCommitTimer()
+  }
+
+  const invalidatePollingSession = () => {
+    pollTokenRef.current += 1
+    activeTaskIdRef.current = ''
+    stopPolling()
   }
 
   const validateAndSetFile = async (selectedFile) => {
@@ -756,15 +774,20 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
   const startPolling = (taskId) => {
     stopPolling()
+    const pollToken = pollTokenRef.current
+    activeTaskIdRef.current = taskId
     pollStartTime.current = Date.now()
     setCurrentStep(1)
 
     pollInterval.current = setInterval(async () => {
       try {
+        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
+
         const elapsed = Date.now() - pollStartTime.current
         if (elapsed > 3000) setCurrentStep(prev => Math.max(prev, 2))
         if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
           stopPolling()
+          activeTaskIdRef.current = ''
           setLoading(false)
           setCurrentStep(0)
           setError('처리 시간이 길어지고 있습니다. 잠시 후 히스토리에서 다시 확인해 주세요.')
@@ -778,19 +801,24 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         if (!res.ok) return
 
         const data = await res.json()
+        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
         if (data.status === 'completed') {
           stopPolling()
           setCurrentStep(3)
-          setTimeout(() => {
+          pollResultCommitTimerRef.current = window.setTimeout(() => {
+            if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
             setResult(data)
             setLoading(false)
             setCurrentStep(0)
             fetchHistory()
             fetchUsage()
+            activeTaskIdRef.current = ''
+            pollResultCommitTimerRef.current = null
           }, 800)
         } else if (data.status === 'error') {
           stopPolling()
+          activeTaskIdRef.current = ''
           setError(data.error || '변환 중 오류가 발생했습니다.')
           setLoading(false)
           setCurrentStep(0)
@@ -798,6 +826,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
           setCurrentStep(3)
         }
       } catch (e) {
+        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
         console.error("Polling error", e)
       }
     }, 2000)
@@ -819,6 +848,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       return
     }
 
+    invalidatePollingSession()
     setLoading(true)
     setError(null)
     setNotice(null)
@@ -863,6 +893,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const handleLoadHistory = async (taskId) => {
+    invalidatePollingSession()
     setLoading(true)
     setError(null)
     setNotice(null)
@@ -970,6 +1001,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const handleLogout = () => {
+    invalidatePollingSession()
     setAuthToken('')
     setAuthUser(null)
     setUsage(null)

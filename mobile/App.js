@@ -1550,6 +1550,8 @@ function Banner({ type = "notice", text }) {
 function App() {
   const pollRef = useRef(null);
   const pollStartedAtRef = useRef(0);
+  const pollTokenRef = useRef(0);
+  const activeTaskIdRef = useRef("");
   const scrollUnlockTimerRef = useRef(null);
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
@@ -1814,6 +1816,12 @@ function App() {
     pollStartedAtRef.current = 0;
   };
 
+  const invalidatePollingSession = () => {
+    pollTokenRef.current += 1;
+    activeTaskIdRef.current = "";
+    stopPolling();
+  };
+
   const requestApiWithTimeoutRetry = async (path, options = {}, retryDelayMs = 1200) => {
     const initialTimeoutMs = Math.max(
       10000,
@@ -1834,7 +1842,7 @@ function App() {
   };
 
   const clearAuthState = async (message = "") => {
-    stopPolling();
+    invalidatePollingSession();
     setAuthToken("");
     setAuthUser(null);
     setUsage(null);
@@ -2078,7 +2086,7 @@ function App() {
       active = false;
       subscription?.remove?.();
       clearScrollUnlockTimer();
-      stopPolling();
+      invalidatePollingSession();
     };
   }, []);
 
@@ -2361,14 +2369,19 @@ function App() {
 
   const startPollingTask = (taskId) => {
     stopPolling();
+    const pollToken = pollTokenRef.current;
+    activeTaskIdRef.current = taskId;
     pollStartedAtRef.current = Date.now();
     setTaskStateText(copy.taskState.waiting);
 
     pollRef.current = setInterval(async () => {
       try {
+        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
+
         const elapsed = Date.now() - (pollStartedAtRef.current || Date.now());
         if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
           stopPolling();
+          activeTaskIdRef.current = "";
           setSubmitting(false);
           setTaskStateText("");
           setError(copy.errors.transcribeLongRunning);
@@ -2377,6 +2390,7 @@ function App() {
         }
 
         const data = await requestApi(`/api/status/${taskId}`, { token: authToken });
+        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
 
         if (data.status === "queued") {
           setTaskStateText(copy.taskState.queued);
@@ -2390,6 +2404,7 @@ function App() {
 
         if (data.status === "completed") {
           stopPolling();
+          activeTaskIdRef.current = "";
           setSubmitting(false);
           setTaskStateText(copy.taskState.done);
           setResult(data);
@@ -2401,6 +2416,7 @@ function App() {
 
         if (data.status === "error") {
           stopPolling();
+          activeTaskIdRef.current = "";
           setSubmitting(false);
           setTaskStateText("");
           setError(data.error || copy.errors.transcribeError);
@@ -2409,12 +2425,15 @@ function App() {
 
         if (data.status === "not_found") {
           stopPolling();
+          activeTaskIdRef.current = "";
           setSubmitting(false);
           setTaskStateText("");
           setError(copy.errors.taskNotFound);
         }
       } catch (e) {
+        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
         stopPolling();
+        activeTaskIdRef.current = "";
         setSubmitting(false);
         setTaskStateText("");
         setError(e.message || copy.errors.statusFailed);
@@ -2435,6 +2454,7 @@ function App() {
       return;
     }
 
+    invalidatePollingSession();
     setSubmitting(true);
     setTaskStateText(copy.taskState.uploading);
     setResult(null);
@@ -2481,6 +2501,7 @@ function App() {
   const handleLoadHistoryItem = async (taskId) => {
     clearMessages();
     unlockWorkspaceScroll();
+    invalidatePollingSession();
     setSubmitting(true);
     setTaskStateText(copy.taskState.historyLoading);
 
