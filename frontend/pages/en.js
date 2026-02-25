@@ -473,6 +473,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const OURS_PRIVACY_URL = `${OURS_URL}/privacy-en`
   const OURS_TERMS_URL = `${OURS_URL}/terms-en`
   const OURS_COMPANY_POLICY_URL = `${OURS_URL}/company-policy-en`
+  const BUSINESS_NAME = process.env.NEXT_PUBLIC_BUSINESS_NAME || 'OURS'
+  const BUSINESS_REG_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_REG_NUMBER || '696-08-03518'
+  const LANDLINE_PHONE = process.env.NEXT_PUBLIC_LANDLINE_PHONE || 'TBD'
+  const BUSINESS_ADDRESS = process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || '12735, 28 Mudeul-ro, Chowol-eup, Gwangju-si, Gyeonggi-do, Republic of Korea'
+  const REPRESENTATIVE_NAME = process.env.NEXT_PUBLIC_REPRESENTATIVE_NAME || 'Hyunwoo Kim'
+  const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || 'Exempt from e-commerce registration'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000
@@ -1997,6 +2003,14 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             <a href={OURS_COMPANY_POLICY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               Company Policy
             </a>
+          </div>
+          <div className="space-y-1 text-[11px] text-nm-text-secondary mb-2">
+            <p>Company Name: {BUSINESS_NAME}</p>
+            <p>Business Registration No.: {BUSINESS_REG_NUMBER}</p>
+            <p>Landline: {LANDLINE_PHONE}</p>
+            <p>Business Address: {BUSINESS_ADDRESS}</p>
+            <p>Representative (CEO): {REPRESENTATIVE_NAME}</p>
+            <p>E-commerce Registration No.: {ECOMMERCE_REG_NUMBER}</p>
           </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.

@@ -28,7 +28,14 @@ http://localhost:3000
 2. GitHub 연결
 3. 프로젝트 import
 4. 환경변수 설정:
-   - NEXT_PUBLIC_API_URL = https://your-backend.railway.app
+   - NEXT_PUBLIC_API_URL = https://api.mallog24.com
+   - NEXT_PUBLIC_OURS_URL = https://ours.mallog24.com
+   - NEXT_PUBLIC_BUSINESS_NAME = OURS
+   - NEXT_PUBLIC_BUSINESS_REG_NUMBER = 696-08-03518
+   - NEXT_PUBLIC_LANDLINE_PHONE = (유선전화번호)
+   - NEXT_PUBLIC_REPRESENTATIVE_NAME = 김현우
+   - NEXT_PUBLIC_BUSINESS_ADDRESS = 12735, 경기도 광주시 초월읍 무들로 28
+   - NEXT_PUBLIC_ECOMMERCE_REG_NUMBER = (통신판매신고번호 또는 면제 문구)
 5. 배포 완료!
 
 ## 기능

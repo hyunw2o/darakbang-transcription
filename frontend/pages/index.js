@@ -473,6 +473,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const OURS_PRIVACY_URL = `${OURS_URL}/privacy`
   const OURS_TERMS_URL = `${OURS_URL}/terms`
   const OURS_COMPANY_POLICY_URL = `${OURS_URL}/company-policy`
+  const BUSINESS_NAME = process.env.NEXT_PUBLIC_BUSINESS_NAME || 'OURS'
+  const BUSINESS_REG_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_REG_NUMBER || '696-08-03518'
+  const LANDLINE_PHONE = process.env.NEXT_PUBLIC_LANDLINE_PHONE || '준비중'
+  const BUSINESS_ADDRESS = process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || '12735, 경기도 광주시 초월읍 무들로 28'
+  const REPRESENTATIVE_NAME = process.env.NEXT_PUBLIC_REPRESENTATIVE_NAME || '김현우'
+  const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || '통신판매업 신고 면제 대상'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000
@@ -1993,6 +1999,14 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             <a href={OURS_COMPANY_POLICY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               회사 정책
             </a>
+          </div>
+          <div className="space-y-1 text-[11px] text-nm-text-secondary mb-2">
+            <p>상호: {BUSINESS_NAME}</p>
+            <p>사업자등록번호: {BUSINESS_REG_NUMBER}</p>
+            <p>유선전화번호: {LANDLINE_PHONE}</p>
+            <p>사업장주소: {BUSINESS_ADDRESS}</p>
+            <p>대표: {REPRESENTATIVE_NAME}</p>
+            <p>통신판매신고번호: {ECOMMERCE_REG_NUMBER}</p>
           </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.
