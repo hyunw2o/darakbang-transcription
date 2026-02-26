@@ -22,3 +22,6 @@ frontend/build/
 # Debug
 debug_venv/
 .vercel
+
+# Local tooling virtualenv
+.venv-pdf/
