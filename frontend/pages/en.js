@@ -1080,10 +1080,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setNotice(null)
     try {
       const normalizedType = result?.transcription_type || transcriptionType || 'conversation'
+      const normalizedStyle = resolveContentStyle(result)
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
       formData.append('summary_type', 'short')
       formData.append('transcription_type', normalizedType)
+      formData.append('content_style', normalizedStyle)
       formData.append('language', language || 'en')
 
       const response = await fetch(`${API_URL}/api/summarize`, {
@@ -1095,7 +1097,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (!response.ok) {
         throw new Error(data.detail || 'Summary generation failed.')
       }
-      setResult({ ...result, summary: data.summary })
+      setResult({
+        ...result,
+        summary: data.summary,
+        content_style: data.content_style || normalizedStyle,
+      })
     } catch (err) {
       setError(err.message || 'Summary generation failed.')
     } finally {
@@ -1186,20 +1192,41 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const typeLabels = { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
+  const contentStyleLabels = {
+    sermon: 'Sermon',
+    lecture: 'Lecture',
+    phonecall: 'Call',
+    meeting: 'Meeting',
+    forum: 'Forum',
+    debate: 'Debate',
+  }
   const summaryActionLabels = {
     sermon: 'Generate Sermon Summary',
+    lecture: 'Generate Lecture Summary',
     phonecall: 'Generate Call Summary',
-    conversation: 'Generate Meeting Summary',
+    meeting: 'Generate Meeting Summary',
+    forum: 'Generate Forum Summary',
+    debate: 'Generate Debate Summary',
   }
   const summaryTitleLabels = {
     sermon: 'Sermon Summary',
+    lecture: 'Lecture Summary',
     phonecall: 'Call Summary',
-    conversation: 'Meeting Summary',
+    meeting: 'Meeting Summary',
+    forum: 'Forum Summary',
+    debate: 'Debate Summary',
   }
   const transcriptionTypeHints = {
     sermon: 'Structured by sermon flow (Main Body / Conclusion / Prayer) with stronger homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
     phonecall: 'Separates call speakers (A/B), reinforces clinical wording, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
     conversation: 'Separates meeting participants, structures agenda/decisions/actions, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
+  }
+  const resolveContentStyle = (data) => {
+    const explicit = String(data?.content_style || '').trim().toLowerCase()
+    if (explicit) return explicit === 'conversation' ? 'meeting' : explicit
+    const fallbackType = String(data?.transcription_type || transcriptionType || 'conversation').trim().toLowerCase()
+    if (fallbackType === 'conversation') return 'meeting'
+    return fallbackType
   }
   const recordTypeLabels = {
     meeting_keywords: 'Meeting Keywords',
@@ -1661,11 +1688,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <h2 className="text-base font-bold text-nm-text-primary">Transcription Result</h2>
-                      {result.transcription_type && result.transcription_type !== 'sermon' && (
-                        <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-nm-accent">
-                          {typeLabels[result.transcription_type] || result.transcription_type}
-                        </span>
-                      )}
+                      <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-nm-accent">
+                        {contentStyleLabels[resolveContentStyle(result)] || typeLabels[result.transcription_type] || result.transcription_type}
+                      </span>
                     </div>
                     <span className="nm-flat px-2.5 py-1 text-green-600 text-[11px] font-medium">
                       {result.characters?.toLocaleString()} chars
@@ -1731,7 +1756,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
                 {/* Summary section (type-specific) */}
                 {(() => {
-                  const summaryType = result.transcription_type || transcriptionType || 'conversation'
+                  const summaryType = resolveContentStyle(result)
                   const summaryCopyKey = `summary-${summaryType}`
                   return (
                   !result.summary ? (
@@ -1741,13 +1766,13 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                       className="w-full nm-btn p-4 text-sm font-medium text-nm-accent
                     disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading ? 'Generating summary...' : (summaryActionLabels[summaryType] || summaryActionLabels.sermon)}
+                      {loading ? 'Generating summary...' : (summaryActionLabels[summaryType] || summaryActionLabels.meeting)}
                     </button>
                   ) : (
                     <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-bold text-nm-text-primary">
-                          {summaryTitleLabels[summaryType] || summaryTitleLabels.sermon}
+                          {summaryTitleLabels[summaryType] || summaryTitleLabels.meeting}
                         </h3>
                         <button
                           onClick={() => copyToClipboard(result.summary, summaryCopyKey)}

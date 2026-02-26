@@ -220,6 +220,14 @@ const I18N = {
       phonecall: "통화",
       conversation: "회의",
     },
+    contentStyles: {
+      sermon: "설교",
+      lecture: "강의",
+      phonecall: "통화",
+      meeting: "회의",
+      forum: "포럼",
+      debate: "토론",
+    },
     recordCategories: {
       meeting_keywords: "회의 중요 키워드",
       clinical_notes: "진료 도움 기록",
@@ -238,7 +246,11 @@ const I18N = {
     generateSummary: "설교 요약 생성",
     generateSummaryByType: {
       sermon: "설교 요약 생성",
+      lecture: "강의 요약 생성",
       phonecall: "통화 기록 요약 생성",
+      meeting: "회의 요약 생성",
+      forum: "포럼 요약 생성",
+      debate: "토론 요약 생성",
       conversation: "회의 요약 생성",
     },
     generatingSummary: "요약 생성 중...",
@@ -496,6 +508,14 @@ const I18N = {
       phonecall: "Call",
       conversation: "Meeting",
     },
+    contentStyles: {
+      sermon: "Sermon",
+      lecture: "Lecture",
+      phonecall: "Call",
+      meeting: "Meeting",
+      forum: "Forum",
+      debate: "Debate",
+    },
     recordCategories: {
       meeting_keywords: "Meeting Keywords",
       clinical_notes: "Clinical Notes",
@@ -514,7 +534,11 @@ const I18N = {
     generateSummary: "Generate Summary",
     generateSummaryByType: {
       sermon: "Generate Sermon Summary",
+      lecture: "Generate Lecture Summary",
       phonecall: "Generate Call Summary",
+      meeting: "Generate Meeting Summary",
+      forum: "Generate Forum Summary",
+      debate: "Generate Debate Summary",
       conversation: "Generate Meeting Summary",
     },
     generatingSummary: "Generating summary...",
@@ -2522,6 +2546,23 @@ function App() {
     }
   };
 
+  const resolveContentStyleKey = (payload) => {
+    const explicit = String(payload?.content_style || "").trim().toLowerCase();
+    if (explicit) return explicit === "conversation" ? "meeting" : explicit;
+    const fallbackType = String(payload?.transcription_type || transcriptionType || "conversation").trim().toLowerCase();
+    if (fallbackType === "conversation") return "meeting";
+    return fallbackType;
+  };
+
+  const resolveTypeLabel = (payload) => {
+    const styleKey = resolveContentStyleKey(payload);
+    return (
+      copy.contentStyles?.[styleKey] ||
+      copy.transcriptionTypes?.[payload?.transcription_type] ||
+      styleKey
+    );
+  };
+
   const handleSummarize = async () => {
     clearMessages();
     unlockWorkspaceScroll();
@@ -2541,10 +2582,12 @@ function App() {
 
     try {
       const normalizedType = result?.transcription_type || transcriptionType || "conversation";
+      const normalizedStyle = resolveContentStyleKey(result);
       const body = new FormData();
       body.append("text", sourceText);
       body.append("summary_type", "short");
       body.append("transcription_type", normalizedType);
+      body.append("content_style", normalizedStyle);
       body.append("language", language || "ko");
 
       const data = await requestApi("/api/summarize", {
@@ -2553,7 +2596,11 @@ function App() {
         body,
       });
 
-      setResult((prev) => ({ ...prev, summary: data.summary || "" }));
+      setResult((prev) => ({
+        ...prev,
+        summary: data.summary || "",
+        content_style: data.content_style || normalizedStyle,
+      }));
       setNotice(copy.notices.summaryDone);
     } catch (e) {
       setError(e.message || copy.errors.summaryFailed);
@@ -2713,7 +2760,7 @@ function App() {
     return copy.selectedTypeHints[transcriptionType] || "";
   }, [copy, transcriptionType]);
   const summaryButtonLabel = useMemo(() => {
-    const key = result?.transcription_type || transcriptionType;
+    const key = resolveContentStyleKey(result);
     return copy.generateSummaryByType?.[key] || copy.generateSummary;
   }, [copy, result, transcriptionType]);
 
@@ -3239,7 +3286,7 @@ function App() {
                   <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeResult}</Text>
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.taskId}: {result.task_id}</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.itemType}: {result.transcription_type || transcriptionType}</Text>
+                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.itemType}: {resolveTypeLabel(result)}</Text>
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.charCount}: {result.characters || 0}</Text>
 
                     <Text style={styles.sectionTitle}>{copy.correctedText}</Text>
@@ -3301,7 +3348,7 @@ function App() {
 
                     {result.summary ? (
                       <View style={[styles.summaryBox, { backgroundColor: activeTheme.noticeBg }]}>
-                        <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.summary}</Text>
+                        <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{`${resolveTypeLabel(result)} ${copy.summary}`}</Text>
                         <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>{result.summary}</Text>
                       </View>
                     ) : null}

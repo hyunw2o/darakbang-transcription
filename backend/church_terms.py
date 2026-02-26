@@ -2113,6 +2113,35 @@ def _ko_sermon_summary_prompt(summary_type: str = "short") -> str:
 3) 원문 근거가 없는 추측/판단을 하지 마세요."""
 
 
+def _ko_lecture_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """다음 강의 기록을 학습/교육 관점으로 요약하세요.
+
+출력 형식:
+강의 요약:
+1) 강의 주제/목표 (1~2문장)
+2) 핵심 개념 (번호 목록 2~5개)
+3) 주요 예시/근거 (번호 목록 1~3개)
+4) 적용/과제 포인트 (번호 목록 1~3개)
+
+규칙:
+1) 원문에 없는 사실/추측/판단을 추가하지 마세요.
+2) "특정 용어가 없다" 같은 메타 문장을 쓰지 마세요."""
+
+    return """다음 강의 기록을 상세 요약하세요.
+
+출력 형식:
+1. 강의 목적/배경
+2. 개념별 설명 요약
+3. 예시/케이스 정리
+4. 실무/학습 적용 포인트
+5. 후속 학습 과제 (있을 때만)
+
+규칙:
+1) 원문 근거 없는 해석/추측을 넣지 마세요.
+2) 메타 평가 문장을 쓰지 마세요."""
+
+
 def _ko_phonecall_summary_prompt(summary_type: str = "short") -> str:
     if summary_type == "short":
         return """다음 통화 기록을 통화 업무 관점으로 요약하세요.
@@ -2173,6 +2202,67 @@ def _ko_conversation_summary_prompt(summary_type: str = "short") -> str:
 2) 원문 근거 없는 판단/추측을 넣지 마세요."""
 
 
+def _ko_forum_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """다음 포럼 기록을 포럼 정리 형식으로 요약하세요.
+
+출력 형식:
+포럼 요약:
+1) 발표 주제/맥락 (1~2문장)
+2) 발표 핵심 포인트 (번호 목록 2~5개)
+3) 패널/참석자 주요 의견 (번호 목록 2~5개)
+4) 질의응답 핵심 (번호 목록 1~3개)
+5) 후속 과제/적용 포인트 (있을 때만)
+
+규칙:
+1) 원문에 없는 의견/사실을 추가하지 마세요.
+2) 메타 평가 문장을 쓰지 마세요."""
+
+    return """다음 포럼 기록을 상세 요약하세요.
+
+출력 형식:
+1. 포럼 목적/배경
+2. 발표 내용 핵심
+3. 패널별 핵심 의견
+4. Q&A 핵심 문답
+5. 합의/후속 과제
+
+규칙:
+1) 원문 근거 없는 추측/판단을 넣지 마세요.
+2) 메타 코멘트를 쓰지 마세요."""
+
+
+def _ko_debate_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """다음 토론 기록을 논점 중심으로 요약하세요.
+
+출력 형식:
+토론 요약:
+1) 핵심 논제/쟁점 (1~2문장)
+2) 찬성 측 핵심 주장 (번호 목록 2~4개)
+3) 반대 측 핵심 주장 (번호 목록 2~4개)
+4) 공통 합의/남은 쟁점 (번호 목록 1~3개)
+5) 결론/후속 조치 (있을 때만)
+
+규칙:
+1) 원문에 없는 주장/근거를 만들지 마세요.
+2) 특정 관점을 편들지 말고 중립적으로 정리하세요.
+3) 메타 평가 문장을 쓰지 마세요."""
+
+    return """다음 토론 기록을 상세 요약하세요.
+
+출력 형식:
+1. 토론 주제/배경
+2. 찬성 측 주장과 근거
+3. 반대 측 주장과 근거
+4. 반박/재반박 핵심
+5. 합의점·미해결 쟁점·후속 조치
+
+규칙:
+1) 원문 근거 없는 판단/추측을 넣지 마세요.
+2) 중립적 문체를 유지하세요."""
+
+
 def _en_sermon_summary_prompt(summary_type: str = "short") -> str:
     if summary_type == "short":
         return """Summarize the sermon transcript concisely.
@@ -2200,6 +2290,35 @@ Rules:
 1) Do not add facts/terms/organization names not present in source.
 2) Do not output meta-comments about missing terms or themes.
 3) Avoid unsupported inference."""
+
+
+def _en_lecture_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize the lecture transcript for learning/execution.
+
+Output format:
+Lecture Summary:
+1) Topic/goal (1-2 sentences)
+2) Core concepts (2-5 bullets)
+3) Key examples/evidence (1-3 bullets)
+4) Practical takeaways/tasks (1-3 bullets)
+
+Rules:
+1) Do not add unsupported assumptions.
+2) Do not output meta-comments about missing terms/themes."""
+
+    return """Provide a detailed summary of the lecture transcript.
+
+Output format:
+1. Context/objective
+2. Concept-by-concept summary
+3. Key examples/cases
+4. Practical applications
+5. Follow-up learning tasks (only if present)
+
+Rules:
+1) Do not infer beyond source evidence.
+2) Avoid meta-comments."""
 
 
 def _en_phonecall_summary_prompt(summary_type: str = "short") -> str:
@@ -2262,21 +2381,111 @@ Rules:
 2) Do not add unsupported assumptions."""
 
 
-def get_summary_prompt(
-    summary_type: str = "short",
+def _en_forum_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize the forum transcript in forum-note format.
+
+Output format:
+Forum Summary:
+1) Theme/context (1-2 sentences)
+2) Core presentation points (2-5 bullets)
+3) Panel/participant viewpoints (2-5 bullets)
+4) Q&A highlights (1-3 bullets)
+5) Follow-up tasks/applications (if any)
+
+Rules:
+1) Do not add facts beyond source evidence.
+2) Avoid meta-comments."""
+
+    return """Provide a detailed forum summary.
+
+Output format:
+1. Forum purpose/context
+2. Main presentation content
+3. Panel viewpoints by speaker
+4. Key Q&A exchanges
+5. Agreements and next steps
+
+Rules:
+1) No unsupported assumptions.
+2) No meta-comments."""
+
+
+def _en_debate_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize the debate transcript by arguments and outcomes.
+
+Output format:
+Debate Summary:
+1) Motion/core issue (1-2 sentences)
+2) Pro-side claims (2-4 bullets)
+3) Con-side claims (2-4 bullets)
+4) Shared points/open issues (1-3 bullets)
+5) Outcome/next actions (if any)
+
+Rules:
+1) Keep neutral tone.
+2) Do not add unsupported claims.
+3) Avoid meta-comments."""
+
+    return """Provide a detailed debate summary.
+
+Output format:
+1. Topic/background
+2. Pro-side arguments and evidence
+3. Con-side arguments and evidence
+4. Rebuttal highlights
+5. Consensus/open issues/follow-up
+
+Rules:
+1) Stay neutral.
+2) Do not infer beyond source evidence."""
+
+
+def _normalize_summary_content_style(
     transcription_type: str = "sermon",
-    language: str = "ko",
-):
-    """
-    유형별(설교/통화/회의) + 언어별(ko/en) 요약 프롬프트
-    """
+    content_style: str = "",
+) -> str:
     normalized_type = (transcription_type or "sermon").strip().lower()
     if normalized_type not in {"sermon", "phonecall", "conversation"}:
         normalized_type = "sermon"
 
+    normalized_style = (content_style or "").strip().lower()
+    if normalized_style == "conversation":
+        normalized_style = "meeting"
+
+    allowed_style_by_type = {
+        "sermon": {"sermon", "lecture"},
+        "phonecall": {"phonecall"},
+        "conversation": {"meeting", "forum", "debate"},
+    }
+    default_style_by_type = {
+        "sermon": "sermon",
+        "phonecall": "phonecall",
+        "conversation": "meeting",
+    }
+    if normalized_style in allowed_style_by_type[normalized_type]:
+        return normalized_style
+    return default_style_by_type[normalized_type]
+
+
+def get_summary_prompt(
+    summary_type: str = "short",
+    transcription_type: str = "sermon",
+    language: str = "ko",
+    content_style: str = "",
+):
+    """
+    유형별 + 세부 스타일별 + 언어별(ko/en) 요약 프롬프트
+    """
     normalized_summary_type = (summary_type or "short").strip().lower()
     if normalized_summary_type not in {"short", "detailed"}:
         normalized_summary_type = "short"
+
+    normalized_style = _normalize_summary_content_style(
+        transcription_type=transcription_type,
+        content_style=content_style,
+    )
 
     normalized_lang = (language or "ko").strip().lower()
     is_en = normalized_lang.startswith("en")
@@ -2284,17 +2493,23 @@ def get_summary_prompt(
     if is_en:
         prompt_map = {
             "sermon": _en_sermon_summary_prompt,
+            "lecture": _en_lecture_summary_prompt,
             "phonecall": _en_phonecall_summary_prompt,
-            "conversation": _en_conversation_summary_prompt,
+            "meeting": _en_conversation_summary_prompt,
+            "forum": _en_forum_summary_prompt,
+            "debate": _en_debate_summary_prompt,
         }
     else:
         prompt_map = {
             "sermon": _ko_sermon_summary_prompt,
+            "lecture": _ko_lecture_summary_prompt,
             "phonecall": _ko_phonecall_summary_prompt,
-            "conversation": _ko_conversation_summary_prompt,
+            "meeting": _ko_conversation_summary_prompt,
+            "forum": _ko_forum_summary_prompt,
+            "debate": _ko_debate_summary_prompt,
         }
 
-    return prompt_map[normalized_type](normalized_summary_type)
+    return prompt_map[normalized_style](normalized_summary_type)
 
 def print_terms_summary():
     """용어 통계 출력"""

@@ -1080,10 +1080,12 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setNotice(null)
     try {
       const normalizedType = result?.transcription_type || transcriptionType || 'conversation'
+      const normalizedStyle = resolveContentStyle(result)
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
       formData.append('summary_type', 'short')
       formData.append('transcription_type', normalizedType)
+      formData.append('content_style', normalizedStyle)
       formData.append('language', language || 'ko')
 
       const response = await fetch(`${API_URL}/api/summarize`, {
@@ -1095,7 +1097,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (!response.ok) {
         throw new Error(data.detail || '요약 실패')
       }
-      setResult({ ...result, summary: data.summary })
+      setResult({
+        ...result,
+        summary: data.summary,
+        content_style: data.content_style || normalizedStyle,
+      })
     } catch (err) {
       setError(err.message || '요약 실패')
     } finally {
@@ -1186,20 +1192,41 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   }
 
   const typeLabels = { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
+  const contentStyleLabels = {
+    sermon: '설교',
+    lecture: '강의',
+    phonecall: '통화',
+    meeting: '회의',
+    forum: '포럼',
+    debate: '토론',
+  }
   const summaryActionLabels = {
     sermon: '설교 기록 요약 생성',
+    lecture: '강의 기록 요약 생성',
     phonecall: '통화 기록 요약 생성',
-    conversation: '회의 기록 요약 생성',
+    meeting: '회의 기록 요약 생성',
+    forum: '포럼 기록 요약 생성',
+    debate: '토론 기록 요약 생성',
   }
   const summaryTitleLabels = {
     sermon: '설교 기록 요약',
+    lecture: '강의 기록 요약',
     phonecall: '통화 기록 요약',
-    conversation: '회의 기록 요약',
+    meeting: '회의 기록 요약',
+    forum: '포럼 기록 요약',
+    debate: '토론 기록 요약',
   }
   const transcriptionTypeHints = {
     sermon: '설교 흐름(본론/결론/기도) 중심으로 정리합니다.',
     phonecall: '통화 화자를 A/B로 분리하여 정리합니다.',
     conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치 하며 구조화 합니다.',
+  }
+  const resolveContentStyle = (data) => {
+    const explicit = String(data?.content_style || '').trim().toLowerCase()
+    if (explicit) return explicit === 'conversation' ? 'meeting' : explicit
+    const fallbackType = String(data?.transcription_type || transcriptionType || 'conversation').trim().toLowerCase()
+    if (fallbackType === 'conversation') return 'meeting'
+    return fallbackType
   }
   const recordTypeLabels = {
     meeting_keywords: '회의 중요 키워드',
@@ -1658,11 +1685,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <h2 className="text-base font-bold text-nm-text-primary">변환 결과</h2>
-                      {result.transcription_type && result.transcription_type !== 'sermon' && (
-                        <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-nm-accent">
-                          {typeLabels[result.transcription_type] || result.transcription_type}
-                        </span>
-                      )}
+                      <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-nm-accent">
+                        {contentStyleLabels[resolveContentStyle(result)] || typeLabels[result.transcription_type] || result.transcription_type}
+                      </span>
                     </div>
                     <span className="nm-flat px-2 py-0.5 text-[11px] font-medium text-green-600">
                       {result.characters?.toLocaleString()} 자
@@ -1728,7 +1753,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
                 {/* 요약 섹션 (유형별) */}
                 {(() => {
-                  const summaryType = result.transcription_type || transcriptionType || 'conversation'
+                  const summaryType = resolveContentStyle(result)
                   const summaryCopyKey = `summary-${summaryType}`
                   return (
                   !result.summary ? (
@@ -1737,13 +1762,13 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                       disabled={loading}
                       className="w-full nm-btn p-4 text-sm font-medium text-nm-accent disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading ? '요약 생성 중...' : (summaryActionLabels[summaryType] || summaryActionLabels.sermon)}
+                      {loading ? '요약 생성 중...' : (summaryActionLabels[summaryType] || summaryActionLabels.meeting)}
                     </button>
                   ) : (
                     <div className="nm-raised p-5 sm:p-6 animate-nm-card-in">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-bold text-nm-text-primary">
-                          {summaryTitleLabels[summaryType] || summaryTitleLabels.sermon}
+                          {summaryTitleLabels[summaryType] || summaryTitleLabels.meeting}
                         </h3>
                         <button
                           onClick={() => copyToClipboard(result.summary, summaryCopyKey)}

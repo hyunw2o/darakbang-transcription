@@ -131,6 +131,23 @@ LOG_GEMINI_MODELS_ON_STARTUP = (os.getenv("LOG_GEMINI_MODELS_ON_STARTUP", "false
 ALLOWED_LANGUAGES = {"ko", "en"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
 ALLOWED_CORRECTION_MODES = {"strict", "normal", "raw"}
+ALLOWED_CONTENT_STYLES = {"sermon", "lecture", "phonecall", "meeting", "forum", "debate"}
+
+SERMON_CONTEXT_HINTS = (
+    "설교", "말씀", "본문", "은혜", "복음", "기도", "예배", "목사", "아멘",
+    "sermon", "scripture", "gospel", "pastor", "amen", "worship",
+)
+LECTURE_CONTEXT_HINTS = (
+    "강의", "수업", "교안", "학습", "학기", "과제", "교육",
+    "lecture", "class", "lesson", "curriculum", "assignment", "training",
+)
+FORUM_CONTEXT_HINTS = (
+    "포럼", "패널", "발제", "질의응답", "q&a", "session", "forum", "panel",
+)
+DEBATE_CONTEXT_HINTS = (
+    "토론", "논제", "쟁점", "찬성", "반대", "반박", "재반박",
+    "debate", "motion", "proposition", "opposition", "rebuttal",
+)
 FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
 FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
 USAGE_TABLE_NAME = "user_usage_quotas"
@@ -1934,6 +1951,57 @@ def _parse_speaker_line(line: str) -> dict | None:
     }
 
 
+def _contains_context_hint(text: str, hints: tuple[str, ...]) -> bool:
+    normalized = (text or "").lower()
+    if not normalized:
+        return False
+    return any(hint in normalized for hint in hints)
+
+
+def _count_detected_speakers(text: str) -> int:
+    speaker_keys: set[str] = set()
+    for line in (text or "").splitlines():
+        parsed = _parse_speaker_line(line)
+        if not parsed:
+            continue
+        speaker_id = str(parsed.get("speaker_id") or "").strip().upper()
+        speaker_alias = str(parsed.get("speaker_alias") or "").strip().lower()
+        if speaker_id:
+            speaker_keys.add(f"id:{speaker_id}")
+        elif speaker_alias:
+            speaker_keys.add(f"alias:{speaker_alias}")
+    return len(speaker_keys)
+
+
+def _infer_content_style(
+    text: str,
+    transcription_type: str = "conversation",
+    language: str = "ko",
+) -> str:
+    normalized_type = (transcription_type or "conversation").strip().lower()
+    if normalized_type not in ALLOWED_TRANSCRIPTION_TYPES:
+        normalized_type = "conversation"
+    normalized_text = text or ""
+    speaker_count = _count_detected_speakers(normalized_text)
+    lower_text = normalized_text.lower()
+
+    if normalized_type == "phonecall":
+        return "phonecall"
+
+    if speaker_count <= 1:
+        if _contains_context_hint(lower_text, SERMON_CONTEXT_HINTS):
+            return "sermon"
+        if _contains_context_hint(lower_text, LECTURE_CONTEXT_HINTS):
+            return "lecture"
+        return "sermon" if normalized_type == "sermon" else "lecture"
+
+    if _contains_context_hint(lower_text, DEBATE_CONTEXT_HINTS):
+        return "debate"
+    if _contains_context_hint(lower_text, FORUM_CONTEXT_HINTS):
+        return "forum"
+    return "meeting"
+
+
 def _default_speaker_label(transcription_type: str, language: str, turn_index: int) -> str:
     if transcription_type == "phonecall":
         token = "Speaker" if language == "en" else "화자"
@@ -2956,17 +3024,26 @@ async def get_task_status(
             }
 
         if row_status == "completed":
+            corrected_text = str(row.get("corrected_text") or "")
+            raw_text = str(row.get("raw_text") or "")
+            normalized_type = str(row.get("transcription_type") or "conversation")
+            content_style = _infer_content_style(
+                text=(corrected_text or raw_text),
+                transcription_type=normalized_type,
+                language=str(row.get("language") or "ko"),
+            )
             return {
                 "task_id": row["task_id"],
                 "status": row_status,
                 "created_at": row["created_at"],
                 "language": row["language"],
-                "raw_text": row["raw_text"],
-                "corrected_text": row["corrected_text"],
+                "raw_text": raw_text,
+                "corrected_text": corrected_text,
                 "characters": row["characters"],
                 "darakbang_optimized": row["darakbang_optimized"],
                 "engine": row["engine"],
-                "transcription_type": row.get("transcription_type", "conversation"),
+                "transcription_type": normalized_type,
+                "content_style": content_style,
             }
         else:
             return {
@@ -4125,6 +4202,7 @@ async def summarize_text(
     text: str = Form(...),
     summary_type: str = Form("short"),
     transcription_type: str = Form("conversation"),
+    content_style: str = Form(""),
     language: str = Form("ko"),
     authorization: str | None = Header(default=None),
 ):
@@ -4145,6 +4223,13 @@ async def summarize_text(
         normalized_language = (language or "ko").strip().lower()
         if normalized_language not in {"ko", "en"}:
             normalized_language = "ko"
+        normalized_content_style = (content_style or "").strip().lower()
+        if normalized_content_style not in ALLOWED_CONTENT_STYLES:
+            normalized_content_style = _infer_content_style(
+                text=normalized_text,
+                transcription_type=normalized_transcription_type,
+                language=normalized_language,
+            )
 
         target_model = get_optimal_model()
         model = genai.GenerativeModel(model_name=target_model)
@@ -4153,6 +4238,7 @@ async def summarize_text(
             summary_type=summary_type,
             transcription_type=normalized_transcription_type,
             language=normalized_language,
+            content_style=normalized_content_style,
         )
         source_label = "원문" if normalized_language == "ko" else "Source Transcript"
         full_prompt = f"""{prompt}
@@ -4183,6 +4269,7 @@ async def summarize_text(
             "summary": response.text,
             "summary_type": summary_type,
             "transcription_type": normalized_transcription_type,
+            "content_style": normalized_content_style,
             "language": normalized_language,
         }
 
