@@ -2183,7 +2183,7 @@ function App() {
     } catch (e) {
       const rawMessage = e?.message || copy.errors.socialStartFailed;
       const withHint = shouldShowOauthConfigHint(rawMessage)
-        ? `${rawMessage}\n(backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL check required)`
+        ? `${rawMessage}\n(Config check required: backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL, not a paid-plan issue)`
         : rawMessage;
       setError(withHint);
       setSocialLoading("");

@@ -606,7 +606,16 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       const res = await fetch(`${API_URL}/api/auth/bootstrap`, {
         headers: getAuthHeaders(token),
       })
-      if (!res.ok) throw new Error('사용자 인증이 만료되었습니다.')
+      if (!res.ok) {
+        let detail = '사용자 인증이 만료되었습니다.'
+        try {
+          const payload = await res.json()
+          detail = payload?.detail || detail
+        } catch {
+          // ignore parse error and keep fallback detail
+        }
+        throw new Error(detail)
+      }
       const data = await res.json()
       setAuthUser(data.user || null)
       if (data.usage) {
@@ -633,6 +642,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       setShowHistory(false)
       setShowRecords(false)
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+      setError(e?.message || '사용자 인증이 만료되었습니다.')
       console.error('Failed to bootstrap auth state', e)
     }
   }

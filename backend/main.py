@@ -8,9 +8,11 @@ import os
 import uuid
 import json
 import base64
+import hashlib
 import asyncio
 import random
 import gc
+import threading
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
@@ -169,6 +171,11 @@ TASK_STATUS_TTL_SECONDS = max(300, int(os.getenv("TASK_STATUS_TTL_SECONDS", "360
 MAX_AUTH_USER_CACHE_SIZE = max(100, int(os.getenv("MAX_AUTH_USER_CACHE_SIZE", "2000")))
 MAX_RATE_LIMIT_BUCKETS = max(100, int(os.getenv("MAX_RATE_LIMIT_BUCKETS", "2000")))
 MAX_CONCURRENT_TRANSCRIPTIONS = max(1, int(os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS", "1")))
+AUTH_MAX_CONCURRENT_SESSIONS = max(0, int(os.getenv("AUTH_MAX_CONCURRENT_SESSIONS", "1")))
+AUTH_SESSION_STALE_SECONDS = max(300, int(os.getenv("AUTH_SESSION_STALE_SECONDS", str(30 * 24 * 60 * 60))))
+AUTH_CONCURRENT_LOGIN_REJECT_MESSAGE = (
+    "다른 기기에서 로그인되어 현재 세션이 종료되었습니다. 다시 로그인해 주세요."
+)
 TASK_STUCK_TIMEOUT_SECONDS = max(900, int(os.getenv("TASK_STUCK_TIMEOUT_SECONDS", "7200")))
 TASK_STUCK_ERROR_MESSAGE = (
     "처리 시간이 비정상적으로 길어 작업이 자동 종료되었습니다. 다시 시도해 주세요."
@@ -396,6 +403,8 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _request_counters: dict[str, deque[float]] = defaultdict(deque)
 _auth_user_cache: dict[str, dict] = {}
 _auth_http_client: httpx.AsyncClient | None = None
+_auth_active_sessions: dict[str, list[dict]] = defaultdict(list)
+_auth_session_state_lock = threading.Lock()
 
 
 def _cleanup_stale_task_states() -> None:
@@ -454,6 +463,102 @@ def _cleanup_auth_user_cache() -> None:
     overflow = len(_auth_user_cache) - MAX_AUTH_USER_CACHE_SIZE
     for token, _ in sortable[:overflow]:
         _auth_user_cache.pop(token, None)
+
+
+def _decode_jwt_iat_unverified(token: str) -> int | None:
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        payload = parts[1]
+        padded = payload + ("=" * ((4 - len(payload) % 4) % 4))
+        decoded_payload = base64.urlsafe_b64decode(padded.encode("utf-8"))
+        decoded = json.loads(decoded_payload.decode("utf-8"))
+        iat = decoded.get("iat")
+        if isinstance(iat, int):
+            return iat
+        if isinstance(iat, float):
+            return int(iat)
+    except Exception:
+        return None
+    return None
+
+
+def _hash_auth_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _cleanup_stale_auth_sessions(now_ts: float | None = None) -> None:
+    if not _auth_active_sessions:
+        return
+    reference_ts = now_ts or time.time()
+    stale_cutoff = reference_ts - AUTH_SESSION_STALE_SECONDS
+    expired_users: list[str] = []
+
+    for user_id, sessions in list(_auth_active_sessions.items()):
+        alive_sessions = [
+            session
+            for session in sessions
+            if float((session or {}).get("last_seen_at") or 0) >= stale_cutoff
+        ]
+        if alive_sessions:
+            _auth_active_sessions[user_id] = alive_sessions
+        else:
+            expired_users.append(user_id)
+
+    for user_id in expired_users:
+        _auth_active_sessions.pop(user_id, None)
+
+
+def _enforce_concurrent_login_limit(token: str, user: dict, is_fresh_login: bool = False) -> None:
+    if AUTH_MAX_CONCURRENT_SESSIONS <= 0:
+        return
+
+    user_id = str((user or {}).get("id") or "").strip()
+    if not user_id:
+        return
+
+    now_ts = time.time()
+    token_hash = _hash_auth_token(token)
+    token_iat = _decode_jwt_iat_unverified(token) or 0
+
+    with _auth_session_state_lock:
+        _cleanup_stale_auth_sessions(now_ts)
+
+        sessions = list(_auth_active_sessions.get(user_id) or [])
+        found = False
+        for session in sessions:
+            if session.get("token_hash") != token_hash:
+                continue
+            session["last_seen_at"] = now_ts
+            existing_iat = int(session.get("iat") or 0)
+            if token_iat > existing_iat:
+                session["iat"] = token_iat
+            found = True
+            break
+
+        if not found:
+            promoted_iat = token_iat
+            if is_fresh_login and sessions:
+                latest_iat = max(int(item.get("iat") or 0) for item in sessions)
+                if promoted_iat <= latest_iat:
+                    promoted_iat = latest_iat + 1
+            sessions.append({
+                "token_hash": token_hash,
+                "iat": promoted_iat,
+                "last_seen_at": now_ts,
+            })
+
+        sessions.sort(
+            key=lambda item: (int(item.get("iat") or 0), float(item.get("last_seen_at") or 0)),
+            reverse=True,
+        )
+        trimmed_sessions = sessions[:AUTH_MAX_CONCURRENT_SESSIONS]
+        _auth_active_sessions[user_id] = trimmed_sessions
+
+        is_active_token = any(item.get("token_hash") == token_hash for item in trimmed_sessions)
+        if not is_active_token:
+            raise HTTPException(status_code=401, detail=AUTH_CONCURRENT_LOGIN_REJECT_MESSAGE)
 
 
 def _resolved_engine_mode() -> str:
@@ -826,10 +931,20 @@ async def _get_current_user(authorization: str | None) -> dict:
     token = _extract_bearer_token(authorization)
     cached_user = _get_cached_user_by_token(token)
     if cached_user:
+        try:
+            _enforce_concurrent_login_limit(token, cached_user, is_fresh_login=False)
+        except HTTPException:
+            _auth_user_cache.pop(token, None)
+            raise
         return cached_user
     user = await _supabase_auth_request("user", method="GET", token=token)
     if not user.get("id"):
         raise HTTPException(status_code=401, detail="유효하지 않은 사용자 토큰입니다.")
+    try:
+        _enforce_concurrent_login_limit(token, user, is_fresh_login=False)
+    except HTTPException:
+        _auth_user_cache.pop(token, None)
+        raise
     _cache_user_by_token(token, user)
     return user
 
@@ -3789,11 +3904,14 @@ async def signup(
     session = data.get("session") or {}
     access_token = data.get("access_token") or session.get("access_token")
     refresh_token = data.get("refresh_token") or session.get("refresh_token")
+    user = data.get("user") or {}
+    if access_token and isinstance(user, dict) and user.get("id"):
+        _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
 
     return {
         "success": True,
         "message": "회원가입이 완료되었습니다. 이메일 인증 설정 여부에 따라 추가 인증이 필요할 수 있습니다.",
-        "user": data.get("user"),
+        "user": user,
         "access_token": access_token,
         "refresh_token": refresh_token,
     }
@@ -3810,10 +3928,14 @@ async def login(
         "token?grant_type=password",
         payload={"email": normalized_email, "password": password},
     )
+    access_token = data.get("access_token") or ""
+    user = data.get("user") or {}
+    if access_token and isinstance(user, dict) and user.get("id"):
+        _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
     return {
         "success": True,
-        "user": data.get("user"),
-        "access_token": data.get("access_token"),
+        "user": user,
+        "access_token": access_token,
         "refresh_token": data.get("refresh_token"),
         "expires_in": data.get("expires_in"),
         "token_type": data.get("token_type", "bearer"),
