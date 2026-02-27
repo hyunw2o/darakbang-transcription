@@ -2317,9 +2317,23 @@ function App() {
 
     setBillingActionLoading("checkout");
     try {
+      const normalizedPricingBase = String(PRICING_URL || "").trim().replace(/\/+$/, "");
+      const locale = language === "en" ? "en" : "ko";
+      const localePricingPath = locale === "en" ? "pricing-en" : "pricing";
+      const pricingPath = normalizedPricingBase.endsWith("/pricing") || normalizedPricingBase.endsWith("/pricing-en")
+        ? normalizedPricingBase
+        : `${normalizedPricingBase}/${localePricingPath}`;
+      const successUrl = `${pricingPath}${pricingPath.includes("?") ? "&" : "?"}checkout=success`;
+      const cancelUrl = `${pricingPath}${pricingPath.includes("?") ? "&" : "?"}checkout=cancel`;
+
       const data = await requestApi("/api/billing/checkout", {
         method: "POST",
         token: authToken,
+        body: JSON.stringify({
+          locale,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
       });
       if (!data?.checkout_url) {
         throw new Error(copy.errors.billingCheckoutFailed);

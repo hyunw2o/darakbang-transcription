@@ -76,7 +76,8 @@ uvicorn main:app --reload
    - `BILLING_PROVIDER` (권장 기본 `portone`, 필요 시 `stripe`)
    - `BILLING_TEST_MODE` (테스트 플로우 확인 시 `true`)
    - `MOCK_CHECKOUT_SESSION_TTL_SECONDS` (기본 1800초)
-   - `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_API_SECRET`, `PORTONE_WEBHOOK_SECRET`
+   - `PORTONE_STORE_ID` (또는 `PORTONE_MID`), `PORTONE_CHANNEL_KEY`, `PORTONE_API_SECRET`, `PORTONE_WEBHOOK_SECRET`
+   - `PAID_PLAN_AMOUNT_KRW` (기본 8000), `PAID_PLAN_PRODUCT_NAME_KO`, `PAID_PLAN_PRODUCT_NAME_EN`
    - `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` (tosspayments 사용 시)
    - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO` (글로벌 확장 시)
    - `PAID_PLAN_TIER` (기본 `pro`)
@@ -110,6 +111,8 @@ uvicorn main:app --reload
 - `POST /api/billing/checkout` : 결제 체크아웃 생성 (공급자별)
 - `POST /api/billing/portal` : 구독 관리 포털 생성 (공급자별)
 - `POST /api/billing/webhook` : Stripe 웹훅 수신 (BILLING_PROVIDER=stripe일 때 활성)
+- `GET /api/billing/portone/checkout/{session_id}` : PortOne 실결제창 호출 페이지
+- `GET /api/billing/portone/complete/{session_id}` : PortOne 결제 검증 후 구독 반영
 - `GET /api/billing/mock/checkout/{session_id}` : 테스트 결제 화면
 - `GET /api/billing/mock/complete/{session_id}` : 테스트 결제 성공/취소 완료 처리
 - `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
@@ -142,6 +145,8 @@ Render Cron Job 스케줄 예시: `0 0 1 * *` (UTC 기준)
 ## 국내 PG 우선 + Stripe 확장 전략
 
 1. 1차 운영(국내): `BILLING_PROVIDER=portone`로 설정하고 국내 PG 키를 적용
+   - 필수값: `PORTONE_CHANNEL_KEY`, `PORTONE_STORE_ID`(또는 `PORTONE_MID`), `PORTONE_API_SECRET`
+   - `BILLING_TEST_MODE=false`일 때 `/api/billing/checkout`이 실제 결제창 URL을 반환
 2. 2차 글로벌: `BILLING_PROVIDER=stripe`로 전환 후 Stripe 키/Price/Webhook 설정
 3. Stripe Webhook URL: `https://<backend-domain>/api/billing/webhook`
    - 이벤트: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`

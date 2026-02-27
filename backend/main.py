@@ -167,10 +167,17 @@ SUPPORTED_BILLING_PROVIDERS = {"portone", "tosspayments", "stripe"}
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
 STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
 STRIPE_PRICE_ID_PRO = (os.getenv("STRIPE_PRICE_ID_PRO") or "").strip()
-PORTONE_STORE_ID = (os.getenv("PORTONE_STORE_ID") or "").strip()
+PORTONE_STORE_ID = (os.getenv("PORTONE_STORE_ID") or os.getenv("PORTONE_MID") or "").strip()
+PORTONE_MID = (os.getenv("PORTONE_MID") or PORTONE_STORE_ID).strip()
 PORTONE_CHANNEL_KEY = (os.getenv("PORTONE_CHANNEL_KEY") or "").strip()
 PORTONE_API_SECRET = (os.getenv("PORTONE_API_SECRET") or "").strip()
 PORTONE_WEBHOOK_SECRET = (os.getenv("PORTONE_WEBHOOK_SECRET") or "").strip()
+PORTONE_API_BASE_URL = (os.getenv("PORTONE_API_BASE_URL") or "https://api.portone.io").strip().rstrip("/")
+PAID_PLAN_AMOUNT_KRW = max(100, int(os.getenv("PAID_PLAN_AMOUNT_KRW", "8000")))
+PAID_PLAN_PRODUCT_NAME_KO = (os.getenv("PAID_PLAN_PRODUCT_NAME_KO") or "mallog24 Pro 월간 구독").strip()
+PAID_PLAN_PRODUCT_NAME_EN = (
+    os.getenv("PAID_PLAN_PRODUCT_NAME_EN") or "mallog24 Pro Monthly Subscription"
+).strip()
 TOSS_CLIENT_KEY = (os.getenv("TOSS_CLIENT_KEY") or "").strip()
 TOSS_SECRET_KEY = (os.getenv("TOSS_SECRET_KEY") or "").strip()
 BILLING_SUCCESS_URL = (os.getenv("BILLING_SUCCESS_URL") or "").strip()
@@ -302,6 +309,7 @@ task_status = {}
 task_owner = {}
 task_updated_at: dict[str, float] = {}
 mock_checkout_sessions: dict[str, dict] = {}
+portone_checkout_sessions: dict[str, dict] = {}
 transcription_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTIONS)
 if TRANSCRIPTION_ENGINE_MODE not in {"auto", "whisper_gemini", "gemini_only"}:
     print(
@@ -1027,6 +1035,8 @@ def _is_tosspayments_billing_enabled() -> bool:
 def _get_checkout_mode(provider: str | None = None) -> str:
     resolved_provider = provider or _get_billing_provider_or_raise()
 
+    if resolved_provider == "portone" and _is_portone_billing_enabled():
+        return "live"
     if resolved_provider == "stripe" and stripe is not None and STRIPE_SECRET_KEY and STRIPE_PRICE_ID_PRO:
         return "live"
     if BILLING_TEST_MODE:
@@ -1089,6 +1099,201 @@ def _resolve_portal_return_url(request: Request, payload: dict) -> str:
     if raw_return:
         return _validate_redirect_url(raw_return)
     return _build_redirect_url_from_request(request, default_return_path)
+
+
+def _append_query_params(target_url: str, params: dict[str, str | int | None]) -> str:
+    if not target_url:
+        return target_url
+    parsed = urllib.parse.urlparse(target_url)
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    for key, value in (params or {}).items():
+        if value is None:
+            continue
+        query[str(key)] = [str(value)]
+    encoded = urllib.parse.urlencode(query, doseq=True)
+    return urllib.parse.urlunparse(parsed._replace(query=encoded))
+
+
+def _to_int_safe(value, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return int(value)
+        normalized = str(value).replace(",", "").strip()
+        if not normalized:
+            return default
+        return int(float(normalized))
+    except Exception:
+        return default
+
+
+def _cleanup_expired_portone_checkout_sessions() -> None:
+    now_ts = time.time()
+    expired_ids = []
+    for session_id, session in portone_checkout_sessions.items():
+        created_ts = float(session.get("created_ts") or 0.0)
+        if created_ts <= 0:
+            expired_ids.append(session_id)
+            continue
+        if now_ts - created_ts > MOCK_CHECKOUT_SESSION_TTL_SECONDS:
+            expired_ids.append(session_id)
+
+    for session_id in expired_ids:
+        portone_checkout_sessions.pop(session_id, None)
+
+
+def _create_portone_checkout_session(
+    user_id: str,
+    email: str,
+    success_url: str,
+    cancel_url: str,
+    locale: str,
+    amount_krw: int,
+    request: Request,
+) -> dict:
+    _cleanup_expired_portone_checkout_sessions()
+    session_id = f"portone_{uuid.uuid4().hex}"
+    payment_id = f"mallog24_{uuid.uuid4().hex[:26]}"
+    now_ts = time.time()
+
+    order_name = PAID_PLAN_PRODUCT_NAME_EN if locale == "en" else PAID_PLAN_PRODUCT_NAME_KO
+    portone_checkout_sessions[session_id] = {
+        "session_id": session_id,
+        "payment_id": payment_id,
+        "user_id": user_id,
+        "email": email,
+        "amount_krw": max(1, int(amount_krw)),
+        "currency": "KRW",
+        "order_name": order_name,
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "locale": locale or "ko",
+        "created_ts": now_ts,
+    }
+
+    checkout_url = _build_redirect_url_from_request(request, f"/api/billing/portone/checkout/{session_id}")
+    return {
+        "session_id": session_id,
+        "payment_id": payment_id,
+        "checkout_url": checkout_url,
+        "expires_in_seconds": MOCK_CHECKOUT_SESSION_TTL_SECONDS,
+    }
+
+
+def _get_portone_checkout_session_or_raise(session_id: str) -> dict:
+    _cleanup_expired_portone_checkout_sessions()
+    session = portone_checkout_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="PortOne 결제 세션이 만료되었거나 존재하지 않습니다.")
+    return session
+
+
+def _normalize_portone_payment_payload(payload: dict | None) -> dict:
+    source = payload or {}
+    if not isinstance(source, dict):
+        return {}
+    if source.get("id") or source.get("status"):
+        return source
+    for key in ("payment", "data", "result"):
+        candidate = source.get(key)
+        if isinstance(candidate, dict) and (candidate.get("id") or candidate.get("status")):
+            return candidate
+    return {}
+
+
+def _extract_portone_payment_status(payment: dict) -> str:
+    return str((payment or {}).get("status") or "").strip().upper()
+
+
+def _extract_portone_payment_currency(payment: dict) -> str:
+    source = payment or {}
+    direct = str(source.get("currency") or "").strip()
+    if direct:
+        return direct.upper()
+    amount = source.get("amount")
+    if isinstance(amount, dict):
+        nested = str(amount.get("currency") or "").strip()
+        if nested:
+            return nested.upper()
+    return ""
+
+
+def _extract_portone_total_amount(payment: dict) -> int:
+    source = payment or {}
+    amount = source.get("amount")
+    if isinstance(amount, dict):
+        for key in ("total", "paid", "value"):
+            resolved = _to_int_safe(amount.get(key), default=0)
+            if resolved > 0:
+                return resolved
+    for key in ("totalAmount", "amount", "paidAmount"):
+        resolved = _to_int_safe(source.get(key), default=0)
+        if resolved > 0:
+            return resolved
+    return 0
+
+
+def _extract_portone_customer_reference(payment: dict) -> str:
+    source = payment or {}
+    customer = source.get("customer")
+    if isinstance(customer, dict):
+        for key in ("id", "customerId", "email", "name"):
+            value = str(customer.get(key) or "").strip()
+            if value:
+                return value
+    for key in ("customerId", "customer_id", "customerEmail", "email"):
+        value = str(source.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+async def _fetch_portone_payment_by_id(payment_id: str) -> dict:
+    normalized_payment_id = str(payment_id or "").strip()
+    if not normalized_payment_id:
+        raise HTTPException(status_code=400, detail="payment_id 값이 필요합니다.")
+    if not PORTONE_API_SECRET:
+        raise HTTPException(status_code=503, detail="PORTONE_API_SECRET 설정이 필요합니다.")
+
+    endpoint = f"{PORTONE_API_BASE_URL}/payments/{urllib.parse.quote(normalized_payment_id)}"
+    headers_candidates = [
+        {"Authorization": f"PortOne {PORTONE_API_SECRET}"},
+        {"Authorization": f"Bearer {PORTONE_API_SECRET}"},
+    ]
+    last_error_message = ""
+    for headers in headers_candidates:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(endpoint, headers=headers)
+        except Exception as e:
+            last_error_message = str(e)
+            continue
+
+        if response.status_code in {401, 403}:
+            last_error_message = f"unauthorized({response.status_code})"
+            continue
+        if response.status_code >= 400:
+            body_text = (response.text or "").strip()
+            detail_text = body_text[:200] if body_text else f"status={response.status_code}"
+            raise HTTPException(status_code=502, detail=f"PortOne 결제 조회 실패: {detail_text}")
+
+        try:
+            payload = response.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="PortOne 결제 조회 응답(JSON)을 해석할 수 없습니다.")
+
+        payment = _normalize_portone_payment_payload(payload)
+        if not payment:
+            raise HTTPException(status_code=502, detail="PortOne 결제 조회 응답에 유효한 결제 정보가 없습니다.")
+        return payment
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"PortOne 결제 조회 인증에 실패했습니다. api_secret 또는 권한을 확인하세요. ({last_error_message or 'unauthorized'})",
+    )
 
 
 def _cleanup_expired_mock_checkout_sessions() -> None:
@@ -3206,6 +3411,41 @@ async def create_checkout_session(
             "expires_in_seconds": mock_session["expires_in_seconds"],
         }
 
+    if billing_provider == "portone":
+        locale = str(payload.get("locale") or "ko").strip().lower()
+        if locale not in {"ko", "en"}:
+            locale = "ko"
+        portone_session = _create_portone_checkout_session(
+            user_id=user["id"],
+            email=(user.get("email") or "").strip().lower(),
+            success_url=success_url,
+            cancel_url=cancel_url,
+            locale=locale,
+            amount_krw=PAID_PLAN_AMOUNT_KRW,
+            request=request,
+        )
+
+        _upsert_billing_row(
+            user["id"],
+            {
+                "provider": "portone",
+                "status": "checkout_pending",
+                "plan_tier": usage_row["plan_tier"],
+                "price_id": f"portone_pro_{PAID_PLAN_AMOUNT_KRW}",
+            },
+        )
+
+        return {
+            "success": True,
+            "checkout_url": portone_session["checkout_url"],
+            "session_id": portone_session["session_id"],
+            "payment_id": portone_session["payment_id"],
+            "mode": "live",
+            "provider": "portone",
+            "amount_krw": PAID_PLAN_AMOUNT_KRW,
+            "expires_in_seconds": portone_session["expires_in_seconds"],
+        }
+
     if billing_provider != "stripe":
         raise HTTPException(
             status_code=501,
@@ -3424,6 +3664,339 @@ async def complete_mock_checkout(session_id: str, result: str = "success"):
         redirect_url = "/pricing"
     redirect_url = redirect_url.replace("{CHECKOUT_SESSION_ID}", session_id)
     return RedirectResponse(url=redirect_url, status_code=303)
+
+
+@app.get("/api/billing/portone/checkout/{session_id}", response_class=HTMLResponse)
+async def render_portone_checkout_page(request: Request, session_id: str):
+    """PortOne 실결제 호출 화면"""
+    session = _get_portone_checkout_session_or_raise(session_id)
+    locale = str(session.get("locale") or "ko").lower()
+    is_en = locale == "en"
+
+    payment_id = str(session.get("payment_id") or "")
+    amount_krw = _to_int_safe(session.get("amount_krw"), default=PAID_PLAN_AMOUNT_KRW)
+    order_name = str(session.get("order_name") or (PAID_PLAN_PRODUCT_NAME_EN if is_en else PAID_PLAN_PRODUCT_NAME_KO))
+    success_url = str(session.get("success_url") or "")
+    cancel_url = str(session.get("cancel_url") or "")
+    customer_email = str(session.get("email") or "")
+
+    complete_base_url = _build_redirect_url_from_request(request, f"/api/billing/portone/complete/{session_id}")
+    if not cancel_url:
+        cancel_url = "/pricing-en?checkout=cancel" if is_en else "/pricing?checkout=cancel"
+    if cancel_url.startswith("/"):
+        cancel_url = _build_redirect_url_from_request(request, cancel_url)
+
+    payment_payload = {
+        "storeId": PORTONE_STORE_ID,
+        "channelKey": PORTONE_CHANNEL_KEY,
+        "paymentId": payment_id,
+        "orderName": order_name,
+        "totalAmount": amount_krw,
+        "currency": "KRW",
+        "payMethod": "CARD",
+        "customData": {
+            "app": "mallog24",
+            "plan_tier": PAID_PLAN_TIER,
+            "provider": "portone",
+            "mid": PORTONE_MID,
+            "session_id": session_id,
+        },
+    }
+    if customer_email:
+        payment_payload["customer"] = {"email": customer_email}
+
+    title = "PortOne Checkout" if is_en else "PortOne 결제창"
+    headline = "Open live checkout" if is_en else "실결제창 열기"
+    description = (
+        "If the popup does not open automatically, tap the button once."
+        if is_en
+        else "자동으로 결제창이 열리지 않으면 버튼을 눌러 진행하세요."
+    )
+    button_label = "Open Checkout" if is_en else "결제창 열기"
+    cancel_label = "Cancel" if is_en else "취소"
+
+    payload_json = json.dumps(payment_payload, ensure_ascii=False)
+    complete_base_json = json.dumps(complete_base_url, ensure_ascii=False)
+    cancel_url_json = json.dumps(cancel_url, ensure_ascii=False)
+    headline_html = headline.replace("<", "&lt;").replace(">", "&gt;")
+    description_html = description.replace("<", "&lt;").replace(">", "&gt;")
+    button_label_html = button_label.replace("<", "&lt;").replace(">", "&gt;")
+    cancel_label_html = cancel_label.replace("<", "&lt;").replace(">", "&gt;")
+    title_html = title.replace("<", "&lt;").replace(">", "&gt;")
+
+    html = f"""
+    <!doctype html>
+    <html lang="{ 'en' if is_en else 'ko' }">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title_html}</title>
+        <script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+        <style>
+          body {{
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(140deg, #eef3ff 0%, #f6f0ff 100%);
+            color: #1f2b47;
+          }}
+          .wrap {{
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+          }}
+          .card {{
+            width: 100%;
+            max-width: 540px;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 20px 48px rgba(56, 85, 168, 0.14);
+            padding: 24px;
+          }}
+          .title {{
+            margin: 0 0 10px;
+            font-size: 28px;
+            font-weight: 800;
+          }}
+          .desc {{
+            margin: 0 0 16px;
+            font-size: 14px;
+            color: #56648b;
+            line-height: 1.6;
+          }}
+          .meta {{
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #6d7ea8;
+            word-break: break-word;
+          }}
+          .actions {{
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+          }}
+          .btn {{
+            border: none;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 13px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+          }}
+          .btn-primary {{
+            background: #315df6;
+            color: #fff;
+          }}
+          .btn-secondary {{
+            background: #eef2ff;
+            color: #1f2b47;
+          }}
+          .status {{
+            margin-top: 10px;
+            font-size: 12px;
+            color: #56648b;
+          }}
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="card">
+            <h1 class="title">{headline_html}</h1>
+            <p class="desc">{description_html}</p>
+            <p class="meta">Payment ID: {payment_id}</p>
+            <p class="meta">Amount: {amount_krw} KRW</p>
+            <p class="meta">Order: {order_name}</p>
+            <div class="actions">
+              <button id="payButton" class="btn btn-primary">{button_label_html}</button>
+              <a class="btn btn-secondary" href="{cancel_url}">{cancel_label_html}</a>
+            </div>
+            <p class="status" id="statusText"></p>
+          </div>
+        </div>
+        <script>
+          const REQUEST_PAYLOAD = {payload_json};
+          const COMPLETE_BASE_URL = {complete_base_json};
+          const CANCEL_URL = {cancel_url_json};
+          const STATUS_TEXT = document.getElementById("statusText");
+          const PAY_BUTTON = document.getElementById("payButton");
+          let launched = false;
+
+          const setStatus = (value) => {{
+            if (STATUS_TEXT) STATUS_TEXT.textContent = value || "";
+          }};
+
+          const moveToCancel = (reason) => {{
+            try {{
+              const target = new URL(CANCEL_URL);
+              target.searchParams.set("checkout", "cancel");
+              if (reason) {{
+                target.searchParams.set("reason", reason);
+              }}
+              window.location.replace(target.toString());
+              return;
+            }} catch (_err) {{
+              window.location.replace(CANCEL_URL);
+            }}
+          }};
+
+          const moveToComplete = (paymentId) => {{
+            const resolvedPaymentId = paymentId || REQUEST_PAYLOAD.paymentId;
+            try {{
+              const target = new URL(COMPLETE_BASE_URL);
+              target.searchParams.set("payment_id", resolvedPaymentId);
+              window.location.replace(target.toString());
+            }} catch (_err) {{
+              const separator = COMPLETE_BASE_URL.includes("?") ? "&" : "?";
+              window.location.replace(`${{COMPLETE_BASE_URL}}${{separator}}payment_id=${{encodeURIComponent(resolvedPaymentId)}}`);
+            }}
+          }};
+
+          const openPaymentWindow = async () => {{
+            if (launched) return;
+            launched = true;
+            PAY_BUTTON.disabled = true;
+            setStatus("결제창을 여는 중...");
+            try {{
+              const response = await PortOne.requestPayment(REQUEST_PAYLOAD);
+              if (!response) {{
+                moveToCancel("empty_response");
+                return;
+              }}
+              if (response.code) {{
+                moveToCancel(String(response.code || "payment_error"));
+                return;
+              }}
+              const paymentId = response.paymentId || response.payment_id || REQUEST_PAYLOAD.paymentId;
+              moveToComplete(paymentId);
+            }} catch (error) {{
+              moveToCancel("payment_exception");
+            }}
+          }};
+
+          PAY_BUTTON.addEventListener("click", openPaymentWindow);
+          window.addEventListener("load", () => {{
+            setTimeout(openPaymentWindow, 200);
+          }});
+        </script>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
+
+
+@app.get("/api/billing/portone/complete/{session_id}")
+async def complete_portone_checkout(
+    request: Request,
+    session_id: str,
+    payment_id: str = "",
+):
+    """PortOne 결제 완료 검증 및 구독 반영"""
+    session = _get_portone_checkout_session_or_raise(session_id)
+    user_id = str(session.get("user_id") or "")
+    success_url = str(session.get("success_url") or "")
+    cancel_url = str(session.get("cancel_url") or "")
+    expected_amount = _to_int_safe(session.get("amount_krw"), default=PAID_PLAN_AMOUNT_KRW)
+    fallback_payment_id = str(session.get("payment_id") or "")
+    resolved_payment_id = str(payment_id or fallback_payment_id).strip()
+
+    if not user_id:
+        portone_checkout_sessions.pop(session_id, None)
+        raise HTTPException(status_code=400, detail="PortOne 결제 세션 사용자 정보가 유효하지 않습니다.")
+
+    if not success_url:
+        success_url = _build_redirect_url_from_request(request, "/pricing?checkout=success")
+    if not cancel_url:
+        cancel_url = _build_redirect_url_from_request(request, "/pricing?checkout=cancel")
+
+    if not resolved_payment_id:
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": "portone",
+                "status": "checkout_canceled",
+                "plan_tier": USAGE_FREE_PLAN,
+                "cancel_at_period_end": False,
+            },
+        )
+        _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+        portone_checkout_sessions.pop(session_id, None)
+        return RedirectResponse(
+            url=_append_query_params(cancel_url, {"checkout": "cancel", "reason": "missing_payment_id"}),
+            status_code=303,
+        )
+
+    try:
+        payment = await _fetch_portone_payment_by_id(resolved_payment_id)
+        payment_status = _extract_portone_payment_status(payment)
+        if payment_status != "PAID":
+            raise HTTPException(status_code=409, detail=f"PortOne 결제 상태가 완료가 아닙니다: {payment_status or 'UNKNOWN'}")
+
+        payment_amount = _extract_portone_total_amount(payment)
+        if payment_amount != expected_amount:
+            raise HTTPException(
+                status_code=409,
+                detail=f"결제 금액 검증 실패: expected={expected_amount}, actual={payment_amount}",
+            )
+
+        payment_currency = _extract_portone_payment_currency(payment)
+        if payment_currency and payment_currency != "KRW":
+            raise HTTPException(status_code=409, detail=f"지원하지 않는 결제 통화입니다: {payment_currency}")
+
+        customer_reference = _extract_portone_customer_reference(payment) or (session.get("email") or "")
+        current_period_end = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": "portone",
+                "customer_id": str(customer_reference)[:255] or resolved_payment_id,
+                "subscription_id": resolved_payment_id,
+                "price_id": f"portone_pro_{expected_amount}",
+                "status": "active",
+                "plan_tier": PAID_PLAN_TIER,
+                "current_period_end": current_period_end,
+                "cancel_at_period_end": False,
+                "checkout_completed_at": datetime.utcnow().isoformat(),
+            },
+        )
+        _set_user_plan_tier(user_id, PAID_PLAN_TIER)
+
+        redirect_url = _append_query_params(
+            success_url,
+            {
+                "checkout": "success",
+                "provider": "portone",
+                "payment_id": resolved_payment_id,
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=303)
+    except HTTPException as verify_err:
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": "portone",
+                "status": "checkout_canceled",
+                "plan_tier": USAGE_FREE_PLAN,
+                "cancel_at_period_end": False,
+            },
+        )
+        _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+        redirect_url = _append_query_params(
+            cancel_url,
+            {
+                "checkout": "cancel",
+                "provider": "portone",
+                "reason": (verify_err.detail if isinstance(verify_err.detail, str) else "verification_failed"),
+            },
+        )
+        return RedirectResponse(url=redirect_url, status_code=303)
+    finally:
+        portone_checkout_sessions.pop(session_id, None)
 
 
 @app.post("/api/billing/portal")
