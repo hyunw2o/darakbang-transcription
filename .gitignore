@@ -25,3 +25,10 @@ debug_venv/
 
 # Local tooling virtualenv
 .venv-pdf/
+
+# Mobile local env (never commit secrets)
+mobile/.env
+
+# Local generated artifacts
+mallog24-source-copyright.zip
+sessions/
