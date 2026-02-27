@@ -479,6 +479,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const BUSINESS_ADDRESS = process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || '12735, 경기도 광주시 초월읍 무들로 28'
   const REPRESENTATIVE_NAME = process.env.NEXT_PUBLIC_REPRESENTATIVE_NAME || '김현우'
   const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || '통신판매업 신고 면제 대상'
+  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'ours113814@gmail.com'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000
@@ -2042,6 +2043,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             <p>사업장주소: {BUSINESS_ADDRESS}</p>
             <p>대표: {REPRESENTATIVE_NAME}</p>
             <p>통신판매신고번호: {ECOMMERCE_REG_NUMBER}</p>
+            <p>비즈니스 문의 이메일: {SUPPORT_EMAIL}</p>
+            <p>1:1 문의 이메일: {SUPPORT_EMAIL}</p>
           </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.

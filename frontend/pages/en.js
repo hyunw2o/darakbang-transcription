@@ -479,6 +479,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const BUSINESS_ADDRESS = process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || '12735, 28 Mudeul-ro, Chowol-eup, Gwangju-si, Gyeonggi-do, Republic of Korea'
   const REPRESENTATIVE_NAME = process.env.NEXT_PUBLIC_REPRESENTATIVE_NAME || 'Hyunwoo Kim'
   const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || 'Exempt from e-commerce registration'
+  const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'ours113814@gmail.com'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
   const WARMUP_TIMEOUT_MS = 4000
@@ -2046,6 +2047,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
             <p>Business Address: {BUSINESS_ADDRESS}</p>
             <p>Representative (CEO): {REPRESENTATIVE_NAME}</p>
             <p>E-commerce Registration No.: {ECOMMERCE_REG_NUMBER}</p>
+            <p>Business Inquiry Email: {SUPPORT_EMAIL}</p>
+            <p>1:1 Inquiry Email: {SUPPORT_EMAIL}</p>
           </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.

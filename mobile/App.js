@@ -37,6 +37,17 @@ const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const FREE_MONTHLY_LIMIT_SECONDS = 10 * 60 * 60;
 const PRICING_URL = process.env.EXPO_PUBLIC_PRICING_URL || "https://mallog24.com/pricing";
 const OURS_URL = process.env.EXPO_PUBLIC_OURS_URL || "https://ours.mallog24.com";
+const BUSINESS_NAME = process.env.EXPO_PUBLIC_BUSINESS_NAME || "OURS";
+const BUSINESS_REG_NUMBER = process.env.EXPO_PUBLIC_BUSINESS_REG_NUMBER || "696-08-03518";
+const LANDLINE_PHONE = process.env.EXPO_PUBLIC_LANDLINE_PHONE || "준비중";
+const REPRESENTATIVE_NAME = process.env.EXPO_PUBLIC_REPRESENTATIVE_NAME || "김현우";
+const BUSINESS_ADDRESS = process.env.EXPO_PUBLIC_BUSINESS_ADDRESS || "12735, 경기도 광주시 초월읍 무들로 28";
+const BUSINESS_ADDRESS_EN =
+  process.env.EXPO_PUBLIC_BUSINESS_ADDRESS_EN
+  || process.env.EXPO_PUBLIC_BUSINESS_ADDRESS
+  || "28 Mudeul-ro, Chowol-eup, Gwangju-si, Gyeonggi-do, 12735, Republic of Korea";
+const ECOMMERCE_REG_NUMBER = process.env.EXPO_PUBLIC_ECOMMERCE_REG_NUMBER || "통신판매업 신고 면제 대상";
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || "ours113814@gmail.com";
 const AUTH_REQUEST_TIMEOUT_MS = Math.max(
   10000,
   Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 120000
@@ -719,6 +730,27 @@ const I18N = {
   },
 };
 
+const SUPPORT_CONTACT_KO = `문의: ${SUPPORT_EMAIL}`;
+const SUPPORT_CONTACT_EN = `Contact: ${SUPPORT_EMAIL}`;
+const SERVICE_INQUIRY_CONTACT_KO = `서비스 관련 문의: ${SUPPORT_EMAIL}`;
+const SERVICE_INQUIRY_CONTACT_EN = `Service inquiries: ${SUPPORT_EMAIL}`;
+const BUSINESS_DISCLOSURE_KO = [
+  `상호: ${BUSINESS_NAME}`,
+  `사업자등록번호: ${BUSINESS_REG_NUMBER}`,
+  `유선전화번호: ${LANDLINE_PHONE}`,
+  `사업장주소: ${BUSINESS_ADDRESS}`,
+  `대표: ${REPRESENTATIVE_NAME}`,
+  `통신판매신고번호: ${ECOMMERCE_REG_NUMBER}`,
+];
+const BUSINESS_DISCLOSURE_EN = [
+  `Company name: ${BUSINESS_NAME}`,
+  `Business registration no.: ${BUSINESS_REG_NUMBER}`,
+  `Landline: ${LANDLINE_PHONE}`,
+  `Business address: ${BUSINESS_ADDRESS_EN}`,
+  `Representative (CEO): ${REPRESENTATIVE_NAME}`,
+  `E-commerce registration no.: ${ECOMMERCE_REG_NUMBER}`,
+];
+
 const LEGAL_DOCUMENTS = {
   ko: {
     privacy: {
@@ -760,7 +792,7 @@ const LEGAL_DOCUMENTS = {
         },
         {
           title: "6. 문의",
-          body: ["문의: ours113814@gmail.com"],
+          body: [SUPPORT_CONTACT_KO],
         },
       ],
     },
@@ -801,27 +833,34 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "5. 이용자 책임",
+          title: "5. 사업자 및 결제 필수 고지",
+          body: [
+            ...BUSINESS_DISCLOSURE_KO,
+            `고객지원 이메일: ${SUPPORT_EMAIL}`,
+          ],
+        },
+        {
+          title: "6. 이용자 책임",
           body: [
             "업로드 자료에 대한 적법한 권리를 보유해야 하며, 타인 권리 침해 자료 업로드를 금지합니다.",
           ],
         },
         {
-          title: "6. 금지 행위",
+          title: "7. 금지 행위",
           body: [
             "서비스 우회/공격/비정상 자동화 트래픽, 무단 재판매, 역설계 등 운영을 저해하는 행위를 금지합니다.",
           ],
         },
         {
-          title: "7. 제한 및 면책",
+          title: "8. 제한 및 면책",
           body: [
             "약관 위반 또는 보안위험 시 이용이 제한될 수 있습니다.",
             "전사 결과는 보조 도구이며 최종 검토 책임은 이용자에게 있습니다.",
           ],
         },
         {
-          title: "8. 문의",
-          body: ["문의: ours113814@gmail.com"],
+          title: "9. 문의",
+          body: [SUPPORT_CONTACT_KO],
         },
       ],
     },
@@ -869,7 +908,14 @@ const LEGAL_DOCUMENTS = {
           title: "6. 공지 및 지원",
           body: [
             "주요 정책/장애/기능 변경은 웹/앱 공지로 안내합니다.",
-            "문의: ours113814@gmail.com",
+            SUPPORT_CONTACT_KO,
+          ],
+        },
+        {
+          title: "7. 사업자/결제 필수 고지",
+          body: [
+            ...BUSINESS_DISCLOSURE_KO,
+            `고객지원 이메일: ${SUPPORT_EMAIL}`,
           ],
         },
       ],
@@ -896,7 +942,7 @@ const LEGAL_DOCUMENTS = {
         {
           title: "3. 문의 채널",
           body: [
-            "서비스 관련 문의: ours113814@gmail.com",
+            SERVICE_INQUIRY_CONTACT_KO,
           ],
         },
       ],
@@ -969,7 +1015,7 @@ const LEGAL_DOCUMENTS = {
         },
         {
           title: "6. Contact",
-          body: ["Contact: ours113814@gmail.com"],
+          body: [SUPPORT_CONTACT_EN],
         },
       ],
     },
@@ -1010,27 +1056,34 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "5. User Responsibility",
+          title: "5. Business and Payment Mandatory Disclosure",
+          body: [
+            ...BUSINESS_DISCLOSURE_EN,
+            `Support email: ${SUPPORT_EMAIL}`,
+          ],
+        },
+        {
+          title: "6. User Responsibility",
           body: [
             "Users must have lawful rights to uploaded content and must not infringe third-party rights.",
           ],
         },
         {
-          title: "6. Prohibited Conduct",
+          title: "7. Prohibited Conduct",
           body: [
             "Abuse, attacks, bypass attempts, abnormal automation traffic, reverse engineering, and unauthorized resale are prohibited.",
           ],
         },
         {
-          title: "7. Restriction and Disclaimer",
+          title: "8. Restriction and Disclaimer",
           body: [
             "Access may be limited for policy violations or security risks.",
             "Generated outputs are assistive; users are responsible for final review and use.",
           ],
         },
         {
-          title: "8. Contact",
-          body: ["Contact: ours113814@gmail.com"],
+          title: "9. Contact",
+          body: [SUPPORT_CONTACT_EN],
         },
       ],
     },
@@ -1077,7 +1130,14 @@ const LEGAL_DOCUMENTS = {
           title: "6. Notice and Support",
           body: [
             "Major policy/feature/incident updates are announced via web or in-app notices.",
-            "Contact: ours113814@gmail.com",
+            SUPPORT_CONTACT_EN,
+          ],
+        },
+        {
+          title: "7. Business/Payment Mandatory Disclosure",
+          body: [
+            ...BUSINESS_DISCLOSURE_EN,
+            `Support email: ${SUPPORT_EMAIL}`,
           ],
         },
       ],
@@ -1104,7 +1164,7 @@ const LEGAL_DOCUMENTS = {
         {
           title: "3. Support Channel",
           body: [
-            "Service inquiries: ours113814@gmail.com",
+            SERVICE_INQUIRY_CONTACT_EN,
           ],
         },
       ],
