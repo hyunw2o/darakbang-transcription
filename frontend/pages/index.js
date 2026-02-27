@@ -475,10 +475,10 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const OURS_COMPANY_POLICY_URL = `${OURS_URL}/company-policy`
   const BUSINESS_NAME = process.env.NEXT_PUBLIC_BUSINESS_NAME || 'OURS'
   const BUSINESS_REG_NUMBER = process.env.NEXT_PUBLIC_BUSINESS_REG_NUMBER || '696-08-03518'
-  const LANDLINE_PHONE = process.env.NEXT_PUBLIC_LANDLINE_PHONE || '준비중'
+  const LANDLINE_PHONE = process.env.NEXT_PUBLIC_LANDLINE_PHONE || '010-4798-3619'
   const BUSINESS_ADDRESS = process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || '12735, 경기도 광주시 초월읍 무들로 28'
   const REPRESENTATIVE_NAME = process.env.NEXT_PUBLIC_REPRESENTATIVE_NAME || '김현우'
-  const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || '통신판매업 신고 면제 대상'
+  const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || '제 2026-경기광주-0442 호'
   const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'ours113814@gmail.com'
   const AUTH_TOKEN_KEY = 'mallog24_access_token'
   const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
