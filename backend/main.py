@@ -3708,9 +3708,9 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     title = "PortOne Checkout" if is_en else "PortOne 결제창"
     headline = "Open live checkout" if is_en else "실결제창 열기"
     description = (
-        "If the popup does not open automatically, tap the button once."
+        "Tap the button below to open the payment window. Browser security may block auto-open."
         if is_en
-        else "자동으로 결제창이 열리지 않으면 버튼을 눌러 진행하세요."
+        else "아래 버튼을 눌러 결제창을 여세요. 브라우저 보안 정책으로 자동 실행은 제한됩니다."
     )
     button_label = "Open Checkout" if is_en else "결제창 열기"
     cancel_label = "Cancel" if is_en else "취소"
@@ -3827,6 +3827,33 @@ async def render_portone_checkout_page(request: Request, session_id: str):
           const PAY_BUTTON = document.getElementById("payButton");
           let launched = false;
 
+          const LOADING_TEXT = {json.dumps("Opening payment window..." if is_en else "결제창을 여는 중...", ensure_ascii=False)};
+          const RETRY_TEXT = {json.dumps("Retry opening checkout" if is_en else "결제창 다시 열기", ensure_ascii=False)};
+          const SDK_MISSING_TEXT = {json.dumps(
+              "PortOne SDK did not load. Please refresh and try again."
+              if is_en else
+              "PortOne SDK를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.",
+              ensure_ascii=False
+          )};
+          const EMPTY_RESPONSE_TEXT = {json.dumps(
+              "No response from checkout. Please try again."
+              if is_en else
+              "결제 응답을 받지 못했습니다. 다시 시도해 주세요.",
+              ensure_ascii=False
+          )};
+          const FAILURE_PREFIX_TEXT = {json.dumps(
+              "Payment launch failed"
+              if is_en else
+              "결제창 호출 실패",
+              ensure_ascii=False
+          )};
+          const EXCEPTION_TEXT = {json.dumps(
+              "An unexpected error occurred while opening checkout."
+              if is_en else
+              "결제창 호출 중 예기치 않은 오류가 발생했습니다.",
+              ensure_ascii=False
+          )};
+
           const setStatus = (value) => {{
             if (STATUS_TEXT) STATUS_TEXT.textContent = value || "";
           }};
@@ -3859,30 +3886,45 @@ async def render_portone_checkout_page(request: Request, session_id: str):
 
           const openPaymentWindow = async () => {{
             if (launched) return;
+            if (!window.PortOne || typeof window.PortOne.requestPayment !== "function") {{
+              setStatus(SDK_MISSING_TEXT);
+              return;
+            }}
             launched = true;
             PAY_BUTTON.disabled = true;
-            setStatus("결제창을 여는 중...");
+            PAY_BUTTON.textContent = LOADING_TEXT;
+            setStatus(LOADING_TEXT);
             try {{
               const response = await PortOne.requestPayment(REQUEST_PAYLOAD);
               if (!response) {{
-                moveToCancel("empty_response");
+                setStatus(EMPTY_RESPONSE_TEXT);
+                launched = false;
+                PAY_BUTTON.disabled = false;
+                PAY_BUTTON.textContent = RETRY_TEXT;
                 return;
               }}
               if (response.code) {{
-                moveToCancel(String(response.code || "payment_error"));
+                const reasonCode = String(response.code || "payment_error");
+                const reasonMessage = String(response.message || "");
+                const detail = reasonMessage ? `${{reasonCode}} - ${{reasonMessage}}` : reasonCode;
+                setStatus(`${{FAILURE_PREFIX_TEXT}}: ${{detail}}`);
+                launched = false;
+                PAY_BUTTON.disabled = false;
+                PAY_BUTTON.textContent = RETRY_TEXT;
                 return;
               }}
               const paymentId = response.paymentId || response.payment_id || REQUEST_PAYLOAD.paymentId;
               moveToComplete(paymentId);
             }} catch (error) {{
-              moveToCancel("payment_exception");
+              const detail = error?.message ? `${{EXCEPTION_TEXT}} (${{error.message}})` : EXCEPTION_TEXT;
+              setStatus(detail);
+              launched = false;
+              PAY_BUTTON.disabled = false;
+              PAY_BUTTON.textContent = RETRY_TEXT;
             }}
           }};
 
           PAY_BUTTON.addEventListener("click", openPaymentWindow);
-          window.addEventListener("load", () => {{
-            setTimeout(openPaymentWindow, 200);
-          }});
         </script>
       </body>
     </html>
