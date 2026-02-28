@@ -1252,7 +1252,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         <title>mallog24 - AI Speech to Text</title>
         <meta
           name="description"
-          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 무료 월 10시간, Pro 월 8,000원 무제한."
+          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
         />
       </Head>
 
@@ -1290,7 +1290,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   무료 월 10시간
                 </span>
                 <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  Pro 월 8,000원 무제한
+                  Pro 월 8,800원(VAT 포함) 무제한
                 </span>
                 <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
                   오픈 베타

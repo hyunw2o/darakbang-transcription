@@ -162,7 +162,7 @@ const I18N = {
     authLanding: {
       badges: {
         free: "무료 월 10시간",
-        pro: "Pro 월 8,000원 무제한",
+        pro: "Pro 월 8,800원(VAT 포함) 무제한",
         beta: "오픈 베타",
       },
       hero: "녹음만 올리세요. 바로 쓰는 구조화 녹취 문서가 나옵니다.",
@@ -450,7 +450,7 @@ const I18N = {
     authLanding: {
       badges: {
         free: "Free 10h/mo",
-        pro: "Pro KRW 8,000 unlimited",
+        pro: "Pro KRW 8,800 (VAT included) unlimited",
         beta: "Open beta",
       },
       hero: "Upload your recording. Get a structured transcript you can use right away.",
@@ -813,7 +813,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "계정·세션 관리 책임은 이용자에게 있으며, 무료 플랜은 월간 사용량 한도가 적용됩니다.",
             "유료 상품은 상품명, 월 이용요금, 이용기간, 제공기능을 서비스 화면에 명시합니다.",
-            "현재 기준 유료 상품은 mallog24 Pro 월간 구독(월 8,000원)이며 결제 승인 시점부터 1개월 단위 자동 갱신됩니다.",
+            "현재 기준 유료 상품은 mallog24 Pro 월간 구독(월 8,800원, VAT 포함)이며 결제 승인 시점부터 1개월 단위 자동 갱신됩니다.",
           ],
         },
         {
@@ -1036,7 +1036,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "Users are responsible for account/session security. Free plans are subject to monthly usage quotas.",
             "Paid products disclose product name, monthly fee, service period, and included features in the UI.",
-            "Current baseline paid product is mallog24 Pro Monthly Subscription (KRW 8,000/month), auto-renewed every month after payment approval.",
+            "Current baseline paid product is mallog24 Pro Monthly Subscription (KRW 8,800/month, VAT included), auto-renewed every month after payment approval.",
           ],
         },
         {

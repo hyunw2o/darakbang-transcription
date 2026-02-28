@@ -173,7 +173,7 @@ PORTONE_CHANNEL_KEY = (os.getenv("PORTONE_CHANNEL_KEY") or "").strip()
 PORTONE_API_SECRET = (os.getenv("PORTONE_API_SECRET") or "").strip()
 PORTONE_WEBHOOK_SECRET = (os.getenv("PORTONE_WEBHOOK_SECRET") or "").strip()
 PORTONE_API_BASE_URL = (os.getenv("PORTONE_API_BASE_URL") or "https://api.portone.io").strip().rstrip("/")
-PAID_PLAN_AMOUNT_KRW = max(100, int(os.getenv("PAID_PLAN_AMOUNT_KRW", "8000")))
+PAID_PLAN_AMOUNT_KRW = max(100, int(os.getenv("PAID_PLAN_AMOUNT_KRW", "8800")))
 PAID_PLAN_PRODUCT_NAME_KO = (os.getenv("PAID_PLAN_PRODUCT_NAME_KO") or "mallog24 Pro 월간 구독").strip()
 PAID_PLAN_PRODUCT_NAME_EN = (
     os.getenv("PAID_PLAN_PRODUCT_NAME_EN") or "mallog24 Pro Monthly Subscription"
@@ -1035,12 +1035,14 @@ def _is_tosspayments_billing_enabled() -> bool:
 def _get_checkout_mode(provider: str | None = None) -> str:
     resolved_provider = provider or _get_billing_provider_or_raise()
 
+    # Always honor explicit test mode first, even if live credentials are present.
+    if BILLING_TEST_MODE:
+        return "mock"
+
     if resolved_provider == "portone" and _is_portone_billing_enabled():
         return "live"
     if resolved_provider == "stripe" and stripe is not None and STRIPE_SECRET_KEY and STRIPE_PRICE_ID_PRO:
         return "live"
-    if BILLING_TEST_MODE:
-        return "mock"
     return "disabled"
 
 

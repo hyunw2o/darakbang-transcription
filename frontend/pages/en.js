@@ -1252,7 +1252,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         <title>mallog24 - AI Speech to Text</title>
         <meta
           name="description"
-          content="AI transcription for sermons, calls, and meetings with structured output. Free 10 hours/month, Pro KRW 8,000/month unlimited."
+          content="AI transcription for sermons, calls, and meetings with structured output. Free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
         />
       </Head>
 
@@ -1290,7 +1290,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                   Free 10h/month
                 </span>
                 <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  Pro KRW 8,000/month Unlimited
+                  Pro KRW 8,800/month (VAT included) Unlimited
                 </span>
                 <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
                   Open Beta

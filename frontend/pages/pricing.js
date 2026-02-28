@@ -252,7 +252,8 @@ export default function PricingPage() {
             </div>
             <div className="nm-concave p-4 border-l-4 border-nm-accent">
               <p className="text-xs text-nm-text-secondary">Pro</p>
-              <p className="text-xl font-bold mt-1">월 8,000원</p>
+              <p className="text-xl font-bold mt-1">월 8,800원 (VAT 포함)</p>
+              <p className="text-[11px] text-nm-text-secondary mt-1">공급가 8,000원 + 부가세 10%(800원)</p>
               <p className="text-xs text-nm-text-secondary mt-2">고한도/우선 처리 · 월간 자동갱신</p>
             </div>
           </div>
@@ -262,7 +263,7 @@ export default function PricingPage() {
             <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
               <li>상품명: mallog24 Pro 월간 구독</li>
               <li>이용기간: 결제 승인 시점부터 1개월 단위 자동 갱신</li>
-              <li>이용요금: 월 8,000원 (결제창 표시 금액 기준)</li>
+              <li>이용요금: 월 8,800원 (VAT 포함, 결제창 표시 금액 기준)</li>
               <li>제공기능: 무료 플랜 대비 상향 사용량 및 우선 처리, 구독 관리 기능</li>
             </ul>
           </div>

@@ -253,7 +253,8 @@ export default function PricingEnPage() {
             </div>
             <div className="nm-concave p-4 border-l-4 border-nm-accent">
               <p className="text-xs text-nm-text-secondary">Pro</p>
-              <p className="text-xl font-bold mt-1">KRW 8,000 / month</p>
+              <p className="text-xl font-bold mt-1">KRW 8,800 / month (VAT included)</p>
+              <p className="text-[11px] text-nm-text-secondary mt-1">Base KRW 8,000 + VAT 10% (KRW 800)</p>
               <p className="text-xs text-nm-text-secondary mt-2">Higher quota / priority · auto-renew monthly</p>
             </div>
           </div>
@@ -263,7 +264,7 @@ export default function PricingEnPage() {
             <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
               <li>Product name: mallog24 Pro Monthly Subscription</li>
               <li>Service period: 1-month auto-renew cycle from payment approval time</li>
-              <li>Price: KRW 8,000 per month (final amount shown at checkout)</li>
+              <li>Price: KRW 8,800 per month (VAT included, final amount shown at checkout)</li>
               <li>Included: higher usage limits, prioritized processing, and subscription management</li>
             </ul>
           </div>
