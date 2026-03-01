@@ -28,6 +28,7 @@ const API_FALLBACK_URLS = String(
   .filter(Boolean);
 const SUPABASE_URL = String(process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const AUTH_TOKEN_KEY = "mallog24_access_token";
+const AUTH_SESSION_EXPIRES_AT_KEY = "mallog24_session_expires_at_ms";
 const UI_THEME_KEY = "mallog24_mobile_ui_theme";
 const UI_THEME_MODE_KEY = "mallog24_mobile_ui_theme_mode";
 const PRIVACY_CONSENT_KEY = "mallog24_privacy_policy_consent_version";
@@ -210,6 +211,9 @@ const I18N = {
     continueGoogle: "Google로 계속하기",
     continueKakao: "Kakao로 계속하기",
     defaultUser: "로그인 사용자",
+    sessionRemainingLabel: "세션 남은 시간",
+    sessionChecking: "확인 중",
+    sessionExpired: "만료됨",
     logout: "로그아웃",
     tabs: {
       transcribe: "변환",
@@ -498,6 +502,9 @@ const I18N = {
     continueGoogle: "Continue with Google",
     continueKakao: "Continue with Kakao",
     defaultUser: "Signed-in user",
+    sessionRemainingLabel: "Session expires in",
+    sessionChecking: "Checking...",
+    sessionExpired: "Expired",
     logout: "Log out",
     tabs: {
       transcribe: "Transcribe",
@@ -1315,7 +1322,7 @@ function inferMimeFromAsset(asset) {
 }
 
 function parseAuthParamsFromUrl(url) {
-  if (!url) return { accessToken: "", oauthError: "" };
+  if (!url) return { accessToken: "", oauthError: "", expiresInSeconds: 0 };
 
   const parts = url.split("#");
   const beforeHash = parts[0] || "";
@@ -1333,8 +1340,13 @@ function parseAuthParamsFromUrl(url) {
     queryParams.get("error_description") ||
     queryParams.get("error") ||
     "";
+  const expiresInRaw =
+    hashParams.get("expires_in") ||
+    queryParams.get("expires_in") ||
+    "";
+  const expiresInSeconds = Math.max(0, parseInt(expiresInRaw, 10) || 0);
 
-  return { accessToken, oauthError };
+  return { accessToken, oauthError, expiresInSeconds };
 }
 
 function buildDirectOauthUrl(provider, redirectTo) {
@@ -1385,6 +1397,41 @@ function formatSecondsToHourMinute(totalSeconds) {
   const minutes = Math.floor((safe % 3600) / 60);
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function formatSecondsToHourMinuteSecond(totalSeconds) {
+  const safe = Math.max(0, Number(totalSeconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function parseJwtExpMs(token) {
+  try {
+    const payload = String(token || "").split(".")[1] || "";
+    if (!payload) return 0;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+
+    let decodedText = "";
+    if (typeof globalThis?.atob === "function") {
+      decodedText = globalThis.atob(padded);
+    } else if (typeof Buffer !== "undefined" && typeof Buffer.from === "function") {
+      decodedText = Buffer.from(padded, "base64").toString("utf-8");
+    } else {
+      return 0;
+    }
+
+    const parsed = JSON.parse(decodedText);
+    const exp = Number(parsed?.exp) || 0;
+    if (!exp) return 0;
+    return exp * 1000;
+  } catch {
+    return 0;
+  }
 }
 
 function escapeXml(value) {
@@ -1654,6 +1701,8 @@ function App() {
 
   const [authToken, setAuthToken] = useState("");
   const [authUser, setAuthUser] = useState(null);
+  const [sessionExpiresAtMs, setSessionExpiresAtMs] = useState(0);
+  const [sessionNowMs, setSessionNowMs] = useState(Date.now());
   const [usage, setUsage] = useState(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [billingStatus, setBillingStatus] = useState(null);
@@ -1808,10 +1857,26 @@ function App() {
   );
   const planLabel = copy.planLabels?.[usagePlan] || usagePlan;
   const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
+  const sessionRemainingSeconds = sessionExpiresAtMs
+    ? Math.max(0, Math.floor((sessionExpiresAtMs - sessionNowMs) / 1000))
+    : 0;
+  const sessionRemainingLabel = !sessionExpiresAtMs
+    ? copy.sessionChecking
+    : sessionRemainingSeconds > 0
+      ? formatSecondsToHourMinuteSecond(sessionRemainingSeconds)
+      : copy.sessionExpired;
 
   useEffect(() => {
     setOpenSettingsMenu("");
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !sessionExpiresAtMs) return undefined;
+    const intervalId = setInterval(() => {
+      setSessionNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [isLoggedIn, sessionExpiresAtMs]);
 
   useEffect(() => {
     if (activeTab !== "transcribe") {
@@ -1929,6 +1994,8 @@ function App() {
     invalidatePollingSession();
     setAuthToken("");
     setAuthUser(null);
+    setSessionExpiresAtMs(0);
+    setSessionNowMs(Date.now());
     setUsage(null);
     setBillingStatus(null);
     setBillingActionLoading("");
@@ -1941,7 +2008,7 @@ function App() {
     setRecordDrafts({});
     setTaskStateText("");
     if (message) setNotice(message);
-    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
   };
 
   const fetchUsage = async (token = authToken, { quiet = false } = {}) => {
@@ -2070,7 +2137,14 @@ function App() {
 
   const hydrateWithToken = async (
     token,
-    { successMessage = "", userHint = null, verifyUser = true, loadWorkspace = false } = {}
+    {
+      successMessage = "",
+      userHint = null,
+      verifyUser = true,
+      loadWorkspace = false,
+      sessionHintSeconds = 0,
+      sessionHintExpiresAtMs = 0,
+    } = {}
   ) => {
     try {
       const shouldVerifyUser = verifyUser || !userHint;
@@ -2081,6 +2155,21 @@ function App() {
       setAuthToken(token);
       setAuthUser(userData);
       await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+
+      const normalizedHintExpiresAtMs = Math.max(0, Number(sessionHintExpiresAtMs) || 0);
+      const normalizedHintSeconds = Math.max(0, Number(sessionHintSeconds) || 0);
+      const tokenExpMs = parseJwtExpMs(token);
+      const resolvedSessionExpiresAtMs = normalizedHintExpiresAtMs || tokenExpMs || (
+        normalizedHintSeconds > 0 ? Date.now() + (normalizedHintSeconds * 1000) : 0
+      );
+      if (resolvedSessionExpiresAtMs > 0) {
+        setSessionExpiresAtMs(resolvedSessionExpiresAtMs);
+        setSessionNowMs(Date.now());
+        await AsyncStorage.setItem(
+          AUTH_SESSION_EXPIRES_AT_KEY,
+          String(Math.floor(resolvedSessionExpiresAtMs))
+        );
+      }
 
       if (loadWorkspace) {
         loadWorkspaceInBackground(token);
@@ -2095,7 +2184,7 @@ function App() {
   };
 
   const handleDeepLink = async (url) => {
-    const { accessToken, oauthError } = parseAuthParamsFromUrl(url);
+    const { accessToken, oauthError, expiresInSeconds } = parseAuthParamsFromUrl(url);
 
     if (oauthError) {
       setError(`${copy.errors.socialFailedPrefix}: ${oauthError}`);
@@ -2112,6 +2201,7 @@ function App() {
         userHint,
         verifyUser: false,
         loadWorkspace: true,
+        sessionHintSeconds: expiresInSeconds,
       });
     } catch (e) {
       setError(e.message || copy.errors.socialSessionFailed);
@@ -2155,12 +2245,25 @@ function App() {
 
         if (!consumedOauthToken) {
           const savedToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+          const savedSessionExpiresAt = await AsyncStorage.getItem(AUTH_SESSION_EXPIRES_AT_KEY);
+          const parsedSavedSessionExpiresAt = Math.max(
+            0,
+            parseInt(String(savedSessionExpiresAt || ""), 10) || 0
+          );
+          if (parsedSavedSessionExpiresAt > 0) {
+            setSessionExpiresAtMs(parsedSavedSessionExpiresAt);
+            setSessionNowMs(Date.now());
+          }
           if (savedToken) {
-            await hydrateWithToken(savedToken, { verifyUser: true, loadWorkspace: true });
+            await hydrateWithToken(savedToken, {
+              verifyUser: true,
+              loadWorkspace: true,
+              sessionHintExpiresAtMs: parsedSavedSessionExpiresAt,
+            });
           }
         }
       } catch {
-        await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+        await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
       } finally {
         if (active) setBootLoading(false);
       }
@@ -2219,6 +2322,7 @@ function App() {
           userHint: data?.user || null,
           verifyUser: false,
           loadWorkspace: true,
+          sessionHintSeconds: Number(data?.expires_in) || 0,
         });
       } else {
         setNotice(data?.message || copy.notices.signupDone);
@@ -3282,6 +3386,9 @@ function App() {
               <View style={styles.userInfo}>
                 <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>{authUser?.email || copy.defaultUser}</Text>
                 <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
+                <Text style={[styles.userSession, { color: activeTheme.textSecondary }]}>
+                  {copy.sessionRemainingLabel}: {sessionRemainingLabel}
+                </Text>
               </View>
               <NmPressable style={[styles.logoutButton, { borderColor: activeTheme.inputBorder }]} onPress={handleLogout}>
                 <Text style={[styles.logoutButtonText, { color: activeTheme.errorText }]}>{copy.logout}</Text>
@@ -4516,6 +4623,12 @@ const styles = StyleSheet.create({
     color: NM.textSecondary,
     fontWeight: "600",
     fontSize: 11,
+  },
+  userSession: {
+    marginTop: 2,
+    color: NM.textSecondary,
+    fontWeight: "600",
+    fontSize: 10,
   },
   logoutButton: {
     borderRadius: 999,

@@ -459,6 +459,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const [recordDrafts, setRecordDrafts] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
   const [savingCategory, setSavingCategory] = useState('')
+  const [sessionExpiresAtMs, setSessionExpiresAtMs] = useState(0)
+  const [sessionNowMs, setSessionNowMs] = useState(Date.now())
 
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
@@ -485,18 +487,34 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const WARMUP_TIMEOUT_MS = 4000
   const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
 
-  const isJwtExpired = (token) => {
+  const parseJwtExpMs = (token) => {
     try {
       const payload = token.split('.')[1]
-      if (!payload) return false
+      if (!payload) return 0
       const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
       const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
       const decoded = JSON.parse(window.atob(padded))
-      if (!decoded?.exp || typeof decoded.exp !== 'number') return false
-      return Date.now() >= (decoded.exp * 1000) - AUTH_TOKEN_EXP_LEEWAY_MS
+      if (!decoded?.exp || typeof decoded.exp !== 'number') return 0
+      return decoded.exp * 1000
     } catch {
-      return false
+      return 0
     }
+  }
+
+  const isJwtExpired = (token) => {
+    const expMs = parseJwtExpMs(token)
+    if (!expMs) return false
+    return Date.now() >= expMs - AUTH_TOKEN_EXP_LEEWAY_MS
+  }
+
+  const formatSessionRemaining = (remainingSeconds) => {
+    const safe = Math.max(0, Number(remainingSeconds) || 0)
+    const hours = Math.floor(safe / 3600)
+    const minutes = Math.floor((safe % 3600) / 60)
+    const seconds = safe % 60
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+    if (minutes > 0) return `${minutes}m ${seconds}s`
+    return `${seconds}s`
   }
 
   const warmUpBackend = () => {
@@ -522,10 +540,13 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     if (oauthAccessToken) {
       if (isJwtExpired(oauthAccessToken)) {
         window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+        setSessionExpiresAtMs(0)
         setError('Your session has expired. Please sign in again.')
       } else {
         setAuthToken(oauthAccessToken)
         window.sessionStorage.setItem(AUTH_TOKEN_KEY, oauthAccessToken)
+        setSessionExpiresAtMs(parseJwtExpMs(oauthAccessToken))
+        setSessionNowMs(Date.now())
         fetchBootstrap(oauthAccessToken)
         setNotice('Social sign-in completed.')
       }
@@ -534,8 +555,11 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (savedToken) {
         if (isJwtExpired(savedToken)) {
           window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+          setSessionExpiresAtMs(0)
         } else {
           setAuthToken(savedToken)
+          setSessionExpiresAtMs(parseJwtExpMs(savedToken))
+          setSessionNowMs(Date.now())
           fetchBootstrap(savedToken)
         }
       }
@@ -554,6 +578,23 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!authToken || !sessionExpiresAtMs) return undefined
+    const intervalId = window.setInterval(() => {
+      setSessionNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(intervalId)
+  }, [authToken, sessionExpiresAtMs])
+
+  const sessionRemainingSeconds = sessionExpiresAtMs
+    ? Math.max(0, Math.floor((sessionExpiresAtMs - sessionNowMs) / 1000))
+    : 0
+  const sessionRemainingLabel = !sessionExpiresAtMs
+    ? 'Checking...'
+    : sessionRemainingSeconds > 0
+      ? formatSessionRemaining(sessionRemainingSeconds)
+      : 'Expired'
 
   const getAuthHeaders = (token = authToken) => {
     if (!token) return {}
@@ -642,6 +683,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       setRecordDrafts({})
       setShowHistory(false)
       setShowRecords(false)
+      setSessionExpiresAtMs(0)
       window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
       setError(e?.message || 'Session expired.')
       console.error('Failed to bootstrap auth state', e)
@@ -973,6 +1015,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (data.access_token) {
         setAuthToken(data.access_token)
         window.sessionStorage.setItem(AUTH_TOKEN_KEY, data.access_token)
+        setSessionExpiresAtMs(parseJwtExpMs(data.access_token))
+        setSessionNowMs(Date.now())
         setAuthUser(data.user || null)
         setHistory([])
         setSavedRecords([])
@@ -1034,6 +1078,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setRecordDrafts({})
     setShowHistory(false)
     setShowRecords(false)
+    setSessionExpiresAtMs(0)
     setError(null)
     window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
     setNotice('You have been logged out.')
@@ -1472,6 +1517,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
                 <p className="text-xs text-nm-text-secondary">Signed in as</p>
                 <p className="text-sm font-semibold text-nm-text-primary">
                   {authUser?.email || 'Authenticated user'}
+                </p>
+                <p className="text-[11px] text-nm-text-secondary mt-1">
+                  Session expires in: {sessionRemainingLabel}
                 </p>
               </div>
               <button
