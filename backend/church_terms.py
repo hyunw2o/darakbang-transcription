@@ -80,6 +80,7 @@ DARAKBANG_CORE = [
     "RUTC", # Remnant Training Unity Center
     "RTS",  # Remnant Theological Seminary
     "RSTS", # Remnant Summit Training School
+    "RBS",  # Remnant Bible School / context-dependent abbreviation
     "RVS",  # Remnant Vision School
     "RPS",  # Remnant Parents School
     "RLS",  # Remnant Leader School
@@ -190,6 +191,9 @@ COMMON_MISTAKES = {
     "R S T S": "RSTS",
     "알 에스 티 에스": "RSTS",
     "알에스티에스": "RSTS",
+    "R B S": "RBS",
+    "알 비 에스": "RBS",
+    "알비에스": "RBS",
     "R V S": "RVS",
     "알 브이 에스": "RVS",
     "알브이에스": "RVS",
@@ -235,6 +239,10 @@ COMMON_MISTAKES = {
     "부 교육자": "부교육자",
     "임만누엘": "임마누엘",
     "임만": "임마누엘",
+    "D 모델": "디모데",
+    "D모델": "디모데",
+    "디 모델": "디모데",
+    "디모델": "디모데",
     "최책감": "죄책감",
     "최책": "죄책",
     "대희": "대위",
@@ -633,6 +641,7 @@ EN_COMMON_CORRECTIONS = {
     "rvis": "RVIS",
     "rts": "RTS",
     "rsts": "RSTS",
+    "rbs": "RBS",
     "rvs": "RVS",
     "rps": "RPS",
     "rls": "RLS",
@@ -752,7 +761,7 @@ def get_gemini_prompt():
 
 [필수 용어]
 237, 5000, 237나라, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
-드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 앉은뱅이
 (이삼칠→237, 칠칠칠→777, 오천종족→5000종족 등 숫자/영어 표기 유지)
 
@@ -780,7 +789,7 @@ def get_gemini_prompt():
    - 예: '삼오늘/세오늘/사모늘/3 오늘'처럼 들리면 문맥상 동일하면 '3오늘'로 표기하라.
    - 예: '포럼망'처럼 들리면 문맥상 동일하면 '포럼방'으로 표기하라.
    - 혼동어는 기계적으로 치환하지 말고 문맥으로 구분하라:
-     결재/결제(승인 vs 지불), 낫다/낳다/낮다(회복 vs 출산 vs 높이 반대), 안/않(부정 부사 vs 용언 부정), 되/돼(되어의 축약), 웬/왠(어찌 된 vs 왜인지), 3오늘/삼오늘/세오늘/사모늘(숫자 표기 우선), 포럼방/포럼망, 알리/REA(일반 인명·브랜드는 알리 유지, 약어 맥락에서만 REA), 수련의/수련회(의료 인력 맥락=수련의, 교회 집회 맥락=수련회), 노회/노예(교단 회의 맥락=노회), 유초등부/유초동부(교회 부서 맥락=유초등부), 교역자/교육자(목회·사역 맥락=교역자, 학교·수업 맥락=교육자), 부교역자/부교육자(목회 보직 맥락=부교역자), 신방/심방(교회 방문 사역 맥락=심방), 쉬고와/기도(예배·마무리·기도 안내 맥락=기도), 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림
+     결재/결제(승인 vs 지불), 낫다/낳다/낮다(회복 vs 출산 vs 높이 반대), 안/않(부정 부사 vs 용언 부정), 되/돼(되어의 축약), 웬/왠(어찌 된 vs 왜인지), 3오늘/삼오늘/세오늘/사모늘(숫자 표기 우선), 포럼방/포럼망, 알리/REA(일반 인명·브랜드는 알리 유지, 약어 맥락에서만 REA), 수련의/수련회(의료 인력 맥락=수련의, 교회 집회 맥락=수련회), 노회/노예(교단 회의 맥락=노회), 유초등부/유초동부(교회 부서 맥락=유초등부), 교역자/교육자(목회·사역 맥락=교역자, 학교·수업 맥락=교육자), 부교역자/부교육자(목회 보직 맥락=부교역자), 신방/심방(교회 방문 사역 맥락=심방), 쉬고와/기도(예배·마무리·기도 안내 맥락=기도), 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS, 디모데/D 모델
    - '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하라.
    - '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 절대 교회명으로 바꾸지 마라.
    - 발음이 비슷한 단어 중 문맥에 맞는 것을 선택하라.
@@ -840,7 +849,7 @@ def get_gemini_content_prompt():
 [추가 규칙]
 1. 발음이 불명확하거나 음성인식이 부정확한 부분은 반드시 문맥을 고려하여 올바른 단어로 교정하라.
 2. 추임새('예,', '자,', '아,', '어,', '응,', '네,')만 삭제하되, 실제 내용 문장은 절대 삭제하지 마라.
-3. '올해/오래', '결재/결제', '낫다/낳다/낮다', '안/않', '되/돼', '웬/왠(특히 왠지)', '3오늘/삼오늘(세오늘/사모늘)', '포럼방/포럼망', '알리/REA', '수련의/수련회', '노회/노예', '유초등부/유초동부', '교역자/교육자', '부교역자/부교육자', '신방/심방', '쉬고와/기도', '대위/대희', '임마누엘/임만', '죄책감/최책감', '네피림/레피림'은 반드시 문맥으로 구분하라.
+3. '올해/오래', '결재/결제', '낫다/낳다/낮다', '안/않', '되/돼', '웬/왠(특히 왠지)', '3오늘/삼오늘(세오늘/사모늘)', '포럼방/포럼망', '알리/REA', '수련의/수련회', '노회/노예', '유초등부/유초동부', '교역자/교육자', '부교역자/부교육자', '신방/심방', '쉬고와/기도', '대위/대희', '임마누엘/임만', '죄책감/최책감', '네피림/레피림', 'RBS/RVS', '디모데/D 모델'은 반드시 문맥으로 구분하라.
 4. '앉은뱅이'는 유사 발음(안즌뱅이/안은뱅이/앉은 뱅이)으로 들어와도 문맥상 동일하면 '앉은뱅이'로 교정하라.
 5. '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 6. 매우 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 음절 단위로 끊어 문맥을 복원하고 누락 없이 기록하라.
@@ -884,7 +893,7 @@ def get_gemini_correction_prompt():
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
   237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중, 앉은뱅이
   Heavenly, Thronely, Eternally, TCK, CCK, NCK, REA, RRTS
-  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
   이삼칠→237, 칠칠칠→777, 오천종족→5000종족 (숫자/영어 표기 유지)
 - 음성인식 오류를 문맥에 맞게 교정하라:
   드로우게 교회/드로에게 교회→드로아교회, 하베스터 선교 교회→하베스터선교교회, 미션 홈→미션홈, 태중미션홈→태중 미션홈, 기도 수첩→기도수첩, 아수르→앗수르, 유락민/노량민→유랑민
@@ -893,7 +902,7 @@ def get_gemini_correction_prompt():
   삼오늘/세오늘/사모늘/삼 오늘/세 오늘→3오늘
   안즌뱅이/안은뱅이/앉은 뱅이→앉은뱅이
   '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 유지하고 교회명으로 치환하지 마라.
-  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘/세오늘/사모늘, 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림은 기계적으로 치환하지 말고 문맥으로 구분
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘/세오늘/사모늘, 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS, 디모데/D 모델은 기계적으로 치환하지 말고 문맥으로 구분
   (연도/시점=올해, 기간/오랜 시간=오래 / 승인=결재, 지불=결제 / 회복=낫다, 출산=낳다, 높이 반대=낮다 / 숫자 의미면 3오늘 / 모임 공간 의미면 포럼방 / '알리'는 인명·브랜드·일반 고유명사면 유지, 선교 약어를 철자로 말한 맥락일 때만 REA / 의료 인력 맥락=수련의, 교회 집회 맥락=수련회 / 교단 회의 맥락=노회 / 교회 부서 맥락=유초등부 / 목회·사역 맥락=교역자·부교역자 / 학교·수업 맥락=교육자·부교육자 / 교회 방문 사역 맥락=심방 / 예배 마무리·기도 안내 맥락=기도)
 - 인명 교정: 김근이→김건희, 김소현→김소영, 이지훈/이지호→이주현, 장현승→장한샘
 - 성경 구절은 반드시 "책약어장:절" 형식으로 표기하라. (예: 행1:8, 시23:1, 롬8:28)
@@ -1035,11 +1044,11 @@ def get_phonecall_correction_prompt():
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
 - 혼동어는 반드시 문맥으로 구분하라:
-  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘(세오늘/사모늘), 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘(세오늘/사모늘), 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS, 디모데/D 모델
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 인명, 지명, 회사명 등 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
-  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 - 전화번호, 주소, 날짜, 시간, 금액은 정확하게 기록하라.
 - 의료 관련 통화인 경우 의료 용어를 정확히 표기하라:
@@ -1160,11 +1169,11 @@ def get_conversation_correction_prompt():
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
 - 혼동어는 반드시 문맥으로 구분하라:
-  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘(세오늘/사모늘), 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘(세오늘/사모늘), 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS, 디모데/D 모델
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 전문 용어, 프로젝트명, 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
-  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 - 숫자, 금액, 날짜, 퍼센트 등은 아라비아 숫자로 통일하라 (예: 삼십 퍼센트 → 30%)
 - 의료 관련 회의인 경우 의료 용어를 정확히 표기하라:
@@ -1348,7 +1357,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Proper nouns (names, companies, locations) should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - Phone numbers, addresses, dates, times, amounts should be recorded accurately.
 - Medical terminology must be accurately spelled:
   Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
@@ -1438,7 +1447,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Technical terms, project names, proper nouns should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
 - Medical terminology if applicable: drug names, disease names, procedure names
 - Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
@@ -1849,6 +1858,8 @@ def _normalize_contextual_homophones(text: str) -> str:
     - 신방/심방
     - 쉬고와/기도
     - 대위/대희
+    - RBS/RVS
+    - 디모데/D 모델
     """
     import re
 
@@ -1859,6 +1870,28 @@ def _normalize_contextual_homophones(text: str) -> str:
 
     # 고정 오인식: 유초동부 -> 유초등부
     corrected = re.sub(r"유초\s*동부", "유초등부", corrected)
+
+    # RBS/RVS: 드로아교회 유아유치/비전스쿨 맥락에서는 RVS를 우선 복원
+    rvs_context = r"(드로아교회|렘넌트|비전\s*스쿨|비전학교|vision\s*school|유아유치|유치부|유초등부|어린이|학교)"
+    corrected = re.sub(rf"((?:{rvs_context})\s*)RBS\b", r"\1RVS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"\bRBS(?=\s*(?:{rvs_context}))", "RVS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"((?:{rvs_context})\s*)알\s*비\s*에스", r"\1RVS", corrected)
+    corrected = re.sub(rf"알\s*비\s*에스(?=\s*(?:{rvs_context}))", "RVS", corrected)
+
+    # 디모데/D 모델: 성경/교회 인물 맥락에서는 디모데로 복원
+    timothy_context = r"(성경|말씀|신약|사도|바울|서신|디모데전서|디모데후서|딤전|딤후|교회|목회|제자|복음|은혜|기도|설교)"
+    corrected = re.sub(
+        rf"((?:{timothy_context})\s*)(?:D\s*모델|D모델|디\s*모델|디모델)",
+        r"\1디모데",
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(
+        rf"(?:D\s*모델|D모델|디\s*모델|디모델)(?=\s*(?:{timothy_context}))",
+        "디모데",
+        corrected,
+        flags=re.IGNORECASE,
+    )
 
     # 대위/대희: 군/장교 맥락에서는 대위를 우선 복원
     military_context = r"(군|육군|해군|공군|사관|장교|병사|간부|중위|대위|소위|소령|대령|전역|복무|훈련|부대|사단|연대|대대)"
@@ -2076,7 +2109,7 @@ def get_claude_context():
 【영문 용어】
 - Heavenly, Thronely, Eternally (영문 그대로)
 - TCK, CCK, NCK, CVDIP (약어 그대로)
-- HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RVS, RPS, RLS, RGS
+- HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 
 【목회자】
 - 류광수 목사님
