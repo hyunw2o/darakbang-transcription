@@ -1683,6 +1683,7 @@ function App() {
   const pollStartedAtRef = useRef(0);
   const pollTokenRef = useRef(0);
   const activeTaskIdRef = useRef("");
+  const resultEpochRef = useRef(0);
   const scrollUnlockTimerRef = useRef(null);
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
@@ -1971,6 +1972,15 @@ function App() {
     stopPolling();
   };
 
+  const resetResultWorkspace = (bumpEpoch = true) => {
+    if (bumpEpoch) {
+      resultEpochRef.current += 1;
+    }
+    setResult(null);
+    setRecordDrafts({});
+    return resultEpochRef.current;
+  };
+
   const requestApiWithTimeoutRetry = async (path, options = {}, retryDelayMs = 1200) => {
     const initialTimeoutMs = Math.max(
       10000,
@@ -2003,9 +2013,8 @@ function App() {
     setHistoryLoaded(false);
     setRecords([]);
     setRecordsLoaded(false);
-    setResult(null);
+    resetResultWorkspace(true);
     setPickedFile(null);
-    setRecordDrafts({});
     setTaskStateText("");
     if (message) setNotice(message);
     await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
@@ -2537,8 +2546,7 @@ function App() {
 
   const pickAudioFile = async () => {
     clearMessages();
-    setResult(null);
-    setRecordDrafts({});
+    resetResultWorkspace(true);
 
     try {
       const resultDoc = await DocumentPicker.getDocumentAsync({
@@ -2569,7 +2577,7 @@ function App() {
     }
   };
 
-  const startPollingTask = (taskId) => {
+  const startPollingTask = (taskId, expectedResultEpoch) => {
     stopPolling();
     const pollToken = pollTokenRef.current;
     activeTaskIdRef.current = taskId;
@@ -2609,6 +2617,7 @@ function App() {
           activeTaskIdRef.current = "";
           setSubmitting(false);
           setTaskStateText(copy.taskState.done);
+          if (expectedResultEpoch !== resultEpochRef.current) return;
           setResult(data);
           setNotice(copy.notices.transcribeDone);
           fetchHistory(authToken);
@@ -2657,10 +2666,9 @@ function App() {
     }
 
     invalidatePollingSession();
+    const submitEpoch = resetResultWorkspace(true);
     setSubmitting(true);
     setTaskStateText(copy.taskState.uploading);
-    setResult(null);
-    setRecordDrafts({});
 
     try {
       const body = new FormData();
@@ -2681,8 +2689,9 @@ function App() {
       });
 
       if (data.status === "queued" && data.task_id) {
-        startPollingTask(data.task_id);
+        startPollingTask(data.task_id, submitEpoch);
       } else if (data.status === "completed") {
+        if (submitEpoch !== resultEpochRef.current) return;
         setSubmitting(false);
         setTaskStateText(copy.taskState.done);
         setResult(data);
@@ -2704,6 +2713,7 @@ function App() {
     clearMessages();
     unlockWorkspaceScroll();
     invalidatePollingSession();
+    const loadEpoch = resetResultWorkspace(true);
     setSubmitting(true);
     setTaskStateText(copy.taskState.historyLoading);
 
@@ -2712,6 +2722,7 @@ function App() {
       if (data.status !== "completed") {
         throw new Error(copy.errors.historyLoadOnlyCompleted);
       }
+      if (loadEpoch !== resultEpochRef.current) return;
       setResult(data);
       setActiveTab("transcribe");
       setNotice(copy.notices.historyLoaded);
@@ -2756,6 +2767,8 @@ function App() {
       return;
     }
 
+    const summarizeEpoch = resultEpochRef.current;
+    const sourceTaskId = result?.task_id || "";
     setSummaryLoading(true);
 
     try {
@@ -2774,11 +2787,16 @@ function App() {
         body,
       });
 
-      setResult((prev) => ({
-        ...prev,
-        summary: data.summary || "",
-        content_style: data.content_style || normalizedStyle,
-      }));
+      if (summarizeEpoch !== resultEpochRef.current) return;
+      setResult((prev) => {
+        if (!prev) return prev;
+        if (sourceTaskId && prev.task_id && prev.task_id !== sourceTaskId) return prev;
+        return {
+          ...prev,
+          summary: data.summary || "",
+          content_style: data.content_style || normalizedStyle,
+        };
+      });
       setNotice(copy.notices.summaryDone);
     } catch (e) {
       setError(e.message || copy.errors.summaryFailed);
@@ -2802,6 +2820,7 @@ function App() {
       return;
     }
 
+    const draftEpoch = resultEpochRef.current;
     setDraftLoadingCategory(category);
 
     try {
@@ -2816,6 +2835,7 @@ function App() {
         body,
       });
 
+      if (draftEpoch !== resultEpochRef.current) return;
       setRecordDrafts((prev) => ({ ...prev, [category]: data?.content || "" }));
       const label = data?.category_label || copy.recordCategories[category] || category;
       setNotice(copy.notices.draftDone.replace("{label}", label));

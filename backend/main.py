@@ -2890,6 +2890,10 @@ def _process_transcription_sync(
             "status": "processing",
             "language": language,
             "transcription_type": transcription_type,
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+            "error": None,
         })
         _log_stage_memory(task_id, "start")
 
@@ -3021,6 +3025,9 @@ def _process_transcription_sync(
                 "created_at": datetime.now().isoformat(),
                 "language": language,
                 "transcription_type": transcription_type,
+                "raw_text": "",
+                "corrected_text": "",
+                "characters": 0,
             })
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
@@ -3231,6 +3238,7 @@ async def get_task_status(
             }
 
         if row_status == "completed":
+            _clear_task_runtime_state(task_id)
             corrected_text = str(row.get("corrected_text") or "")
             raw_text = str(row.get("raw_text") or "")
             normalized_type = str(row.get("transcription_type") or "conversation")

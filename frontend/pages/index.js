@@ -470,6 +470,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
   const pollResultCommitTimerRef = useRef(null)
   const toastTimerRef = useRef(null)
   const fileDurationProbeRef = useRef(0)
+  const resultEpochRef = useRef(0)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
   const OURS_PRIVACY_URL = `${OURS_URL}/privacy`
@@ -767,6 +768,15 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     stopPolling()
   }
 
+  const resetResultWorkspace = (bumpEpoch = true) => {
+    if (bumpEpoch) {
+      resultEpochRef.current += 1
+    }
+    setResult(null)
+    setRecordDrafts({})
+    return resultEpochRef.current
+  }
+
   const validateAndSetFile = async (selectedFile) => {
     if (selectedFile.size > 100 * 1024 * 1024) {
       setError('파일 크기는 100MB 이하여야 합니다.')
@@ -793,16 +803,14 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       setFileDurationSeconds(durationSeconds)
       setError(null)
       setNotice(null)
-      setResult(null)
-      setRecordDrafts({})
+      resetResultWorkspace(true)
     } catch {
       if (fileDurationProbeRef.current !== probeId) return
       setFile(selectedFile)
       setFileDurationSeconds(0)
       setError(null)
       setNotice('브라우저에서 길이 확인에 실패해 업로드는 진행합니다. 서버에서 길이를 다시 검사합니다.')
-      setResult(null)
-      setRecordDrafts({})
+      resetResultWorkspace(true)
     }
   }
 
@@ -831,7 +839,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setDragOver(false)
   }, [])
 
-  const startPolling = (taskId) => {
+  const startPolling = (taskId, resultEpoch) => {
     stopPolling()
     const pollToken = pollTokenRef.current
     activeTaskIdRef.current = taskId
@@ -867,6 +875,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
           setCurrentStep(3)
           pollResultCommitTimerRef.current = window.setTimeout(() => {
             if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
+            if (resultEpoch !== resultEpochRef.current) return
             setResult(data)
             setLoading(false)
             setCurrentStep(0)
@@ -908,11 +917,10 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     }
 
     invalidatePollingSession()
+    const submitEpoch = resetResultWorkspace(true)
     setLoading(true)
     setError(null)
     setNotice(null)
-    setResult(null)
-    setRecordDrafts({})
     setCurrentStep(1)
 
     try {
@@ -938,8 +946,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
       if (data.status === 'queued') {
         setCurrentStep(2)
-        startPolling(data.task_id)
+        startPolling(data.task_id, submitEpoch)
       } else {
+        if (submitEpoch !== resultEpochRef.current) return
         setResult(data)
         setLoading(false)
         setCurrentStep(0)
@@ -953,11 +962,10 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
 
   const handleLoadHistory = async (taskId) => {
     invalidatePollingSession()
+    const loadEpoch = resetResultWorkspace(true)
     setLoading(true)
     setError(null)
     setNotice(null)
-    setResult(null)
-    setRecordDrafts({})
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
     try {
@@ -966,6 +974,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       })
       const data = await res.json()
       if (data.status === 'completed') {
+        if (loadEpoch !== resultEpochRef.current) return
         setResult(data)
       } else {
         setError('해당 기록을 불러올 수 없습니다.')
@@ -1072,10 +1081,9 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setHistory([])
     setHistoryLoaded(false)
     setHistoryLoading(false)
-    setResult(null)
+    resetResultWorkspace(true)
     setFile(null)
     setFileDurationSeconds(0)
-    setRecordDrafts({})
     setShowHistory(false)
     setShowRecords(false)
     setSessionExpiresAtMs(0)
@@ -1121,6 +1129,8 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       setError('요약은 로그인 후 이용할 수 있습니다.')
       return
     }
+    const summarizeEpoch = resultEpochRef.current
+    const sourceTaskId = result?.task_id || ''
     setLoading(true)
     setError(null)
     setNotice(null)
@@ -1143,10 +1153,15 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
       if (!response.ok) {
         throw new Error(data.detail || '요약 실패')
       }
-      setResult({
-        ...result,
-        summary: data.summary,
-        content_style: data.content_style || normalizedStyle,
+      if (summarizeEpoch !== resultEpochRef.current) return
+      setResult((prev) => {
+        if (!prev) return prev
+        if (sourceTaskId && prev.task_id && prev.task_id !== sourceTaskId) return prev
+        return {
+          ...prev,
+          summary: data.summary,
+          content_style: data.content_style || normalizedStyle,
+        }
       })
     } catch (err) {
       setError(err.message || '요약 실패')
@@ -1164,6 +1179,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
     setError(null)
     setNotice(null)
     setDraftLoadingCategory(category)
+    const draftEpoch = resultEpochRef.current
     try {
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
@@ -1180,6 +1196,7 @@ export default function Home({ darkMode, setDarkMode, uiTheme, setUiTheme, uiThe
         throw new Error(data.detail || '기록본 초안 생성에 실패했습니다.')
       }
 
+      if (draftEpoch !== resultEpochRef.current) return
       setRecordDrafts((prev) => ({ ...prev, [category]: data.content || '' }))
       setNotice(`${data.category_label || '기록본'} 초안을 생성했습니다.`)
     } catch (err) {
