@@ -173,6 +173,10 @@ PORTONE_CHANNEL_KEY = (os.getenv("PORTONE_CHANNEL_KEY") or "").strip()
 PORTONE_API_SECRET = (os.getenv("PORTONE_API_SECRET") or "").strip()
 PORTONE_WEBHOOK_SECRET = (os.getenv("PORTONE_WEBHOOK_SECRET") or "").strip()
 PORTONE_API_BASE_URL = (os.getenv("PORTONE_API_BASE_URL") or "https://api.portone.io").strip().rstrip("/")
+PORTONE_CHECKOUT_FLOW = (os.getenv("PORTONE_CHECKOUT_FLOW") or "billing_key").strip().lower()
+PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE = (
+    os.getenv("PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE", "false").strip().lower() == "true"
+)
 PAID_PLAN_AMOUNT_KRW = max(100, int(os.getenv("PAID_PLAN_AMOUNT_KRW", "8800")))
 PAID_PLAN_PRODUCT_NAME_KO = (os.getenv("PAID_PLAN_PRODUCT_NAME_KO") or "mallog24 Pro 월간 구독").strip()
 PAID_PLAN_PRODUCT_NAME_EN = (
@@ -1051,6 +1055,17 @@ def _is_billing_enabled() -> bool:
     return _get_checkout_mode(provider) != "disabled"
 
 
+def _normalize_portone_checkout_flow(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in {"payment", "billing_key"}:
+        return normalized
+    return "billing_key"
+
+
+def _get_portone_checkout_flow() -> str:
+    return _normalize_portone_checkout_flow(PORTONE_CHECKOUT_FLOW)
+
+
 def _require_stripe_billing_enabled() -> None:
     if stripe is None:
         raise HTTPException(
@@ -1159,12 +1174,15 @@ def _create_portone_checkout_session(
     _cleanup_expired_portone_checkout_sessions()
     session_id = f"portone_{uuid.uuid4().hex}"
     payment_id = f"mallog24_{uuid.uuid4().hex[:26]}"
+    issue_id = f"mallog24_issue_{uuid.uuid4().hex[:22]}"
     now_ts = time.time()
+    checkout_flow = _get_portone_checkout_flow()
 
     order_name = PAID_PLAN_PRODUCT_NAME_EN if locale == "en" else PAID_PLAN_PRODUCT_NAME_KO
     portone_checkout_sessions[session_id] = {
         "session_id": session_id,
         "payment_id": payment_id,
+        "issue_id": issue_id,
         "user_id": user_id,
         "email": email,
         "amount_krw": max(1, int(amount_krw)),
@@ -1174,12 +1192,15 @@ def _create_portone_checkout_session(
         "cancel_url": cancel_url,
         "locale": locale or "ko",
         "created_ts": now_ts,
+        "checkout_flow": checkout_flow,
     }
 
     checkout_url = _build_redirect_url_from_request(request, f"/api/billing/portone/checkout/{session_id}")
     return {
         "session_id": session_id,
         "payment_id": payment_id,
+        "issue_id": issue_id,
+        "checkout_flow": checkout_flow,
         "checkout_url": checkout_url,
         "expires_in_seconds": MOCK_CHECKOUT_SESSION_TTL_SECONDS,
     }
@@ -1827,6 +1848,7 @@ def _build_billing_status_payload(user: dict) -> dict:
     normalized_billing["provider"] = provider
     normalized_billing["payment_enabled"] = checkout_supported
     normalized_billing["checkout_mode"] = checkout_mode
+    normalized_billing["checkout_flow"] = _get_portone_checkout_flow() if provider == "portone" else "payment"
     normalized_billing["checkout_supported"] = checkout_supported
     normalized_billing["portal_supported"] = portal_supported
     normalized_billing["usage"] = usage_snapshot
@@ -3379,6 +3401,11 @@ async def create_checkout_session(
     billing_status = str((billing_row or {}).get("status") or "").strip().lower()
     if billing_status in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES:
         raise HTTPException(status_code=409, detail="이미 활성화된 구독이 있습니다. 구독 관리 페이지를 이용하세요.")
+    if billing_provider == "portone" and billing_status == "billing_key_issued":
+        raise HTTPException(
+            status_code=409,
+            detail="이미 정기결제 수단(빌링키)이 등록되어 있습니다. 결제 승인 절차를 진행해 주세요.",
+        )
     if usage_row["plan_tier"] != USAGE_FREE_PLAN:
         raise HTTPException(status_code=409, detail="이미 유료 요금제를 사용 중입니다.")
 
@@ -3450,6 +3477,8 @@ async def create_checkout_session(
             "checkout_url": portone_session["checkout_url"],
             "session_id": portone_session["session_id"],
             "payment_id": portone_session["payment_id"],
+            "issue_id": portone_session["issue_id"],
+            "checkout_flow": portone_session["checkout_flow"],
             "mode": "live",
             "provider": "portone",
             "amount_krw": PAID_PLAN_AMOUNT_KRW,
@@ -3684,6 +3713,8 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     is_en = locale == "en"
 
     payment_id = str(session.get("payment_id") or "")
+    issue_id = str(session.get("issue_id") or "")
+    checkout_flow = _normalize_portone_checkout_flow(session.get("checkout_flow"))
     amount_krw = _to_int_safe(session.get("amount_krw"), default=PAID_PLAN_AMOUNT_KRW)
     order_name = str(session.get("order_name") or (PAID_PLAN_PRODUCT_NAME_EN if is_en else PAID_PLAN_PRODUCT_NAME_KO))
     success_url = str(session.get("success_url") or "")
@@ -3696,33 +3727,67 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     if cancel_url.startswith("/"):
         cancel_url = _build_redirect_url_from_request(request, cancel_url)
 
+    customer_id = f"mallog24_{str(session.get('user_id') or '')[:24]}"
     payment_payload = {
         "storeId": PORTONE_STORE_ID,
         "channelKey": PORTONE_CHANNEL_KEY,
-        "paymentId": payment_id,
-        "orderName": order_name,
-        "totalAmount": amount_krw,
-        "currency": "KRW",
-        "payMethod": "CARD",
         "customData": {
             "app": "mallog24",
             "plan_tier": PAID_PLAN_TIER,
             "provider": "portone",
             "mid": PORTONE_MID,
             "session_id": session_id,
+            "checkout_flow": checkout_flow,
         },
     }
+    if checkout_flow == "billing_key":
+        payment_payload.update({
+            "issueId": issue_id,
+            "issueName": order_name,
+            "billingKeyMethod": "CARD",
+            "customer": {
+                "customerId": customer_id,
+            },
+        })
+    else:
+        payment_payload.update({
+            "paymentId": payment_id,
+            "orderName": order_name,
+            "totalAmount": amount_krw,
+            "currency": "KRW",
+            "payMethod": "CARD",
+            "customer": {
+                "customerId": customer_id,
+            },
+        })
     if customer_email:
-        payment_payload["customer"] = {"email": customer_email}
+        payment_payload.setdefault("customer", {})
+        payment_payload["customer"]["email"] = customer_email
 
     title = "PortOne Checkout" if is_en else "PortOne 결제창"
-    headline = "Open live checkout" if is_en else "실결제창 열기"
-    description = (
-        "Tap the button below to open the payment window. Browser security may block auto-open."
-        if is_en
-        else "아래 버튼을 눌러 결제창을 여세요. 브라우저 보안 정책으로 자동 실행은 제한됩니다."
+    headline = (
+        "Open recurring billing-key window"
+        if (is_en and checkout_flow == "billing_key")
+        else ("Open live checkout" if is_en else ("정기과금(빌링키) 결제창 열기" if checkout_flow == "billing_key" else "실결제창 열기"))
     )
-    button_label = "Open Checkout" if is_en else "결제창 열기"
+    description = (
+        "Tap the button below to open the recurring billing-key window for card registration."
+        if (is_en and checkout_flow == "billing_key")
+        else (
+            "Tap the button below to open the payment window. Browser security may block auto-open."
+            if is_en
+            else (
+                "아래 버튼을 눌러 정기과금(비인증) 빌링키 발급 결제창을 여세요. 브라우저 보안 정책으로 자동 실행은 제한될 수 있습니다."
+                if checkout_flow == "billing_key"
+                else "아래 버튼을 눌러 결제창을 여세요. 브라우저 보안 정책으로 자동 실행은 제한됩니다."
+            )
+        )
+    )
+    button_label = (
+        "Open Billing-Key Window"
+        if (is_en and checkout_flow == "billing_key")
+        else ("Open Checkout" if is_en else ("정기과금 결제창 열기" if checkout_flow == "billing_key" else "결제창 열기"))
+    )
     cancel_label = "Cancel" if is_en else "취소"
 
     payload_json = json.dumps(payment_payload, ensure_ascii=False)
@@ -3819,8 +3884,9 @@ async def render_portone_checkout_page(request: Request, session_id: str):
           <div class="card">
             <h1 class="title">{headline_html}</h1>
             <p class="desc">{description_html}</p>
-            <p class="meta">Payment ID: {payment_id}</p>
-            <p class="meta">Amount: {amount_krw} KRW</p>
+            <p class="meta">{'Issue ID' if checkout_flow == 'billing_key' else 'Payment ID'}: {issue_id if checkout_flow == 'billing_key' else payment_id}</p>
+            <p class="meta">Checkout Flow: {checkout_flow}</p>
+            <p class="meta">Amount: {amount_krw} KRW{'' if checkout_flow == 'payment' else ' (charged after billing-key issue)'}</p>
             <p class="meta">Order: {order_name}</p>
             <div class="actions">
               <button id="payButton" class="btn btn-primary">{button_label_html}</button>
@@ -3833,6 +3899,7 @@ async def render_portone_checkout_page(request: Request, session_id: str):
           const REQUEST_PAYLOAD = {payload_json};
           const COMPLETE_BASE_URL = {complete_base_json};
           const CANCEL_URL = {cancel_url_json};
+          const CHECKOUT_FLOW = {json.dumps(checkout_flow, ensure_ascii=False)};
           const STATUS_TEXT = document.getElementById("statusText");
           const PAY_BUTTON = document.getElementById("payButton");
           let launched = false;
@@ -3882,21 +3949,30 @@ async def render_portone_checkout_page(request: Request, session_id: str):
             }}
           }};
 
-          const moveToComplete = (paymentId) => {{
-            const resolvedPaymentId = paymentId || REQUEST_PAYLOAD.paymentId;
+          const moveToComplete = (params = {{}}) => {{
             try {{
               const target = new URL(COMPLETE_BASE_URL);
-              target.searchParams.set("payment_id", resolvedPaymentId);
+              Object.entries(params || {{}}).forEach(([key, value]) => {{
+                if (value !== undefined && value !== null && String(value).trim() !== "") {{
+                  target.searchParams.set(key, String(value));
+                }}
+              }});
               window.location.replace(target.toString());
             }} catch (_err) {{
+              const query = new URLSearchParams();
+              Object.entries(params || {{}}).forEach(([key, value]) => {{
+                if (value !== undefined && value !== null && String(value).trim() !== "") {{
+                  query.set(key, String(value));
+                }}
+              }});
               const separator = COMPLETE_BASE_URL.includes("?") ? "&" : "?";
-              window.location.replace(`${{COMPLETE_BASE_URL}}${{separator}}payment_id=${{encodeURIComponent(resolvedPaymentId)}}`);
+              window.location.replace(`${{COMPLETE_BASE_URL}}${{separator}}${{query.toString()}}`);
             }}
           }};
 
           const openPaymentWindow = async () => {{
             if (launched) return;
-            if (!window.PortOne || typeof window.PortOne.requestPayment !== "function") {{
+            if (!window.PortOne) {{
               setStatus(SDK_MISSING_TEXT);
               return;
             }}
@@ -3905,7 +3981,26 @@ async def render_portone_checkout_page(request: Request, session_id: str):
             PAY_BUTTON.textContent = LOADING_TEXT;
             setStatus(LOADING_TEXT);
             try {{
-              const response = await PortOne.requestPayment(REQUEST_PAYLOAD);
+              let response = null;
+              if (CHECKOUT_FLOW === "billing_key") {{
+                if (typeof window.PortOne.requestIssueBillingKey !== "function") {{
+                  setStatus(SDK_MISSING_TEXT);
+                  launched = false;
+                  PAY_BUTTON.disabled = false;
+                  PAY_BUTTON.textContent = RETRY_TEXT;
+                  return;
+                }}
+                response = await PortOne.requestIssueBillingKey(REQUEST_PAYLOAD);
+              }} else {{
+                if (typeof window.PortOne.requestPayment !== "function") {{
+                  setStatus(SDK_MISSING_TEXT);
+                  launched = false;
+                  PAY_BUTTON.disabled = false;
+                  PAY_BUTTON.textContent = RETRY_TEXT;
+                  return;
+                }}
+                response = await PortOne.requestPayment(REQUEST_PAYLOAD);
+              }}
               if (!response) {{
                 setStatus(EMPTY_RESPONSE_TEXT);
                 launched = false;
@@ -3923,8 +4018,37 @@ async def render_portone_checkout_page(request: Request, session_id: str):
                 PAY_BUTTON.textContent = RETRY_TEXT;
                 return;
               }}
-              const paymentId = response.paymentId || response.payment_id || REQUEST_PAYLOAD.paymentId;
-              moveToComplete(paymentId);
+              if (CHECKOUT_FLOW === "billing_key") {{
+                const billingKey = response.billingKey || response.billing_key || "";
+                const customerId =
+                  response.customerId || response.customer_id || response.customerKey || response.customer_key || "";
+                if (!billingKey) {{
+                  setStatus(EMPTY_RESPONSE_TEXT);
+                  launched = false;
+                  PAY_BUTTON.disabled = false;
+                  PAY_BUTTON.textContent = RETRY_TEXT;
+                  return;
+                }}
+                moveToComplete({{
+                  flow: "billing_key",
+                  billing_key: billingKey,
+                  customer_id: customerId,
+                }});
+                return;
+              }}
+
+              const paymentId = response.paymentId || response.payment_id || REQUEST_PAYLOAD.paymentId || "";
+              if (!paymentId) {{
+                setStatus(EMPTY_RESPONSE_TEXT);
+                launched = false;
+                PAY_BUTTON.disabled = false;
+                PAY_BUTTON.textContent = RETRY_TEXT;
+                return;
+              }}
+              moveToComplete({{
+                flow: "payment",
+                payment_id: paymentId,
+              }});
             }} catch (error) {{
               const detail = error?.message ? `${{EXCEPTION_TEXT}} (${{error.message}})` : EXCEPTION_TEXT;
               setStatus(detail);
@@ -3946,7 +4070,10 @@ async def render_portone_checkout_page(request: Request, session_id: str):
 async def complete_portone_checkout(
     request: Request,
     session_id: str,
+    flow: str = "",
     payment_id: str = "",
+    billing_key: str = "",
+    customer_id: str = "",
 ):
     """PortOne 결제 완료 검증 및 구독 반영"""
     session = _get_portone_checkout_session_or_raise(session_id)
@@ -3955,7 +4082,11 @@ async def complete_portone_checkout(
     cancel_url = str(session.get("cancel_url") or "")
     expected_amount = _to_int_safe(session.get("amount_krw"), default=PAID_PLAN_AMOUNT_KRW)
     fallback_payment_id = str(session.get("payment_id") or "")
+    fallback_flow = _normalize_portone_checkout_flow(session.get("checkout_flow"))
+    resolved_flow = _normalize_portone_checkout_flow(flow or fallback_flow)
     resolved_payment_id = str(payment_id or fallback_payment_id).strip()
+    resolved_billing_key = str(billing_key or "").strip()
+    resolved_customer_id = str(customer_id or "").strip()
 
     if not user_id:
         portone_checkout_sessions.pop(session_id, None)
@@ -3965,6 +4096,60 @@ async def complete_portone_checkout(
         success_url = _build_redirect_url_from_request(request, "/pricing?checkout=success")
     if not cancel_url:
         cancel_url = _build_redirect_url_from_request(request, "/pricing?checkout=cancel")
+
+    if resolved_flow == "billing_key":
+        if not resolved_billing_key:
+            _upsert_billing_row(
+                user_id,
+                {
+                    "provider": "portone",
+                    "status": "checkout_canceled",
+                    "plan_tier": USAGE_FREE_PLAN,
+                    "cancel_at_period_end": False,
+                },
+            )
+            _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+            portone_checkout_sessions.pop(session_id, None)
+            return RedirectResponse(
+                url=_append_query_params(cancel_url, {"checkout": "cancel", "reason": "missing_billing_key"}),
+                status_code=303,
+            )
+
+        status_value = "active" if PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE else "billing_key_issued"
+        plan_tier = PAID_PLAN_TIER if PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE else USAGE_FREE_PLAN
+        current_period_end = (
+            (datetime.utcnow() + timedelta(days=30)).isoformat()
+            if PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE
+            else None
+        )
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": "portone",
+                "customer_id": (resolved_customer_id or (session.get("email") or resolved_billing_key))[:255],
+                "subscription_id": resolved_billing_key[:255],
+                "price_id": f"portone_pro_{expected_amount}",
+                "status": status_value,
+                "plan_tier": plan_tier,
+                "current_period_end": current_period_end,
+                "cancel_at_period_end": False,
+                "checkout_completed_at": datetime.utcnow().isoformat(),
+            },
+        )
+        _set_user_plan_tier(user_id, plan_tier)
+
+        redirect_url = _append_query_params(
+            success_url,
+            {
+                "checkout": "success",
+                "provider": "portone",
+                "flow": "billing_key",
+                "billing_key": resolved_billing_key,
+                "status": status_value,
+            },
+        )
+        portone_checkout_sessions.pop(session_id, None)
+        return RedirectResponse(url=redirect_url, status_code=303)
 
     if not resolved_payment_id:
         _upsert_billing_row(
@@ -4023,6 +4208,7 @@ async def complete_portone_checkout(
             {
                 "checkout": "success",
                 "provider": "portone",
+                "flow": "payment",
                 "payment_id": resolved_payment_id,
             },
         )
@@ -4911,11 +5097,13 @@ async def health_check():
         billing_enabled = _is_billing_enabled()
         billing_checkout_mode = _get_checkout_mode(billing_provider)
         stripe_billing = _is_stripe_billing_enabled()
+        portone_checkout_flow = _get_portone_checkout_flow() if billing_provider == "portone" else "payment"
     except Exception:
         billing_provider = BILLING_PROVIDER
         billing_enabled = False
         billing_checkout_mode = "disabled"
         stripe_billing = False
+        portone_checkout_flow = _normalize_portone_checkout_flow(PORTONE_CHECKOUT_FLOW)
 
     return {
         "status": "healthy",
@@ -4929,6 +5117,7 @@ async def health_check():
             "billing_provider": billing_provider,
             "billing_enabled": billing_enabled,
             "billing_checkout_mode": billing_checkout_mode,
+            "portone_checkout_flow": portone_checkout_flow,
             "billing_test_mode": BILLING_TEST_MODE,
             "stripe_billing": stripe_billing,
         }
