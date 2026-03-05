@@ -67,13 +67,14 @@ export default function PricingEnPage() {
     Authorization: `Bearer ${token}`,
   })
 
-  const startCheckout = async () => {
+  const startCheckout = async (payMethod = 'card') => {
     if (!authToken) {
       setError('Please log in before starting checkout.')
       return
     }
 
-    setActionLoading('checkout')
+    const normalizedPayMethod = payMethod === 'kakaopay' ? 'kakaopay' : 'card'
+    setActionLoading(`checkout_${normalizedPayMethod}`)
     setError('')
     setMessage('')
     try {
@@ -89,6 +90,7 @@ export default function PricingEnPage() {
           locale: 'en',
           success_url: successUrl,
           cancel_url: cancelUrl,
+          pay_method: normalizedPayMethod,
         }),
       })
       const data = await res.json()
@@ -224,7 +226,9 @@ export default function PricingEnPage() {
   const checkoutSupported = Boolean(status?.checkout_supported)
   const portalSupported = Boolean(status?.portal_supported)
   const paymentEnabled = Boolean(status?.payment_enabled)
+  const checkoutFlow = status?.checkout_flow || 'payment'
   const isMockCheckout = checkoutMode === 'mock'
+  const supportsKakaoPayCheckout = checkoutSupported && checkoutFlow === 'payment'
   const isPaid = currentPlan !== 'free'
 
   return (
@@ -321,20 +325,36 @@ export default function PricingEnPage() {
                     : 'Domestic PG portal pending'}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={startCheckout}
-                disabled={!checkoutSupported || !authToken || actionLoading !== ''}
-                className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
-              >
-                {actionLoading === 'checkout'
-                  ? 'Opening...'
-                  : checkoutSupported
-                    ? isMockCheckout
-                      ? 'Start Mock Checkout'
-                      : 'Start Pro Subscription'
-                    : 'Checkout unavailable'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => startCheckout('card')}
+                  disabled={!checkoutSupported || !authToken || actionLoading !== ''}
+                  className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  {actionLoading === 'checkout_card'
+                    ? 'Opening...'
+                    : checkoutSupported
+                      ? isMockCheckout
+                        ? 'Card Mock Checkout'
+                        : 'Start Pro (Card)'
+                      : 'Checkout unavailable'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startCheckout('kakaopay')}
+                  disabled={!supportsKakaoPayCheckout || !authToken || actionLoading !== ''}
+                  className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+                >
+                  {actionLoading === 'checkout_kakaopay'
+                    ? 'Opening...'
+                    : supportsKakaoPayCheckout
+                      ? isMockCheckout
+                        ? 'KakaoPay Mock Checkout'
+                        : 'Pay with KakaoPay'
+                      : 'KakaoPay unavailable'}
+                </button>
+              </>
             )}
             {isPaid && (
               <button
@@ -383,6 +403,12 @@ export default function PricingEnPage() {
           {checkoutSupported && isMockCheckout && (
             <p className="text-xs text-nm-text-secondary mt-3">
               Mock checkout mode is enabled. You can validate success/cancel flow without real charges.
+            </p>
+          )}
+          {checkoutSupported && checkoutFlow === 'billing_key' && (
+            <p className="text-xs text-nm-text-secondary mt-3">
+              Current mode is recurring billing-key (`PORTONE_CHECKOUT_FLOW=billing_key`). For KakaoPay test checkout,
+              switch backend to `PORTONE_CHECKOUT_FLOW=payment`.
             </p>
           )}
           {isPaid && (

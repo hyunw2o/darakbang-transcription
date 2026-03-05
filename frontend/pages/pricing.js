@@ -67,13 +67,14 @@ export default function PricingPage() {
     Authorization: `Bearer ${token}`,
   })
 
-  const startCheckout = async () => {
+  const startCheckout = async (payMethod = 'card') => {
     if (!authToken) {
       setError('로그인 후 결제를 진행할 수 있습니다.')
       return
     }
 
-    setActionLoading('checkout')
+    const normalizedPayMethod = payMethod === 'kakaopay' ? 'kakaopay' : 'card'
+    setActionLoading(`checkout_${normalizedPayMethod}`)
     setError('')
     setMessage('')
     try {
@@ -89,6 +90,7 @@ export default function PricingPage() {
           locale: 'ko',
           success_url: successUrl,
           cancel_url: cancelUrl,
+          pay_method: normalizedPayMethod,
         }),
       })
       const data = await res.json()
@@ -224,7 +226,9 @@ export default function PricingPage() {
   const checkoutSupported = Boolean(status?.checkout_supported)
   const portalSupported = Boolean(status?.portal_supported)
   const paymentEnabled = Boolean(status?.payment_enabled)
+  const checkoutFlow = status?.checkout_flow || 'payment'
   const isMockCheckout = checkoutMode === 'mock'
+  const supportsKakaoPayCheckout = checkoutSupported && checkoutFlow === 'payment'
   const isPaid = currentPlan !== 'free'
 
   return (
@@ -333,20 +337,36 @@ export default function PricingPage() {
                     )}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={startCheckout}
-                disabled={!checkoutSupported || !authToken || actionLoading !== ''}
-                className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
-              >
-                {actionLoading === 'checkout'
-                  ? '연결 중...'
-                  : checkoutSupported
-                    ? isMockCheckout
-                      ? '테스트 결제 시작하기'
-                      : 'Pro 구독 시작하기'
-                    : '결제 준비 중'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => startCheckout('card')}
+                  disabled={!checkoutSupported || !authToken || actionLoading !== ''}
+                  className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  {actionLoading === 'checkout_card'
+                    ? '연결 중...'
+                    : checkoutSupported
+                      ? isMockCheckout
+                        ? '카드 테스트 결제'
+                        : '카드로 Pro 구독 시작'
+                      : '결제 준비 중'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startCheckout('kakaopay')}
+                  disabled={!supportsKakaoPayCheckout || !authToken || actionLoading !== ''}
+                  className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
+                >
+                  {actionLoading === 'checkout_kakaopay'
+                    ? '연결 중...'
+                    : supportsKakaoPayCheckout
+                      ? isMockCheckout
+                        ? '카카오페이 테스트 결제'
+                        : '카카오페이로 결제'
+                      : '카카오페이 준비 중'}
+                </button>
+              </>
             )}
             {isPaid && (
               <button
@@ -423,6 +443,12 @@ export default function PricingPage() {
           {checkoutSupported && isMockCheckout && (
             <p className="text-xs text-nm-text-secondary mt-3">
               현재는 테스트 결제 모드입니다. 실제 과금 없이 성공/취소 플로우를 확인할 수 있습니다.
+            </p>
+          )}
+          {checkoutSupported && checkoutFlow === 'billing_key' && (
+            <p className="text-xs text-nm-text-secondary mt-3">
+              현재 정기과금(빌링키) 모드입니다. 카카오페이 테스트는 서버 환경변수 `PORTONE_CHECKOUT_FLOW=payment`
+              로 전환 후 가능합니다.
             </p>
           )}
           {isPaid && (

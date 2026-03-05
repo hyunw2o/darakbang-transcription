@@ -170,10 +170,12 @@ STRIPE_PRICE_ID_PRO = (os.getenv("STRIPE_PRICE_ID_PRO") or "").strip()
 PORTONE_STORE_ID = (os.getenv("PORTONE_STORE_ID") or os.getenv("PORTONE_MID") or "").strip()
 PORTONE_MID = (os.getenv("PORTONE_MID") or PORTONE_STORE_ID).strip()
 PORTONE_CHANNEL_KEY = (os.getenv("PORTONE_CHANNEL_KEY") or "").strip()
+PORTONE_KAKAOPAY_CHANNEL_KEY = (os.getenv("PORTONE_KAKAOPAY_CHANNEL_KEY") or "").strip()
 PORTONE_API_SECRET = (os.getenv("PORTONE_API_SECRET") or "").strip()
 PORTONE_WEBHOOK_SECRET = (os.getenv("PORTONE_WEBHOOK_SECRET") or "").strip()
 PORTONE_API_BASE_URL = (os.getenv("PORTONE_API_BASE_URL") or "https://api.portone.io").strip().rstrip("/")
 PORTONE_CHECKOUT_FLOW = (os.getenv("PORTONE_CHECKOUT_FLOW") or "billing_key").strip().lower()
+PORTONE_DEFAULT_PAY_METHOD = (os.getenv("PORTONE_DEFAULT_PAY_METHOD") or "card").strip().lower()
 PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE = (
     os.getenv("PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE", "false").strip().lower() == "true"
 )
@@ -1066,6 +1068,25 @@ def _get_portone_checkout_flow() -> str:
     return _normalize_portone_checkout_flow(PORTONE_CHECKOUT_FLOW)
 
 
+def _normalize_portone_pay_method(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    alias_map = {
+        "card": "card",
+        "credit_card": "card",
+        "kakao": "kakaopay",
+        "kakao_pay": "kakaopay",
+        "kakaopay": "kakaopay",
+    }
+    return alias_map.get(normalized, "card")
+
+
+def _resolve_portone_channel_key_for_pay_method(pay_method: str) -> str:
+    normalized = _normalize_portone_pay_method(pay_method)
+    if normalized == "kakaopay" and PORTONE_KAKAOPAY_CHANNEL_KEY:
+        return PORTONE_KAKAOPAY_CHANNEL_KEY
+    return PORTONE_CHANNEL_KEY
+
+
 def _require_stripe_billing_enabled() -> None:
     if stripe is None:
         raise HTTPException(
@@ -1169,6 +1190,7 @@ def _create_portone_checkout_session(
     cancel_url: str,
     locale: str,
     amount_krw: int,
+    pay_method: str,
     request: Request,
 ) -> dict:
     _cleanup_expired_portone_checkout_sessions()
@@ -1177,6 +1199,8 @@ def _create_portone_checkout_session(
     issue_id = f"mallog24_issue_{uuid.uuid4().hex[:22]}"
     now_ts = time.time()
     checkout_flow = _get_portone_checkout_flow()
+    normalized_pay_method = _normalize_portone_pay_method(pay_method or PORTONE_DEFAULT_PAY_METHOD)
+    channel_key = _resolve_portone_channel_key_for_pay_method(normalized_pay_method)
 
     order_name = PAID_PLAN_PRODUCT_NAME_EN if locale == "en" else PAID_PLAN_PRODUCT_NAME_KO
     portone_checkout_sessions[session_id] = {
@@ -1193,6 +1217,8 @@ def _create_portone_checkout_session(
         "locale": locale or "ko",
         "created_ts": now_ts,
         "checkout_flow": checkout_flow,
+        "pay_method": normalized_pay_method,
+        "channel_key": channel_key,
     }
 
     checkout_url = _build_redirect_url_from_request(request, f"/api/billing/portone/checkout/{session_id}")
@@ -1201,6 +1227,7 @@ def _create_portone_checkout_session(
         "payment_id": payment_id,
         "issue_id": issue_id,
         "checkout_flow": checkout_flow,
+        "pay_method": normalized_pay_method,
         "checkout_url": checkout_url,
         "expires_in_seconds": MOCK_CHECKOUT_SESSION_TTL_SECONDS,
     }
@@ -3452,6 +3479,13 @@ async def create_checkout_session(
         locale = str(payload.get("locale") or "ko").strip().lower()
         if locale not in {"ko", "en"}:
             locale = "ko"
+        pay_method = _normalize_portone_pay_method(payload.get("pay_method") or PORTONE_DEFAULT_PAY_METHOD)
+        checkout_flow = _get_portone_checkout_flow()
+        if checkout_flow == "billing_key" and pay_method != "card":
+            raise HTTPException(
+                status_code=400,
+                detail="카카오페이 테스트 결제는 PORTONE_CHECKOUT_FLOW=payment(일반결제) 모드에서만 지원됩니다.",
+            )
         portone_session = _create_portone_checkout_session(
             user_id=user["id"],
             email=(user.get("email") or "").strip().lower(),
@@ -3459,6 +3493,7 @@ async def create_checkout_session(
             cancel_url=cancel_url,
             locale=locale,
             amount_krw=PAID_PLAN_AMOUNT_KRW,
+            pay_method=pay_method,
             request=request,
         )
 
@@ -3479,6 +3514,7 @@ async def create_checkout_session(
             "payment_id": portone_session["payment_id"],
             "issue_id": portone_session["issue_id"],
             "checkout_flow": portone_session["checkout_flow"],
+            "pay_method": portone_session["pay_method"],
             "mode": "live",
             "provider": "portone",
             "amount_krw": PAID_PLAN_AMOUNT_KRW,
@@ -3715,11 +3751,13 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     payment_id = str(session.get("payment_id") or "")
     issue_id = str(session.get("issue_id") or "")
     checkout_flow = _normalize_portone_checkout_flow(session.get("checkout_flow"))
+    pay_method = _normalize_portone_pay_method(session.get("pay_method") or PORTONE_DEFAULT_PAY_METHOD)
     amount_krw = _to_int_safe(session.get("amount_krw"), default=PAID_PLAN_AMOUNT_KRW)
     order_name = str(session.get("order_name") or (PAID_PLAN_PRODUCT_NAME_EN if is_en else PAID_PLAN_PRODUCT_NAME_KO))
     success_url = str(session.get("success_url") or "")
     cancel_url = str(session.get("cancel_url") or "")
     customer_email = str(session.get("email") or "")
+    channel_key = str(session.get("channel_key") or _resolve_portone_channel_key_for_pay_method(pay_method)).strip()
 
     complete_base_url = _build_redirect_url_from_request(request, f"/api/billing/portone/complete/{session_id}")
     if not cancel_url:
@@ -3730,7 +3768,7 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     customer_id = f"mallog24_{str(session.get('user_id') or '')[:24]}"
     payment_payload = {
         "storeId": PORTONE_STORE_ID,
-        "channelKey": PORTONE_CHANNEL_KEY,
+        "channelKey": channel_key,
         "customData": {
             "app": "mallog24",
             "plan_tier": PAID_PLAN_TIER,
@@ -3738,6 +3776,7 @@ async def render_portone_checkout_page(request: Request, session_id: str):
             "mid": PORTONE_MID,
             "session_id": session_id,
             "checkout_flow": checkout_flow,
+            "requested_pay_method": pay_method,
         },
     }
     if checkout_flow == "billing_key":
@@ -3750,16 +3789,28 @@ async def render_portone_checkout_page(request: Request, session_id: str):
             },
         })
     else:
-        payment_payload.update({
-            "paymentId": payment_id,
-            "orderName": order_name,
-            "totalAmount": amount_krw,
-            "currency": "KRW",
-            "payMethod": "CARD",
-            "customer": {
-                "customerId": customer_id,
-            },
-        })
+        payment_payload.update(
+            {
+                "paymentId": payment_id,
+                "orderName": order_name,
+                "totalAmount": amount_krw,
+                "currency": "KRW",
+                "customer": {
+                    "customerId": customer_id,
+                },
+            }
+        )
+        if pay_method == "kakaopay":
+            payment_payload.update(
+                {
+                    "payMethod": "EASY_PAY",
+                    "easyPay": {
+                        "easyPayProvider": "KAKAOPAY",
+                    },
+                }
+            )
+        else:
+            payment_payload["payMethod"] = "CARD"
     if customer_email:
         payment_payload.setdefault("customer", {})
         payment_payload["customer"]["email"] = customer_email
@@ -3886,6 +3937,7 @@ async def render_portone_checkout_page(request: Request, session_id: str):
             <p class="desc">{description_html}</p>
             <p class="meta">{'Issue ID' if checkout_flow == 'billing_key' else 'Payment ID'}: {issue_id if checkout_flow == 'billing_key' else payment_id}</p>
             <p class="meta">Checkout Flow: {checkout_flow}</p>
+            <p class="meta">Pay Method: {'CARD' if checkout_flow == 'billing_key' else pay_method.upper()}</p>
             <p class="meta">Amount: {amount_krw} KRW{'' if checkout_flow == 'payment' else ' (charged after billing-key issue)'}</p>
             <p class="meta">Order: {order_name}</p>
             <div class="actions">
