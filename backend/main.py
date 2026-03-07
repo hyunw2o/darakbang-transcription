@@ -79,6 +79,17 @@ def _parse_csv_env_union(name: str, default: list[str]) -> list[str]:
     return merged
 
 
+def _parse_optional_bool_env(name: str) -> bool | None:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return None
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -206,6 +217,15 @@ AUTH_SESSION_STALE_SECONDS = max(300, int(os.getenv("AUTH_SESSION_STALE_SECONDS"
 AUTH_CONCURRENT_LOGIN_REJECT_MESSAGE = (
     "다른 기기에서 로그인되어 현재 세션이 종료되었습니다. 다시 로그인해 주세요."
 )
+AUTH_COOKIE_NAME = (os.getenv("AUTH_COOKIE_NAME") or "mallog24_session").strip() or "mallog24_session"
+AUTH_COOKIE_DOMAIN = (os.getenv("AUTH_COOKIE_DOMAIN") or "").strip() or None
+AUTH_COOKIE_PATH = (os.getenv("AUTH_COOKIE_PATH") or "/").strip() or "/"
+AUTH_COOKIE_SAMESITE = ((os.getenv("AUTH_COOKIE_SAMESITE") or "none").strip().lower() or "none")
+AUTH_COOKIE_SECURE_OVERRIDE = _parse_optional_bool_env("AUTH_COOKIE_SECURE")
+AUTH_COOKIE_MAX_AGE_SECONDS = max(
+    3600,
+    int(os.getenv("AUTH_COOKIE_MAX_AGE_SECONDS", str(30 * 24 * 60 * 60))),
+)
 TASK_STUCK_TIMEOUT_SECONDS = max(900, int(os.getenv("TASK_STUCK_TIMEOUT_SECONDS", "7200")))
 TASK_STUCK_ERROR_MESSAGE = (
     "처리 시간이 비정상적으로 길어 작업이 자동 종료되었습니다. 다시 시도해 주세요."
@@ -220,10 +240,21 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOW_ORIGINS if not CORS_ALLOW_ORIGIN_REGEX else [],
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def attach_auth_cookie_to_authorization(request: Request, call_next):
+    cookie_token = (request.cookies.get(AUTH_COOKIE_NAME) or "").strip()
+    has_authorization = bool(request.headers.get("authorization"))
+    if cookie_token and not has_authorization:
+        headers = list(request.scope.get("headers") or [])
+        headers.append((b"authorization", f"Bearer {cookie_token}".encode("utf-8")))
+        request.scope["headers"] = headers
+    return await call_next(request)
 
 # Gemini 설정
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -590,6 +621,103 @@ def _enforce_concurrent_login_limit(token: str, user: dict, is_fresh_login: bool
         is_active_token = any(item.get("token_hash") == token_hash for item in trimmed_sessions)
         if not is_active_token:
             raise HTTPException(status_code=401, detail=AUTH_CONCURRENT_LOGIN_REJECT_MESSAGE)
+
+
+def _remove_active_auth_session(token: str, user_id: str | None = None) -> None:
+    normalized_token = (token or "").strip()
+    if not normalized_token:
+        return
+
+    token_hash = _hash_auth_token(normalized_token)
+    candidate_user_ids = [str(user_id).strip()] if user_id else []
+
+    with _auth_session_state_lock:
+        _cleanup_stale_auth_sessions()
+        target_user_ids = candidate_user_ids or list(_auth_active_sessions.keys())
+        for candidate in target_user_ids:
+            sessions = list(_auth_active_sessions.get(candidate) or [])
+            filtered = [session for session in sessions if session.get("token_hash") != token_hash]
+            if filtered:
+                _auth_active_sessions[candidate] = filtered
+            else:
+                _auth_active_sessions.pop(candidate, None)
+
+
+def _is_loopback_host(hostname: str | None) -> bool:
+    normalized = (hostname or "").strip().lower()
+    return normalized in {"localhost", "127.0.0.1", "0.0.0.0"}
+
+
+def _should_use_secure_auth_cookie(request: Request) -> bool:
+    if AUTH_COOKIE_SECURE_OVERRIDE is not None:
+        return AUTH_COOKIE_SECURE_OVERRIDE
+    hostname = request.url.hostname or ""
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").strip().lower()
+    if _is_loopback_host(hostname):
+        return False
+    if request.url.scheme == "http" or forwarded_proto == "http":
+        return False
+    return True
+
+
+def _resolve_auth_cookie_samesite(request: Request) -> str:
+    configured = AUTH_COOKIE_SAMESITE if AUTH_COOKIE_SAMESITE in {"lax", "strict", "none"} else "none"
+    if configured == "none" and not _should_use_secure_auth_cookie(request):
+        return "lax"
+    return configured
+
+
+def _resolve_auth_cookie_max_age(token: str) -> int:
+    max_age = AUTH_COOKIE_MAX_AGE_SECONDS
+    token_exp = _decode_jwt_exp_unverified(token)
+    if token_exp:
+        remaining = int(token_exp - time.time())
+        if remaining > 0:
+            max_age = min(max_age, remaining)
+    return max(60, max_age)
+
+
+def _set_auth_cookie(response: JSONResponse, request: Request, token: str) -> None:
+    normalized_token = (token or "").strip()
+    if not normalized_token:
+        return
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=normalized_token,
+        max_age=_resolve_auth_cookie_max_age(normalized_token),
+        path=AUTH_COOKIE_PATH,
+        domain=AUTH_COOKIE_DOMAIN,
+        secure=_should_use_secure_auth_cookie(request),
+        httponly=True,
+        samesite=_resolve_auth_cookie_samesite(request),
+    )
+
+
+def _clear_auth_cookie(response: JSONResponse, request: Request | None = None) -> None:
+    response.delete_cookie(
+        key=AUTH_COOKIE_NAME,
+        path=AUTH_COOKIE_PATH,
+        domain=AUTH_COOKIE_DOMAIN,
+        secure=_should_use_secure_auth_cookie(request) if request else bool(AUTH_COOKIE_SECURE_OVERRIDE),
+        httponly=True,
+        samesite=_resolve_auth_cookie_samesite(request) if request else AUTH_COOKIE_SAMESITE,
+    )
+
+
+def _build_auth_payload(token: str, user: dict) -> dict:
+    row = _get_or_create_usage_row(user["id"])
+    snapshot = _build_usage_snapshot(
+        row,
+        is_admin_bypass=_is_admin_bypass_user(user=user),
+    )
+    session_expires_at = _decode_jwt_exp_unverified(token)
+    return {
+        "success": True,
+        "user": user,
+        "usage": snapshot,
+        "session_established": True,
+        "session_expires_at": session_expires_at,
+    }
 
 
 def _resolved_engine_mode() -> str:
@@ -4822,6 +4950,7 @@ async def stripe_billing_webhook(request: Request):
 
 @app.post("/api/auth/signup")
 async def signup(
+    request: Request,
     email: str = Form(...),
     password: str = Form(...),
     full_name: str = Form(""),
@@ -4847,18 +4976,23 @@ async def signup(
     user = data.get("user") or {}
     if access_token and isinstance(user, dict) and user.get("id"):
         _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
+        _cache_user_by_token(access_token, user)
 
-    return {
-        "success": True,
+    payload = {
+        **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
         "message": "회원가입이 완료되었습니다. 이메일 인증 설정 여부에 따라 추가 인증이 필요할 수 있습니다.",
-        "user": user,
         "access_token": access_token,
         "refresh_token": refresh_token,
     }
+    response = JSONResponse(payload)
+    if access_token:
+        _set_auth_cookie(response, request, access_token)
+    return response
 
 
 @app.post("/api/auth/login")
 async def login(
+    request: Request,
     email: str = Form(...),
     password: str = Form(...),
 ):
@@ -4872,14 +5006,78 @@ async def login(
     user = data.get("user") or {}
     if access_token and isinstance(user, dict) and user.get("id"):
         _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
-    return {
-        "success": True,
-        "user": user,
+        _cache_user_by_token(access_token, user)
+    payload = {
+        **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
         "access_token": access_token,
         "refresh_token": data.get("refresh_token"),
         "expires_in": data.get("expires_in"),
         "token_type": data.get("token_type", "bearer"),
     }
+    response = JSONResponse(payload)
+    if access_token:
+        _set_auth_cookie(response, request, access_token)
+    return response
+
+
+@app.post("/api/auth/session")
+async def establish_auth_session(
+    request: Request,
+    access_token: str = Form(""),
+    refresh_token: str = Form(""),
+    authorization: str | None = Header(default=None),
+):
+    """OAuth redirect에서 받은 access token을 httpOnly 쿠키 세션으로 전환"""
+    token = (access_token or "").strip()
+    if not token and authorization:
+        try:
+            token = _extract_bearer_token(authorization)
+        except HTTPException:
+            token = ""
+    if not token:
+        raise HTTPException(status_code=400, detail="세션으로 전환할 access token이 필요합니다.")
+
+    user = await _supabase_auth_request("user", method="GET", token=token)
+    if not user.get("id"):
+        raise HTTPException(status_code=401, detail="유효하지 않은 사용자 토큰입니다.")
+
+    _enforce_concurrent_login_limit(token, user, is_fresh_login=True)
+    _cache_user_by_token(token, user)
+    payload = {
+        **_build_auth_payload(token, user),
+        "access_token": token,
+        "refresh_token": (refresh_token or "").strip() or None,
+    }
+    response = JSONResponse(payload)
+    _set_auth_cookie(response, request, token)
+    return response
+
+
+@app.post("/api/auth/logout")
+async def logout(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    token = ""
+    if authorization:
+        try:
+            token = _extract_bearer_token(authorization)
+        except HTTPException:
+            token = ""
+    if not token:
+        token = (request.cookies.get(AUTH_COOKIE_NAME) or "").strip()
+
+    user_id = None
+    if token:
+        cached_user = _get_cached_user_by_token(token)
+        if cached_user and cached_user.get("id"):
+            user_id = str(cached_user.get("id"))
+        _auth_user_cache.pop(token, None)
+        _remove_active_auth_session(token, user_id=user_id)
+
+    response = JSONResponse({"success": True, "message": "로그아웃되었습니다."})
+    _clear_auth_cookie(response, request)
+    return response
 
 
 @app.get("/api/auth/oauth-url")
@@ -4911,26 +5109,16 @@ async def get_oauth_url(
 async def me(authorization: str | None = Header(default=None)):
     """현재 로그인 사용자 조회"""
     user = await _get_current_user(authorization)
-    return {
-        "success": True,
-        "user": user,
-    }
+    token = _extract_bearer_token(authorization)
+    return _build_auth_payload(token, user)
 
 
 @app.get("/api/auth/bootstrap")
 async def auth_bootstrap(authorization: str | None = Header(default=None)):
     """로그인 초기 화면 부팅용 사용자/사용량 통합 조회"""
     user = await _get_current_user(authorization)
-    row = _get_or_create_usage_row(user["id"])
-    snapshot = _build_usage_snapshot(
-        row,
-        is_admin_bypass=_is_admin_bypass_user(user=user),
-    )
-    return {
-        "success": True,
-        "user": user,
-        "usage": snapshot,
-    }
+    token = _extract_bearer_token(authorization)
+    return _build_auth_payload(token, user)
 
 
 @app.post("/api/records/draft")

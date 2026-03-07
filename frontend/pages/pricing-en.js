@@ -1,38 +1,42 @@
 import { useEffect, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import { apiFetch, safeReadJson } from '../utils/network'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://darakbang-transcription-production.up.railway.app'
-const AUTH_TOKEN_KEY = 'mallog24_access_token'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
 const CONTACT_MAIL = 'ours113814@gmail.com'
 const CONTACT_URL = `mailto:${CONTACT_MAIL}?subject=mallog24%20Subscription%20Upgrade%20Inquiry`
 
+const readResponseData = async (response, fallbackMessage) => {
+  const data = await safeReadJson(response)
+  if (!response.ok) {
+    throw new Error(data?.detail || fallbackMessage)
+  }
+  return data || {}
+}
+
 export default function PricingEnPage() {
-  const [authToken, setAuthToken] = useState('')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const refreshBillingStatus = async (token, { quiet = false } = {}) => {
-    if (!token) {
-      setStatus(null)
-      return
-    }
-
+  const refreshBillingStatus = async ({ quiet = false } = {}) => {
     if (!quiet) {
       setStatusLoading(true)
     }
     setError('')
     try {
-      const res = await fetch(`${API_URL}/api/billing/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.detail || 'Failed to load billing status.')
+      const res = await apiFetch(`${API_URL}/api/billing/status`)
+      if (res.status === 401) {
+        setIsAuthenticated(false)
+        setStatus(null)
+        return
       }
+      const data = await readResponseData(res, 'Failed to load billing status.')
+      setIsAuthenticated(true)
       setStatus(data)
     } catch (err) {
       setError(err.message || 'Failed to load billing status.')
@@ -45,7 +49,6 @@ export default function PricingEnPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    setAuthToken(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || '')
 
     const checkoutResult = new URLSearchParams(window.location.search).get('checkout')
     if (checkoutResult === 'success') {
@@ -53,22 +56,12 @@ export default function PricingEnPage() {
     } else if (checkoutResult === 'cancel') {
       setMessage('Payment was canceled.')
     }
+
+    refreshBillingStatus()
   }, [])
 
-  useEffect(() => {
-    if (!authToken) {
-      setStatus(null)
-      return
-    }
-    refreshBillingStatus(authToken)
-  }, [authToken])
-
-  const withAuthHeaders = (token) => ({
-    Authorization: `Bearer ${token}`,
-  })
-
   const startCheckout = async (payMethod = 'card') => {
-    if (!authToken) {
+    if (!isAuthenticated) {
       setError('Please log in before starting checkout.')
       return
     }
@@ -80,10 +73,9 @@ export default function PricingEnPage() {
     try {
       const successUrl = `${window.location.origin}/pricing-en?checkout=success`
       const cancelUrl = `${window.location.origin}/pricing-en?checkout=cancel`
-      const res = await fetch(`${API_URL}/api/billing/checkout`, {
+      const res = await apiFetch(`${API_URL}/api/billing/checkout`, {
         method: 'POST',
         headers: {
-          ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -93,10 +85,7 @@ export default function PricingEnPage() {
           pay_method: normalizedPayMethod,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.detail || 'Failed to open checkout.')
-      }
+      const data = await readResponseData(res, 'Failed to open checkout.')
       if (!data.checkout_url) {
         throw new Error('Checkout URL is empty.')
       }
@@ -109,7 +98,7 @@ export default function PricingEnPage() {
   }
 
   const openBillingPortal = async () => {
-    if (!authToken) {
+    if (!isAuthenticated) {
       setError('Please log in before opening billing portal.')
       return
     }
@@ -119,10 +108,9 @@ export default function PricingEnPage() {
     setMessage('')
     try {
       const returnUrl = `${window.location.origin}/pricing-en`
-      const res = await fetch(`${API_URL}/api/billing/portal`, {
+      const res = await apiFetch(`${API_URL}/api/billing/portal`, {
         method: 'POST',
         headers: {
-          ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -130,10 +118,7 @@ export default function PricingEnPage() {
           return_url: returnUrl,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.detail || 'Failed to open billing portal.')
-      }
+      const data = await readResponseData(res, 'Failed to open billing portal.')
       if (!data.portal_url) {
         throw new Error('Billing portal URL is empty.')
       }
@@ -146,7 +131,7 @@ export default function PricingEnPage() {
   }
 
   const cancelSubscription = async () => {
-    if (!authToken) {
+    if (!isAuthenticated) {
       setError('Please log in before canceling your subscription.')
       return
     }
@@ -159,10 +144,9 @@ export default function PricingEnPage() {
     setError('')
     setMessage('')
     try {
-      const res = await fetch(`${API_URL}/api/billing/cancel`, {
+      const res = await apiFetch(`${API_URL}/api/billing/cancel`, {
         method: 'POST',
         headers: {
-          ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -170,12 +154,9 @@ export default function PricingEnPage() {
           reason: 'user_requested_from_pricing_page_en',
         }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.detail || 'Failed to request cancellation.')
-      }
+      const data = await readResponseData(res, 'Failed to request cancellation.')
       setMessage(data.message || 'Cancellation request submitted.')
-      await refreshBillingStatus(authToken, { quiet: true })
+      await refreshBillingStatus({ quiet: true })
     } catch (err) {
       setError(err.message || 'Failed to request cancellation.')
     } finally {
@@ -184,7 +165,7 @@ export default function PricingEnPage() {
   }
 
   const requestRefund = async () => {
-    if (!authToken) {
+    if (!isAuthenticated) {
       setError('Please log in before requesting a refund.')
       return
     }
@@ -197,22 +178,18 @@ export default function PricingEnPage() {
     setError('')
     setMessage('')
     try {
-      const res = await fetch(`${API_URL}/api/billing/refund`, {
+      const res = await apiFetch(`${API_URL}/api/billing/refund`, {
         method: 'POST',
         headers: {
-          ...withAuthHeaders(authToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           reason: 'user_requested_from_pricing_page_en',
         }),
       })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.detail || 'Failed to request refund.')
-      }
+      const data = await readResponseData(res, 'Failed to request refund.')
       setMessage(data.message || 'Refund request submitted.')
-      await refreshBillingStatus(authToken, { quiet: true })
+      await refreshBillingStatus({ quiet: true })
     } catch (err) {
       setError(err.message || 'Failed to request refund.')
     } finally {
@@ -220,206 +197,73 @@ export default function PricingEnPage() {
     }
   }
 
-  const currentPlan = status?.usage?.plan_tier || status?.plan_tier || 'free'
-  const billingProvider = status?.provider || 'portone'
-  const checkoutMode = status?.checkout_mode || 'disabled'
-  const checkoutSupported = Boolean(status?.checkout_supported)
-  const portalSupported = Boolean(status?.portal_supported)
-  const paymentEnabled = Boolean(status?.payment_enabled)
-  const checkoutFlow = status?.checkout_flow || 'payment'
-  const isMockCheckout = checkoutMode === 'mock'
-  const supportsKakaoPayCheckout = checkoutSupported && checkoutFlow === 'payment'
-  const isPaid = currentPlan !== 'free'
-
   return (
-    <div className="min-h-screen bg-nm-bg text-nm-text-primary">
+    <div className="min-h-screen bg-[#071021] text-white">
       <Head>
         <title>mallog24 Pricing</title>
       </Head>
-
-      <main className="max-w-3xl mx-auto px-4 py-10">
-        <div className="nm-raised p-6 sm:p-8">
-          <p className="text-xs font-semibold text-nm-accent mb-2">Pricing</p>
-          <h1 className="text-2xl sm:text-3xl font-bold">mallog24 Plans</h1>
-          <p className="mt-3 text-sm text-nm-text-secondary leading-relaxed">
-            Free tier includes up to 10 hours each month. In environments with billing keys configured,
-            you can start Pro immediately.
-          </p>
-          <p className="mt-2 text-xs text-nm-text-secondary leading-relaxed">
-            Effective date: 2026-02-23 / Document version: v2026.02.23
-          </p>
-
-          <div className="grid sm:grid-cols-2 gap-3 mt-6">
-            <div className="nm-concave p-4">
-              <p className="text-xs text-nm-text-secondary">Free</p>
-              <p className="text-xl font-bold mt-1">10 hours / month</p>
-              <p className="text-xs text-nm-text-secondary mt-2">Core transcription and structuring features</p>
-            </div>
-            <div className="nm-concave p-4 border-l-4 border-nm-accent">
-              <p className="text-xs text-nm-text-secondary">Pro</p>
-              <p className="text-xl font-bold mt-1">KRW 8,800 / month (VAT included)</p>
-              <p className="text-[11px] text-nm-text-secondary mt-1">Base KRW 8,000 + VAT 10% (KRW 800)</p>
-              <p className="text-xs text-nm-text-secondary mt-2">Higher quota / priority · auto-renew monthly</p>
-            </div>
+      <main className="max-w-4xl mx-auto px-4 py-12">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
+          <div>
+            <p className="text-sm text-white/60">Pricing</p>
+            <h1 className="text-3xl font-bold">mallog24 Pro</h1>
+            <p className="text-white/70 mt-2">KRW 8,800/month (VAT included) for unlimited structured transcription</p>
           </div>
-
-          <div className="mt-5 nm-concave p-4">
-            <p className="text-sm font-semibold">Product Information</p>
-            <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
-              <li>Product name: mallog24 Pro Monthly Subscription</li>
-              <li>Service period: 1-month auto-renew cycle from payment approval time</li>
-              <li>Price: KRW 8,800 per month (VAT included, final amount shown at checkout)</li>
-              <li>Included: higher usage limits, prioritized processing, and subscription management</li>
-            </ul>
-          </div>
-
-          <div className="mt-4 nm-concave p-4">
-            <p className="text-sm font-semibold">Checkout and Subscription Flow</p>
-            <ol className="mt-2 list-decimal pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
-              <li>Log in and select Pro from this pricing page.</li>
-              <li>Review product name, amount, payment method, and terms in the payment provider checkout.</li>
-              <li>After payment approval, subscription is activated immediately and billing period starts.</li>
-              <li>To stop renewal, cancel from the subscription management page before the next billing date.</li>
-            </ol>
-          </div>
-
-          <div className="mt-4 nm-concave p-4">
-            <p className="text-sm font-semibold">Refund Policy</p>
-            <ul className="mt-2 list-disc pl-5 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
-              <li>Full refund may be requested within 7 days after payment if no usage has occurred.</li>
-              <li>If usage exists, partial refunds for the current billing cycle may be limited; cancellation is applied from the next cycle.</li>
-              <li>Duplicate charges, payment errors, or confirmed overcharges are refunded in full after verification.</li>
-              <li>Refund completion timing and payout rails depend on payment provider/card issuer policies.</li>
-              <li>Applicable consumer protection laws take precedence where required.</li>
-            </ul>
-          </div>
-
-          <div className="mt-5 nm-concave p-4">
-            <p className="text-xs text-nm-text-secondary">Current Plan</p>
-            {statusLoading ? (
-              <p className="text-sm mt-1">Loading...</p>
-            ) : (
-              <p className="text-sm font-semibold mt-1">
-                {authToken ? (isPaid ? 'Pro' : 'Free') : 'Login required'}
-              </p>
-            )}
-            {authToken && (
-              <p className="text-xs text-nm-text-secondary mt-1">
-                Billing provider: {billingProvider} / checkout mode: {checkoutMode}
-              </p>
-            )}
-          </div>
-
-          <div className="mt-6 flex flex-col sm:flex-row gap-2">
-            {isPaid ? (
-              <button
-                type="button"
-                onClick={openBillingPortal}
-                disabled={!portalSupported || actionLoading !== ''}
-                className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
-              >
-                {actionLoading === 'portal'
-                  ? 'Opening...'
-                  : portalSupported
-                    ? 'Manage Subscription'
-                    : 'Domestic PG portal pending'}
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => startCheckout('card')}
-                  disabled={!checkoutSupported || !authToken || actionLoading !== ''}
-                  className="nm-btn-primary inline-flex items-center justify-center px-5 py-3 text-sm font-semibold disabled:opacity-50"
-                >
-                  {actionLoading === 'checkout_card'
-                    ? 'Opening...'
-                    : checkoutSupported
-                      ? isMockCheckout
-                        ? 'Card Mock Checkout'
-                        : 'Start Pro (Card)'
-                      : 'Checkout unavailable'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startCheckout('kakaopay')}
-                  disabled={!supportsKakaoPayCheckout || !authToken || actionLoading !== ''}
-                  className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
-                >
-                  {actionLoading === 'checkout_kakaopay'
-                    ? 'Opening...'
-                    : supportsKakaoPayCheckout
-                      ? isMockCheckout
-                        ? 'KakaoPay Mock Checkout'
-                        : 'Pay with KakaoPay'
-                      : 'KakaoPay unavailable'}
-                </button>
-              </>
-            )}
-            {isPaid && (
-              <button
-                type="button"
-                onClick={cancelSubscription}
-                disabled={actionLoading !== ''}
-                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
-              >
-                {actionLoading === 'cancel' ? 'Processing...' : 'Cancel Subscription'}
-              </button>
-            )}
-            {isPaid && (
-              <button
-                type="button"
-                onClick={requestRefund}
-                disabled={actionLoading !== ''}
-                className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50"
-              >
-                {actionLoading === 'refund' ? 'Processing...' : 'Request Refund'}
-              </button>
-            )}
-            <a
-              href={CONTACT_URL}
-              className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary"
-            >
-              Upgrade Inquiry
-            </a>
-            <Link
-              href="/en"
-              className="nm-btn inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-nm-text-primary"
-            >
-              Back to mallog24
-            </Link>
-          </div>
-
-          {!authToken && (
-            <p className="text-xs text-nm-text-secondary mt-3">
-              Log in on mallog24 first to start checkout.
-            </p>
-          )}
-          {!paymentEnabled && (
-            <p className="text-xs text-nm-text-secondary mt-3">
-              Billing keys are not configured on the backend yet, so live checkout is disabled.
-            </p>
-          )}
-          {checkoutSupported && isMockCheckout && (
-            <p className="text-xs text-nm-text-secondary mt-3">
-              Mock checkout mode is enabled. You can validate success/cancel flow without real charges.
-            </p>
-          )}
-          {checkoutSupported && checkoutFlow === 'billing_key' && (
-            <p className="text-xs text-nm-text-secondary mt-3">
-              Current mode is recurring billing-key (`PORTONE_CHECKOUT_FLOW=billing_key`). For KakaoPay test checkout,
-              switch backend to `PORTONE_CHECKOUT_FLOW=payment`.
-            </p>
-          )}
-          {isPaid && (
-            <p className="text-xs text-nm-text-secondary mt-3">
-              Default auto-refund criteria: within 7 days after payment and zero monthly usage.
-            </p>
-          )}
-          {message && <p className="text-xs text-blue-600 mt-3">{message}</p>}
-          {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
-          <p className="text-xs text-nm-text-secondary mt-4">Contact: {CONTACT_MAIL}</p>
+          <Link href="/en" className="px-4 py-2 rounded-full border border-white/15 text-sm text-white/80 hover:text-white">
+            Back to mallog24
+          </Link>
         </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <p className="text-sm text-white/60">Current plan</p>
+            <h2 className="text-2xl font-semibold mt-2">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
+            <p className="text-white/60 mt-2">Free plan includes up to 10 hours per month.</p>
+            {statusLoading ? (
+              <p className="mt-4 text-white/60">Checking billing status...</p>
+            ) : status ? (
+              <div className="mt-4 space-y-2 text-sm text-white/80">
+                <p>Status: {status.status || 'inactive'}</p>
+                <p>Renews on: {status.current_period_end ? new Date(status.current_period_end).toLocaleString('en-US') : 'N/A'}</p>
+                <p>Cancel scheduled: {status.cancel_at_period_end ? 'Yes' : 'No'}</p>
+              </div>
+            ) : (
+              <p className="mt-4 text-white/60">Log in first to see subscription status.</p>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <p className="text-sm text-white/60">Upgrade</p>
+            <h2 className="text-2xl font-semibold mt-2">Pro monthly subscription</h2>
+            <p className="text-white/70 mt-2">Unlimited usage, priority support, and subscription management</p>
+            <div className="mt-6 grid gap-3">
+              <button type="button" onClick={() => startCheckout('card')} className="rounded-2xl bg-white text-[#071021] px-4 py-3 font-semibold">
+                {actionLoading === 'checkout_card' ? 'Opening checkout...' : 'Subscribe with card'}
+              </button>
+              <button type="button" onClick={() => startCheckout('kakaopay')} className="rounded-2xl bg-[#FEE500] text-[#1D1D1F] px-4 py-3 font-semibold">
+                {actionLoading === 'checkout_kakaopay' ? 'Connecting KakaoPay...' : 'Subscribe with KakaoPay'}
+              </button>
+              <button type="button" onClick={openBillingPortal} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85">
+                {actionLoading === 'portal' ? 'Opening...' : 'Open billing portal'}
+              </button>
+              <button type="button" onClick={cancelSubscription} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85">
+                {actionLoading === 'cancel' ? 'Processing...' : 'Cancel subscription'}
+              </button>
+              <button type="button" onClick={requestRefund} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85">
+                {actionLoading === 'refund' ? 'Processing...' : 'Request refund'}
+              </button>
+              <a href={CONTACT_URL} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85 text-center">
+                Send billing inquiry email
+              </a>
+            </div>
+          </section>
+        </div>
+
+        {(message || error) && (
+          <div className={`mt-6 rounded-2xl px-4 py-3 text-sm ${error ? 'bg-red-500/15 text-red-200 border border-red-400/20' : 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/20'}`}>
+            {error || message}
+          </div>
+        )}
       </main>
     </div>
   )
