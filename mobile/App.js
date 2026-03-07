@@ -93,6 +93,50 @@ function App() {
     setNotice("");
     setError("");
   }, []);
+  const clearScrollUnlockTimer = useCallback(() => {
+    if (scrollUnlockTimerRef.current) {
+      clearTimeout(scrollUnlockTimerRef.current);
+      scrollUnlockTimerRef.current = null;
+    }
+  }, []);
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+  const unlockWorkspaceScroll = useCallback(() => {
+    clearScrollUnlockTimer();
+    setWorkspaceScrollEnabled(true);
+  }, [clearScrollUnlockTimer]);
+  const lockWorkspaceScroll = useCallback(() => {
+    clearScrollUnlockTimer();
+    setWorkspaceScrollEnabled(false);
+    scrollUnlockTimerRef.current = setTimeout(() => {
+      setWorkspaceScrollEnabled(true);
+      scrollUnlockTimerRef.current = null;
+    }, 500);
+  }, [clearScrollUnlockTimer]);
+  const invalidatePollingSession = useCallback(() => {
+    stopPolling();
+    pollTokenRef.current += 1;
+    pollStartedAtRef.current = 0;
+    activeTaskIdRef.current = "";
+  }, [stopPolling]);
+  const resetResultWorkspace = useCallback((restoreScroll = false) => {
+    resultEpochRef.current += 1;
+    setResult(null);
+    setSummaryLoading(false);
+    setRecordDrafts({});
+    setDraftLoadingCategory("");
+    setSavingCategory("");
+    setTaskStateText("");
+    setSubmitting(false);
+    if (restoreScroll) {
+      unlockWorkspaceScroll();
+    }
+    return resultEpochRef.current;
+  }, [unlockWorkspaceScroll]);
   const shortestEdge = Math.min(screenWidth, screenHeight);
   const compactLayout = screenHeight < 760 || shortestEdge < 390 || fontScale >= 1.1;
   const tinyLayout = screenHeight < 680 || shortestEdge < 360 || fontScale >= 1.25;
