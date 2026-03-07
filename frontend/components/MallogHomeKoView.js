@@ -145,7 +145,7 @@ export default function MallogHomeKoView(props) {
 
       {/* 헤더 */}
       <header className="sticky top-0 z-50 bg-nm-bg shadow-nm-flat">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <a
               href={OURS_URL}
@@ -168,7 +168,7 @@ export default function MallogHomeKoView(props) {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 pt-6">
+      <main className="max-w-4xl mx-auto px-4 pt-6">
         {!authToken && (
           <MallogLandingSections
             locale="kr"
@@ -180,7 +180,7 @@ export default function MallogHomeKoView(props) {
         )}
 
         {/* 인증 카드 */}
-        <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
+        <div className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in ${!authToken ? 'max-w-2xl mx-auto' : ''}`}>
           {!authToken ? (
             <>
               <div className="mb-4">
@@ -244,14 +244,14 @@ export default function MallogHomeKoView(props) {
                 </button>
               </form>
               <div className="mt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {socialProviders.map((provider) => (
                     <button
                       key={provider.key}
                       type="button"
                       onClick={() => handleSocialLogin(provider.key)}
                       disabled={authLoading || Boolean(socialLoading)}
-                      className="nm-btn w-full h-11 px-3 text-sm font-semibold text-nm-text-primary inline-flex items-center justify-center gap-2"
+                      className="nm-btn w-full min-h-[44px] px-3 py-2 text-sm font-semibold text-nm-text-primary inline-flex items-center justify-center gap-2 text-center leading-snug"
                     >
                       <span className={`w-5 h-5 rounded-full text-[11px] font-bold inline-flex items-center justify-center ${provider.iconClass}`}>
                         {provider.icon}
@@ -331,8 +331,11 @@ export default function MallogHomeKoView(props) {
             )}
 
             <div className="nm-flat p-4 mb-5 animate-nm-card-in">
-              <p className="text-xs sm:text-sm text-nm-accent font-medium">
-                mallog24는 공식적으로 배포된 음성 파일의 사용을 권장 합니다. <br />부정적인 방법으로 사용 중 외부에 적발시 법적인 책임이 없음을 알립니다.
+              <p className="text-xs sm:text-sm text-nm-accent font-medium leading-relaxed">
+                mallog24는 공식적으로 배포된 음성 파일의 사용을 권장합니다.
+                <span className="block mt-1">
+                  비정상적이거나 권한 없는 방식으로 사용하다가 외부에 적발되는 경우, 그에 따른 법적 책임은 사용자에게 있습니다.
+                </span>
               </p>
             </div>
             {/* 업로드 카드 */}

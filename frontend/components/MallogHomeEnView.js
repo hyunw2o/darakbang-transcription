@@ -145,7 +145,7 @@ export default function MallogHomeEnView(props) {
 
       {/* 헤더 */}
       <header className="sticky top-0 z-50 bg-nm-bg shadow-nm-flat">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <a
               href={OURS_URL}
@@ -168,7 +168,7 @@ export default function MallogHomeEnView(props) {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 pt-6">
+      <main className="max-w-4xl mx-auto px-4 pt-6">
         {!authToken && (
           <MallogLandingSections
             locale="en"
@@ -180,7 +180,7 @@ export default function MallogHomeEnView(props) {
         )}
 
         {/* Auth Card */}
-        <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
+        <div className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in ${!authToken ? 'max-w-2xl mx-auto' : ''}`}>
           {!authToken ? (
             <>
               <div className="mb-4">
@@ -246,14 +246,14 @@ export default function MallogHomeEnView(props) {
                 </button>
               </form>
               <div className="mt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {socialProviders.map((provider) => (
                     <button
                       key={provider.key}
                       type="button"
                       onClick={() => handleSocialLogin(provider.key)}
                       disabled={authLoading || Boolean(socialLoading)}
-                      className="nm-btn w-full h-11 px-3 text-sm font-semibold text-nm-text-primary disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                      className="nm-btn w-full min-h-[44px] px-3 py-2 text-sm font-semibold text-nm-text-primary disabled:opacity-50 inline-flex items-center justify-center gap-2 text-center leading-snug"
                     >
                       <span className={`w-5 h-5 rounded-full text-[11px] font-bold inline-flex items-center justify-center ${provider.iconClass}`}>
                         {provider.icon}
@@ -333,8 +333,11 @@ export default function MallogHomeEnView(props) {
             )}
 
             <div className="nm-flat mb-5 p-4 animate-nm-card-in">
-              <p className="text-xs sm:text-sm text-nm-accent font-medium">
-                mallog24 recommends the use of officially distributed audio files. Please be advised that mallog24 assumes no legal liability for any consequences arising from unauthorized or improper use if discovered by third parties.
+              <p className="text-xs sm:text-sm text-nm-accent font-medium leading-relaxed">
+                mallog24 recommends the use of officially distributed audio files.
+                <span className="block mt-1">
+                  If unauthorized or improper use is identified by a third party, the resulting legal responsibility remains with the user.
+                </span>
               </p>
             </div>
             {/* 업로드 카드 */}

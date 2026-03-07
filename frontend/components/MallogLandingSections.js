@@ -4,6 +4,7 @@ import StepIndicator from './StepIndicator'
 
 export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats }) {
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
+  const localeTextClass = locale === 'kr' ? 'break-keep' : ''
   const statsCards = [
     {
       key: 'hoursProcessed',
@@ -41,20 +42,20 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
           ))}
         </div>
 
-        <h1 className="text-xl sm:text-2xl font-bold text-nm-text-primary leading-tight">{content.heroTitle}</h1>
-        <p className="mt-2 text-sm text-nm-text-secondary leading-relaxed">{content.heroDescription}</p>
+        <h1 className={`text-xl sm:text-2xl font-bold text-nm-text-primary leading-tight ${localeTextClass}`}>{content.heroTitle}</h1>
+        <p className={`mt-2 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.heroDescription}</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           <div className="nm-concave p-4">
             <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">{content.beforeLabel}</p>
-            <p className="text-sm text-nm-text-secondary leading-relaxed">{content.beforeText}</p>
+            <p className={`text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.beforeText}</p>
           </div>
           <div className="nm-concave p-4">
             <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">{content.afterLabel}</p>
-            <p className="text-sm font-semibold text-nm-text-primary">{content.afterTitle}</p>
+            <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{content.afterTitle}</p>
             <ul className="mt-2 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
               {content.afterItems.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item} className={localeTextClass}>- {item}</li>
               ))}
             </ul>
           </div>
@@ -76,11 +77,11 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {content.featureCards.map((card) => (
           <div key={card.title} className="nm-raised p-4">
-            <p className="text-sm font-semibold text-nm-text-primary">{card.title}</p>
-            <p className="text-xs text-nm-text-secondary mt-1">{card.body}</p>
+            <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{card.title}</p>
+            <p className={`text-xs text-nm-text-secondary mt-1 leading-relaxed ${localeTextClass}`}>{card.body}</p>
           </div>
         ))}
       </div>
@@ -88,29 +89,29 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <div className="nm-raised p-5 sm:p-6 space-y-4">
         <div>
           <p className="text-xs font-semibold text-nm-accent uppercase tracking-[0.22em]">{content.howItWorksEyebrow}</p>
-          <h2 className="mt-2 text-lg font-bold text-nm-text-primary">{content.howItWorksTitle}</h2>
-          <p className="mt-1 text-sm text-nm-text-secondary leading-relaxed">{content.howItWorksDescription}</p>
+          <h2 className={`mt-2 text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.howItWorksTitle}</h2>
+          <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.howItWorksDescription}</p>
         </div>
         <div className="nm-concave p-4 sm:p-5">
           <StepIndicator currentStep={1} locale={locale} />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {content.stepCards.map((step) => (
             <div key={step.title} className="nm-concave p-4">
-              <p className="text-sm font-semibold text-nm-text-primary">{step.title}</p>
-              <p className="mt-1 text-xs text-nm-text-secondary leading-relaxed">{step.body}</p>
+              <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{step.title}</p>
+              <p className={`mt-1 text-xs text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{step.body}</p>
             </div>
           ))}
         </div>
       </div>
 
       <div className="nm-raised p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-nm-text-primary">{content.trustTitle}</h2>
+        <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.trustTitle}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
           {content.trustCards.map((card) => (
             <div key={card.title} className="nm-concave p-4">
-              <p className="text-sm font-semibold text-nm-text-primary">{card.title}</p>
-              <p className="mt-1 text-xs text-nm-text-secondary leading-relaxed">{card.body}</p>
+              <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{card.title}</p>
+              <p className={`mt-1 text-xs text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{card.body}</p>
             </div>
           ))}
         </div>
@@ -119,8 +120,8 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <div className="nm-raised p-5 sm:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-nm-text-primary">{content.statsTitle}</h2>
-            <p className="mt-1 text-sm text-nm-text-secondary leading-relaxed">{content.statsDescription}</p>
+            <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.statsTitle}</h2>
+            <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.statsDescription}</p>
           </div>
           {stats?.updatedAt ? (
             <p className="text-[11px] text-nm-text-secondary">
@@ -132,19 +133,19 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
           {statsCards.map((card) => (
             <div key={card.key} className="nm-concave p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-nm-text-secondary">{card.label}</p>
-              <p className="mt-2 text-base font-bold text-nm-text-primary leading-snug">{card.value}</p>
+              <p className={`mt-2 text-base font-bold text-nm-text-primary leading-snug ${localeTextClass}`}>{card.value}</p>
             </div>
           ))}
         </div>
       </div>
 
       <div className="nm-raised p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-nm-text-primary">{content.useCasesTitle}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+        <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.useCasesTitle}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
           {content.useCases.map((item) => (
             <div key={item.title} className="nm-concave p-4">
-              <p className="text-sm font-semibold text-nm-text-primary">{item.title}</p>
-              <p className="mt-1 text-xs text-nm-text-secondary leading-relaxed">{item.body}</p>
+              <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{item.title}</p>
+              <p className={`mt-1 text-xs text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{item.body}</p>
             </div>
           ))}
         </div>
@@ -152,10 +153,11 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
 
       <div className="nm-raised p-5 sm:p-6">
         <div>
-          <h2 className="text-lg font-bold text-nm-text-primary">{content.comparisonTitle}</h2>
-          <p className="mt-1 text-sm text-nm-text-secondary leading-relaxed">{content.comparisonDescription}</p>
+          <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.comparisonTitle}</h2>
+          <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.comparisonDescription}</p>
         </div>
-        <div className="mt-4 overflow-hidden rounded-[22px] border border-white/10">
+        <div className="mt-4 overflow-x-auto rounded-[22px] border border-white/10">
+          <div className="min-w-[720px]">
           <div className="grid grid-cols-[1.3fr,1fr,1fr] bg-white/5 text-[11px] font-semibold uppercase tracking-[0.12em] text-nm-text-secondary">
             <div className="px-4 py-3">{content.comparisonColumns.feature}</div>
             <div className="px-4 py-3 border-l border-white/10">{content.comparisonColumns.free}</div>
@@ -166,16 +168,17 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
               key={row.feature}
               className="grid grid-cols-[1.3fr,1fr,1fr] text-sm text-nm-text-primary border-t border-white/10 bg-white/[0.03]"
             >
-              <div className="px-4 py-3 font-semibold">{row.feature}</div>
-              <div className="px-4 py-3 border-l border-white/10 text-nm-text-secondary">{row.free}</div>
-              <div className="px-4 py-3 border-l border-white/10 text-nm-text-secondary">{row.pro}</div>
+              <div className={`px-4 py-3 font-semibold ${localeTextClass}`}>{row.feature}</div>
+              <div className={`px-4 py-3 border-l border-white/10 text-nm-text-secondary ${localeTextClass}`}>{row.free}</div>
+              <div className={`px-4 py-3 border-l border-white/10 text-nm-text-secondary ${localeTextClass}`}>{row.pro}</div>
             </div>
           ))}
+          </div>
         </div>
       </div>
 
       <div className="nm-raised p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-nm-text-primary">{content.faqTitle}</h2>
+        <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.faqTitle}</h2>
         <div className="mt-4 space-y-3">
           {content.faqs.map((faq, index) => {
             const isOpen = openFaqIndex === index
@@ -187,14 +190,14 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
                   className="w-full px-4 py-4 flex items-center justify-between gap-4 text-left"
                   aria-expanded={isOpen}
                 >
-                  <span className="text-sm font-semibold text-nm-text-primary">{faq.question}</span>
+                  <span className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{faq.question}</span>
                   <span className={`text-nm-text-secondary transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>
                     +
                   </span>
                 </button>
                 {isOpen ? (
                   <div className="px-4 pb-4">
-                    <p className="text-xs text-nm-text-secondary leading-relaxed">{faq.answer}</p>
+                    <p className={`text-xs text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{faq.answer}</p>
                   </div>
                 ) : null}
               </div>
