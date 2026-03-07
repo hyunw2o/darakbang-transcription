@@ -37,6 +37,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   buttonActive: {
     shadowOpacity: 0.14,

@@ -1304,7 +1304,12 @@ function App() {
 
           <FadeInView delay={70} duration={360}>
             <View style={[styles.tabsWrap, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-              <View style={styles.segmentRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.segmentScroll}
+                contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
+              >
                 {tabOptions.map((tab) => (
                   <SegmentButton
                     key={tab.key}
@@ -1314,7 +1319,7 @@ function App() {
                     theme={activeTheme}
                   />
                 ))}
-              </View>
+              </ScrollView>
             </View>
           </FadeInView>
 
@@ -1329,7 +1334,12 @@ function App() {
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
 
-                  <View style={styles.segmentRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.segmentScroll}
+                    contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
+                  >
                     {transcriptionTypeOptions.map((item) => (
                       <SegmentButton
                         key={item.key}
@@ -1339,7 +1349,7 @@ function App() {
                         theme={activeTheme}
                       />
                     ))}
-                  </View>
+                  </ScrollView>
 
                   <NmPressable style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={pickAudioFile}>
                     <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.pickFile}</Text>
@@ -1805,13 +1815,23 @@ function App() {
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsAppearanceHint}</Text>
 
                   <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.settingsLanguageLabel}</Text>
-                  <View style={styles.segmentRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.segmentScroll}
+                    contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
+                  >
                     <SegmentButton label={copy.languageOptionKo} active={language === "ko"} onPress={() => setLanguage("ko")} theme={activeTheme} />
                     <SegmentButton label={copy.languageOptionEn} active={language === "en"} onPress={() => setLanguage("en")} theme={activeTheme} />
-                  </View>
+                  </ScrollView>
 
                   <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.settingsThemeLabel}</Text>
-                  <View style={styles.segmentRow}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.segmentScroll}
+                    contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
+                  >
                     {MOBILE_THEME_OPTIONS.map((themeOption) => {
                       const active =
                         themeOption.key === "auto"
@@ -1827,7 +1847,7 @@ function App() {
                         />
                       );
                     })}
-                  </View>
+                  </ScrollView>
                 </View>
               </FadeInView>
             </ScrollView>
@@ -2309,6 +2329,12 @@ const styles = StyleSheet.create({
   segmentRow: {
     flexDirection: "row",
     gap: 6,
+  },
+  segmentScroll: {
+    flexGrow: 0,
+  },
+  segmentScrollContent: {
+    paddingRight: 6,
   },
   input: {
     borderRadius: NM.radiusSm,
