@@ -4,6 +4,7 @@ import useMallogTranscription from '../hooks/useMallogTranscription'
 import useUiFeedback from '../hooks/useUiFeedback'
 import MallogHomeKoView from './MallogHomeKoView'
 import MallogHomeEnView from './MallogHomeEnView'
+import { apiFetch, safeReadJson } from '../utils/network'
 
 const QUOTA_TOAST_MS = 2600
 
@@ -18,6 +19,7 @@ export default function MallogHomePageContainer({
 }) {
   const isEnglish = locale === 'en'
   const [copied, setCopied] = useState(null)
+  const [landingStats, setLandingStats] = useState(null)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
@@ -75,6 +77,34 @@ export default function MallogHomePageContainer({
   useEffect(() => {
     transcription.resetState()
   }, [auth.authToken])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchLandingStats = async () => {
+      try {
+        const response = await apiFetch(`${API_URL}/api/stats`)
+        const payload = await safeReadJson(response)
+        if (!response.ok || !payload || cancelled) return
+        setLandingStats({
+          hoursProcessed: payload.hours_processed || '',
+          betaUsers: payload.beta_users || '',
+          avgTurnaround: payload.avg_turnaround?.[isEnglish ? 'en' : 'ko'] || '',
+          timeSaving: payload.time_saving?.[isEnglish ? 'en' : 'ko'] || '',
+          updatedAt: payload.updated_at || '',
+        })
+      } catch {
+        if (!cancelled) {
+          setLandingStats(null)
+        }
+      }
+    }
+
+    fetchLandingStats()
+    return () => {
+      cancelled = true
+    }
+  }, [API_URL, isEnglish])
 
   const {
     authMode,
@@ -257,6 +287,7 @@ export default function MallogHomePageContainer({
       error={error}
       notice={notice}
       toastMessage={toastMessage}
+      landingStats={landingStats}
       API_URL={API_URL}
       SITE_URL={SITE_URL}
       OURS_URL={OURS_URL}

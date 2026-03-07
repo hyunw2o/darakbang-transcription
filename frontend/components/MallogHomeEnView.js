@@ -1,8 +1,10 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import HeaderMenuControls from './HeaderMenuControls'
+import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
 import StepIndicator from './StepIndicator'
+import { EN_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
 
 export default function MallogHomeEnView(props) {
@@ -17,6 +19,7 @@ export default function MallogHomeEnView(props) {
     error,
     notice,
     toastMessage,
+    landingStats,
     OURS_URL,
     OURS_PRIVACY_URL,
     OURS_TERMS_URL,
@@ -167,92 +170,13 @@ export default function MallogHomeEnView(props) {
 
       <main className="max-w-2xl mx-auto px-4 pt-6">
         {!authToken && (
-          <section className="space-y-4 mb-5 animate-nm-card-in">
-            <div className="nm-raised p-5 sm:p-6">
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  Free 10h/month
-                </span>
-                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  Pro KRW 8,800/month (VAT included) Unlimited
-                </span>
-                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  Open Beta
-                </span>
-              </div>
-
-              <h1 className="text-xl sm:text-2xl font-bold text-nm-text-primary leading-tight">
-                Upload audio once. Get structured transcripts ready to use.
-              </h1>
-              <p className="mt-2 text-sm text-nm-text-secondary leading-relaxed">
-                For sermons, calls, and meetings, AI listens, corrects, and summarizes.
-                Export as TXT/DOCX and save structured records in one flow.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                <div className="nm-concave p-4">
-                  <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">Before</p>
-                  <p className="text-sm text-nm-text-secondary leading-relaxed">
-                    "Ad budget was 15% over this week, and we need the revised plan by next week."
-                  </p>
-                </div>
-                <div className="nm-concave p-4">
-                  <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">After</p>
-                  <p className="text-sm font-semibold text-nm-text-primary">Meeting Summary</p>
-                  <ul className="mt-2 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
-                    <li>- Agenda: Budget overrun (+15%)</li>
-                    <li>- Decision: Share revised plan</li>
-                    <li>- Action: Reassign owner and timeline</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <Link
-                  href={UPGRADE_CONTACT_URL}
-                  className="nm-btn-primary inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold"
-                >
-                  View Pricing
-                </Link>
-                <a
-                  href={OURS_URL}
-                  className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
-                >
-                  About OURS
-                </a>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="nm-raised p-4">
-                <p className="text-sm font-semibold text-nm-text-primary">Domain Term Accuracy</p>
-                <p className="text-xs text-nm-text-secondary mt-1">Dictionary + context correction reduces term confusion.</p>
-              </div>
-              <div className="nm-raised p-4">
-                <p className="text-sm font-semibold text-nm-text-primary">Structured Output</p>
-                <p className="text-xs text-nm-text-secondary mt-1">Summaries, key points, and follow-up actions in usable form.</p>
-              </div>
-              <div className="nm-raised p-4">
-                <p className="text-sm font-semibold text-nm-text-primary">Two-stage Engine</p>
-                <p className="text-xs text-nm-text-secondary mt-1">Whisper transcription + Gemini correction for quality and speed.</p>
-              </div>
-            </div>
-
-            <div className="nm-raised p-4">
-              <p className="text-xs font-semibold text-nm-accent mb-2">Early Beta Feedback</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="nm-concave p-3">
-                  <p className="text-xs text-nm-text-primary">"Meeting recap time dropped a lot."</p>
-                </div>
-                <div className="nm-concave p-3">
-                  <p className="text-xs text-nm-text-primary">"Saving sermon summaries is practical and quick."</p>
-                </div>
-                <div className="nm-concave p-3">
-                  <p className="text-xs text-nm-text-primary">"Domain wording breaks less than before."</p>
-                </div>
-              </div>
-            </div>
-          </section>
+          <MallogLandingSections
+            locale="en"
+            content={EN_MALLOG_LANDING_CONTENT}
+            pricingUrl={UPGRADE_CONTACT_URL}
+            oursUrl={OURS_URL}
+            stats={landingStats}
+          />
         )}
 
         {/* Auth Card */}

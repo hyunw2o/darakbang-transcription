@@ -138,6 +138,13 @@ MAX_TEXT_INPUT_CHARS = int(os.getenv("MAX_TEXT_INPUT_CHARS", "120000"))
 MAX_RECORD_CONTENT_CHARS = int(os.getenv("MAX_RECORD_CONTENT_CHARS", "80000"))
 EXPOSE_TERMS_ENDPOINT = (os.getenv("EXPOSE_TERMS_ENDPOINT", "false").strip().lower() == "true")
 LOG_GEMINI_MODELS_ON_STARTUP = (os.getenv("LOG_GEMINI_MODELS_ON_STARTUP", "false").strip().lower() == "true")
+LANDING_STATS_HOURS_PROCESSED = (os.getenv("LANDING_STATS_HOURS_PROCESSED") or "").strip()
+LANDING_STATS_BETA_USERS = (os.getenv("LANDING_STATS_BETA_USERS") or "").strip()
+LANDING_STATS_AVG_TURNAROUND_KO = (os.getenv("LANDING_STATS_AVG_TURNAROUND_KO") or "").strip()
+LANDING_STATS_AVG_TURNAROUND_EN = (os.getenv("LANDING_STATS_AVG_TURNAROUND_EN") or "").strip()
+LANDING_STATS_TIME_SAVING_KO = (os.getenv("LANDING_STATS_TIME_SAVING_KO") or "").strip()
+LANDING_STATS_TIME_SAVING_EN = (os.getenv("LANDING_STATS_TIME_SAVING_EN") or "").strip()
+LANDING_STATS_UPDATED_AT = (os.getenv("LANDING_STATS_UPDATED_AT") or "").strip()
 
 ALLOWED_LANGUAGES = {"ko", "en"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
@@ -327,6 +334,23 @@ async def root():
         "engine": "Whisper STT + Gemini 교정" if openai_client else "Gemini (단일)",
         "darakbang_terms": len(DARAKBANG_CORE),
         "total_terms": len(ALL_CHURCH_TERMS),
+    }
+
+
+@app.get("/api/stats")
+async def get_public_landing_stats():
+    return {
+        "hours_processed": LANDING_STATS_HOURS_PROCESSED,
+        "beta_users": LANDING_STATS_BETA_USERS,
+        "avg_turnaround": {
+            "ko": LANDING_STATS_AVG_TURNAROUND_KO,
+            "en": LANDING_STATS_AVG_TURNAROUND_EN,
+        },
+        "time_saving": {
+            "ko": LANDING_STATS_TIME_SAVING_KO,
+            "en": LANDING_STATS_TIME_SAVING_EN,
+        },
+        "updated_at": LANDING_STATS_UPDATED_AT,
     }
 
 # Supabase 설정

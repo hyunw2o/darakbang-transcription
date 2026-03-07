@@ -1,8 +1,10 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import HeaderMenuControls from './HeaderMenuControls'
+import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
 import StepIndicator from './StepIndicator'
+import { KO_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
 
 export default function MallogHomeKoView(props) {
@@ -17,6 +19,7 @@ export default function MallogHomeKoView(props) {
     error,
     notice,
     toastMessage,
+    landingStats,
     OURS_URL,
     OURS_PRIVACY_URL,
     OURS_TERMS_URL,
@@ -167,92 +170,13 @@ export default function MallogHomeKoView(props) {
 
       <main className="max-w-2xl mx-auto px-4 pt-6">
         {!authToken && (
-          <section className="space-y-4 mb-5 animate-nm-card-in">
-            <div className="nm-raised p-5 sm:p-6">
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  무료 월 10시간
-                </span>
-                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  Pro 월 8,800원(VAT 포함) 무제한
-                </span>
-                <span className="px-3 py-1 rounded-full text-[11px] font-semibold nm-concave text-nm-text-secondary">
-                  오픈 베타
-                </span>
-              </div>
-
-              <h1 className="text-xl sm:text-2xl font-bold text-nm-text-primary leading-tight">
-                녹음만 올리세요. 바로 쓰는 구조화 녹취 문서가 나옵니다.
-              </h1>
-              <p className="mt-2 text-sm text-nm-text-secondary leading-relaxed">
-                설교, 통화, 회의에 맞춰 AI가 듣고 교정하고 요약합니다.
-                결과는 TXT/DOCX와 기록본으로 바로 저장할 수 있습니다.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                <div className="nm-concave p-4">
-                  <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">Before</p>
-                  <p className="text-sm text-nm-text-secondary leading-relaxed">
-                    "이번 주 광고 예산이 15% 초과됐고, 다음 주 수정안을 다시 공유해 주세요."
-                  </p>
-                </div>
-                <div className="nm-concave p-4">
-                  <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">After</p>
-                  <p className="text-sm font-semibold text-nm-text-primary">회의 기록 요약</p>
-                  <ul className="mt-2 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
-                    <li>- 안건: 예산 초과 15%</li>
-                    <li>- 결정: 수정안 재공유</li>
-                    <li>- 후속 조치: 일정/담당 재배정</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <Link
-                  href={UPGRADE_CONTACT_URL}
-                  className="nm-btn-primary inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold"
-                >
-                  요금제 보기
-                </Link>
-                <a
-                  href={OURS_URL}
-                  className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
-                >
-                  OURS 소개 보기
-                </a>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="nm-raised p-4">
-                <p className="text-sm font-semibold text-nm-text-primary">전문 용어 정확도</p>
-                <p className="text-xs text-nm-text-secondary mt-1">도메인 용어 사전 + 문맥 교정으로 오인식을 줄입니다.</p>
-              </div>
-              <div className="nm-raised p-4">
-                <p className="text-sm font-semibold text-nm-text-primary">구조화된 문서 출력</p>
-                <p className="text-xs text-nm-text-secondary mt-1">요약, 핵심 포인트, 후속 조치까지 바로 쓰는 형태로 제공합니다.</p>
-              </div>
-              <div className="nm-raised p-4">
-                <p className="text-sm font-semibold text-nm-text-primary">2단계 엔진</p>
-                <p className="text-xs text-nm-text-secondary mt-1">Whisper 전사 + Gemini 교정으로 속도와 품질을 함께 확보합니다.</p>
-              </div>
-            </div>
-
-            <div className="nm-raised p-4">
-              <p className="text-xs font-semibold text-nm-accent mb-2">베타 사용자 피드백</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="nm-concave p-3">
-                  <p className="text-xs text-nm-text-primary">"회의록 정리 시간이 훨씬 단축됐어요."</p>
-                </div>
-                <div className="nm-concave p-3">
-                  <p className="text-xs text-nm-text-primary">"설교 요약본을 바로 저장할 수 있어 편합니다."</p>
-                </div>
-                <div className="nm-concave p-3">
-                  <p className="text-xs text-nm-text-primary">"전문 용어가 이전보다 덜 깨집니다."</p>
-                </div>
-              </div>
-            </div>
-          </section>
+          <MallogLandingSections
+            locale="kr"
+            content={KO_MALLOG_LANDING_CONTENT}
+            pricingUrl={UPGRADE_CONTACT_URL}
+            oursUrl={OURS_URL}
+            stats={landingStats}
+          />
         )}
 
         {/* 인증 카드 */}
