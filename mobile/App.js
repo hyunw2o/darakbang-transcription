@@ -207,6 +207,7 @@ function App() {
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
+  const isPrivacyGateVisible = !privacyAccepted && !activeLegalDoc;
   const transcriptionTypeOptions = useMemo(
     () => TRANSCRIPTION_TYPES.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
     [copy]
@@ -973,6 +974,11 @@ function App() {
       <SafeAreaView edges={["top", "right", "bottom", "left"]} style={[styles.root, { backgroundColor: activeTheme.bg }]}>
         <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
 
+      <View
+        style={[styles.appShell, isPrivacyGateVisible ? styles.appShellBlocked : null]}
+        pointerEvents={isPrivacyGateVisible ? "none" : "auto"}
+        importantForAccessibility={isPrivacyGateVisible ? "no-hide-descendants" : "auto"}
+      >
       <View pointerEvents="none" style={styles.softBackground}>
         <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
         <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
@@ -1828,13 +1834,14 @@ function App() {
           ) : null}
         </View>
       )}
+      </View>
 
-      {!privacyAccepted && !activeLegalDoc ? (
+      {isPrivacyGateVisible ? (
         <View
           style={[
             styles.privacyOverlay,
             {
-              backgroundColor: "rgba(5, 12, 24, 0.58)",
+              backgroundColor: "rgba(5, 12, 24, 0.78)",
               paddingHorizontal: modalHorizontalPadding,
               paddingVertical: modalVerticalPadding,
             },
@@ -1880,6 +1887,34 @@ function App() {
                 >
                   {copy.privacy.version}
                 </Text>
+                <View
+                  style={[
+                    styles.privacyNoticeBox,
+                    tinyLayout ? styles.privacyNoticeBoxTiny : null,
+                    { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.privacyNoticeText,
+                      tinyLayout ? styles.privacyNoticeTextTiny : null,
+                      modalTextStyles.sectionBody,
+                      { color: activeTheme.textPrimary },
+                    ]}
+                  >
+                    {copy.privacy.gateNotice}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.privacyNoticeText,
+                      tinyLayout ? styles.privacyNoticeTextTiny : null,
+                      modalTextStyles.sectionBody,
+                      { color: activeTheme.textSecondary },
+                    ]}
+                  >
+                    {copy.privacy.versionNotice}
+                  </Text>
+                </View>
                 <Text style={[styles.privacyBody, compactLayout ? styles.privacyBodyCompact : null, tinyLayout ? styles.privacyBodyTiny : null, modalTextStyles.body, { color: activeTheme.textSecondary }]}>
                   {copy.privacy.body}
                 </Text>
@@ -1969,6 +2004,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: NM.bg,
     position: "relative",
+  },
+  appShell: {
+    flex: 1,
+  },
+  appShellBlocked: {
+    opacity: 0.18,
+    transform: [{ scale: 0.985 }],
   },
   centerScreen: {
     flex: 1,
@@ -2801,6 +2843,28 @@ const styles = StyleSheet.create({
   privacyBodyTiny: {
     fontSize: 10,
     lineHeight: 15,
+  },
+  privacyNoticeBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  privacyNoticeBoxTiny: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  privacyNoticeText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+  privacyNoticeTextTiny: {
+    fontSize: 10,
+    lineHeight: 14,
   },
   privacySummaryBox: {
     borderRadius: 12,
