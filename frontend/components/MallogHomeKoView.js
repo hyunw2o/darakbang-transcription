@@ -180,7 +180,7 @@ export default function MallogHomeKoView(props) {
         )}
 
         {/* 인증 카드 */}
-        <div className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in ${!authToken ? 'max-w-2xl mx-auto' : ''}`}>
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${!authToken ? 'max-w-2xl mx-auto' : ''}`}>
           {!authToken ? (
             <>
               <div className="mb-4">

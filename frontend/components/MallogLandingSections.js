@@ -4,7 +4,10 @@ import StepIndicator from './StepIndicator'
 
 export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats }) {
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
+  const [activePreviewIndex, setActivePreviewIndex] = useState(0)
   const localeTextClass = locale === 'kr' ? 'break-keep' : ''
+  const authUrl = locale === 'kr' ? '/#auth-card' : '/en#auth-card'
+  const activePreview = content.previewCases?.[activePreviewIndex] || null
   const statsCards = [
     {
       key: 'hoursProcessed',
@@ -63,18 +66,25 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
 
         <div className="mt-4 flex flex-col sm:flex-row gap-2">
           <Link
-            href={pricingUrl}
+            href={authUrl}
             className="nm-btn-primary inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold"
           >
             {content.primaryCtaLabel}
           </Link>
-          <a
-            href={oursUrl}
+          <Link
+            href={pricingUrl}
             className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
           >
             {content.secondaryCtaLabel}
-          </a>
+          </Link>
         </div>
+        <a
+          href={oursUrl}
+          className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-nm-text-secondary hover:text-nm-accent transition-colors"
+        >
+          {content.tertiaryCtaLabel}
+          <span aria-hidden="true">+</span>
+        </a>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -137,6 +147,67 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="nm-raised p-5 sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.previewTitle}</h2>
+            <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.previewDescription}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {content.previewCases.map((preview, index) => {
+            const isActive = activePreviewIndex === index
+            return (
+              <button
+                key={preview.key}
+                type="button"
+                onClick={() => setActivePreviewIndex(index)}
+                className={`px-3 py-2 rounded-full text-xs font-semibold transition-colors ${
+                  isActive ? 'nm-btn-primary text-white' : 'nm-btn text-nm-text-primary'
+                }`}
+                aria-pressed={isActive}
+              >
+                {preview.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {activePreview ? (
+          <div className="grid grid-cols-1 lg:grid-cols-[0.92fr,1.08fr] gap-3 mt-4">
+            <div className="nm-concave p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-nm-text-secondary">{activePreview.sourceTitle}</p>
+              <div className="mt-3 space-y-2">
+                {activePreview.sourceLines.map((line) => (
+                  <p key={line} className={`text-sm leading-relaxed text-nm-text-secondary ${localeTextClass}`}>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </div>
+            <div className="nm-concave p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-nm-text-secondary">{activePreview.outputTitle}</p>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {activePreview.outputSections.map((section) => (
+                  <div key={section.title} className="rounded-[20px] bg-white/[0.04] border border-white/10 p-3">
+                    <p className={`text-xs font-semibold text-nm-text-primary ${localeTextClass}`}>{section.title}</p>
+                    <ul className="mt-2 space-y-1">
+                      {section.items.map((item) => (
+                        <li key={item} className={`text-[12px] text-nm-text-secondary leading-relaxed ${localeTextClass}`}>
+                          - {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className={`mt-3 text-xs text-nm-accent leading-relaxed ${localeTextClass}`}>{activePreview.footer}</p>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="nm-raised p-5 sm:p-6">
@@ -203,6 +274,29 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
               </div>
             )
           })}
+        </div>
+      </div>
+
+      <div className="nm-raised p-5 sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.ctaBannerTitle}</h2>
+            <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.ctaBannerBody}</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            <Link
+              href={authUrl}
+              className="nm-btn-primary inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold"
+            >
+              {content.ctaBannerPrimaryLabel}
+            </Link>
+            <Link
+              href={pricingUrl}
+              className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
+            >
+              {content.ctaBannerSecondaryLabel}
+            </Link>
+          </div>
         </div>
       </div>
     </section>

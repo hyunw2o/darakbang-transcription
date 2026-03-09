@@ -8,8 +8,9 @@ export const KO_MALLOG_LANDING_CONTENT = {
   afterLabel: 'After',
   afterTitle: '회의 기록 요약',
   afterItems: ['안건: 예산 초과 15%', '결정: 수정안 재공유', '후속 조치: 일정/담당 재배정'],
-  primaryCtaLabel: '요금제 보기',
-  secondaryCtaLabel: 'OURS 소개 보기',
+  primaryCtaLabel: '무료로 시작하기',
+  secondaryCtaLabel: '요금제 보기',
+  tertiaryCtaLabel: 'OURS 소개 보기',
   featureCards: [
     {
       title: '전문 용어 정확도',
@@ -49,6 +50,58 @@ export const KO_MALLOG_LANDING_CONTENT = {
     timeSaving: { label: '시간 절감 효과', fallback: '비교 데이터 준비 중' },
   },
   statsUpdatedPrefix: '최근 업데이트',
+  previewTitle: '결과물이 어떻게 나오는지 먼저 확인하세요',
+  previewDescription: '설교, 회의, 통화는 최종 출력 형식이 다릅니다. 가입 전에 어떤 문서가 생성되는지 예시로 바로 볼 수 있습니다.',
+  previewCases: [
+    {
+      key: 'meeting',
+      label: '회의',
+      sourceTitle: '입력 예시',
+      sourceLines: [
+        '“광고 예산이 이번 주에 15% 초과됐고, 다음 주 수정안이 필요합니다.”',
+        '“담당자를 다시 배정하고 일정도 조정해야 합니다.”',
+      ],
+      outputTitle: '출력 예시',
+      outputSections: [
+        { title: '안건', items: ['광고 예산 초과 15%', '다음 주 수정안 재공유'] },
+        { title: '결정', items: ['담당자 재배정', '일정 조정'] },
+        { title: '후속 조치', items: ['수정안 공유 일정 확정', '실행 담당자 명시'] },
+      ],
+      footer: '회의/대화형 파일은 안건, 결정, 후속 조치 중심으로 구조화됩니다.',
+    },
+    {
+      key: 'call',
+      label: '통화',
+      sourceTitle: '입력 예시',
+      sourceLines: [
+        '“약 복용 이후 어지러움이 있었고, 오늘 오후에는 통화로 다시 체크해 주세요.”',
+        '“검사 일정은 다음 주 수요일로 잡겠습니다.”',
+      ],
+      outputTitle: '출력 예시',
+      outputSections: [
+        { title: '핵심 메모', items: ['복용 후 어지러움 보고', '오후 재통화 필요'] },
+        { title: '일정', items: ['검사 예약: 다음 주 수요일'] },
+        { title: '주의 사항', items: ['증상 변화 시 즉시 재연락'] },
+      ],
+      footer: '통화형 파일은 화자 흐름과 핵심 메모를 우선 정리합니다.',
+    },
+    {
+      key: 'sermon',
+      label: '설교',
+      sourceTitle: '입력 예시',
+      sourceLines: [
+        '“본문은 행1:8입니다. 오늘 메시지는 증인이 되는 삶에 대한 것입니다.”',
+        '“결론에서는 적용과 기도 제목을 함께 정리하겠습니다.”',
+      ],
+      outputTitle: '출력 예시',
+      outputSections: [
+        { title: '본문', items: ['행1:8'] },
+        { title: '핵심 메시지', items: ['증인의 정체성', '현장 적용 중심 정리'] },
+        { title: '적용/기도', items: ['오늘의 적용 포인트', '기도 제목 정리'] },
+      ],
+      footer: '설교형 파일은 본문, 핵심 메시지, 적용 포인트 순으로 정리합니다.',
+    },
+  ],
   useCasesTitle: '누가 어떤 결과를 받는지 바로 보입니다',
   useCases: [
     {
@@ -92,6 +145,10 @@ export const KO_MALLOG_LANDING_CONTENT = {
       answer: '문맥 교정과 도메인 사전으로 일부 복원을 시도하지만, 배경 소음이 적고 발음이 분명한 파일일수록 결과가 안정적입니다.',
     },
   ],
+  ctaBannerTitle: '무료 10시간으로 먼저 검증하고, 필요할 때만 Pro로 전환하세요.',
+  ctaBannerBody: '비로그인 상태에서도 흐름과 결과 예시는 모두 확인할 수 있고, 로그인 후 바로 업로드 테스트를 시작할 수 있습니다.',
+  ctaBannerPrimaryLabel: '지금 무료로 시작',
+  ctaBannerSecondaryLabel: '요금제 자세히 보기',
 }
 
 export const EN_MALLOG_LANDING_CONTENT = {
@@ -104,8 +161,9 @@ export const EN_MALLOG_LANDING_CONTENT = {
   afterLabel: 'After',
   afterTitle: 'Meeting Summary',
   afterItems: ['Agenda: Budget overrun (+15%)', 'Decision: Share revised plan', 'Action: Reassign owner and timeline'],
-  primaryCtaLabel: 'View Pricing',
-  secondaryCtaLabel: 'About OURS',
+  primaryCtaLabel: 'Start Free',
+  secondaryCtaLabel: 'View Pricing',
+  tertiaryCtaLabel: 'About OURS',
   featureCards: [
     {
       title: 'Domain Term Accuracy',
@@ -145,6 +203,58 @@ export const EN_MALLOG_LANDING_CONTENT = {
     timeSaving: { label: 'Time saved', fallback: 'Benchmark pending' },
   },
   statsUpdatedPrefix: 'Last updated',
+  previewTitle: 'Preview the final output before signup',
+  previewDescription: 'Sermons, meetings, and calls produce different document shapes. These examples show what the structured output looks like.',
+  previewCases: [
+    {
+      key: 'meeting',
+      label: 'Meeting',
+      sourceTitle: 'Input sample',
+      sourceLines: [
+        '"Ad spend ran 15% over this week, and we need a revised plan next week."',
+        '"We should reassign the owner and adjust the timeline."',
+      ],
+      outputTitle: 'Output sample',
+      outputSections: [
+        { title: 'Agenda', items: ['Budget overrun (+15%)', 'Revised plan request'] },
+        { title: 'Decision', items: ['Reassign owner', 'Adjust delivery timeline'] },
+        { title: 'Follow-up', items: ['Lock revised plan date', 'Assign execution owner'] },
+      ],
+      footer: 'Meeting-type files are structured around agenda, decisions, and follow-up actions.',
+    },
+    {
+      key: 'call',
+      label: 'Call',
+      sourceTitle: 'Input sample',
+      sourceLines: [
+        '"There was dizziness after the medication, so please check in by phone this afternoon."',
+        '"Let us keep the test appointment for next Wednesday."',
+      ],
+      outputTitle: 'Output sample',
+      outputSections: [
+        { title: 'Key notes', items: ['Dizziness reported after medication', 'Afternoon follow-up call needed'] },
+        { title: 'Schedule', items: ['Test booked for next Wednesday'] },
+        { title: 'Watchouts', items: ['Call back immediately if symptoms worsen'] },
+      ],
+      footer: 'Call-type files prioritize speaker flow and action-ready notes.',
+    },
+    {
+      key: 'sermon',
+      label: 'Sermon',
+      sourceTitle: 'Input sample',
+      sourceLines: [
+        '"The scripture is Acts 1:8. Today the message is about living as a witness."',
+        '"In the conclusion we will organize application points and prayer topics together."',
+      ],
+      outputTitle: 'Output sample',
+      outputSections: [
+        { title: 'Scripture', items: ['Acts 1:8'] },
+        { title: 'Core message', items: ['Identity as a witness', 'Field-centered application'] },
+        { title: 'Application / Prayer', items: ['Today’s application points', 'Prayer topic summary'] },
+      ],
+      footer: 'Sermon-type files are organized by scripture, core message, and application.',
+    },
+  ],
   useCasesTitle: 'Different roles, different outputs',
   useCases: [
     {
@@ -189,4 +299,8 @@ export const EN_MALLOG_LANDING_CONTENT = {
       answer: 'Context correction and domain dictionaries try to recover part of the content, but clear recordings with less background noise remain the most stable input.',
     },
   ],
+  ctaBannerTitle: 'Validate with the free 10-hour plan first, then move to Pro only when it makes sense.',
+  ctaBannerBody: 'Even before login, visitors can review the workflow and document examples. After login, they can start upload testing immediately.',
+  ctaBannerPrimaryLabel: 'Start Free Now',
+  ctaBannerSecondaryLabel: 'See Pricing Details',
 }
