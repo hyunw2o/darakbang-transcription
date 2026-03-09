@@ -68,6 +68,8 @@ export default function MallogHomeEnView(props) {
     history,
     historyLoading,
     historyLoaded,
+    historyDeletingTaskId,
+    historyBulkDeleting,
     currentStep,
     dragOver,
     showHistory,
@@ -101,6 +103,8 @@ export default function MallogHomeEnView(props) {
     handleDragOver,
     handleDragLeave,
     handleLoadHistory,
+    handleDeleteHistory,
+    handleDeleteAllHistory,
     exportAsTxt,
     exportAsDocx,
     exportTextByLabel,
@@ -719,45 +723,87 @@ export default function MallogHomeEnView(props) {
                     ) : history.length === 0 ? (
                       <p className="text-sm text-nm-text-secondary p-4">No transcriptions yet.</p>
                     ) : (
-                      <ul className="divide-y divide-nm-text-secondary/10">
+                      <>
+                        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-nm-text-secondary/10">
+                          <p className="text-xs text-nm-text-secondary">Deletes apply only to this account history.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('Delete all transcription history for this account? Active tasks will be kept.')) {
+                                handleDeleteAllHistory()
+                              }
+                            }}
+                            disabled={historyBulkDeleting}
+                            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              historyBulkDeleting
+                                ? 'bg-nm-bg/60 text-nm-text-secondary cursor-not-allowed'
+                                : 'bg-red-50 text-red-600 hover:bg-red-100'
+                            }`}
+                          >
+                            {historyBulkDeleting ? 'Deleting...' : 'Delete all'}
+                          </button>
+                        </div>
+                        <ul className="divide-y divide-nm-text-secondary/10">
                         {history.map((item) => (
                           <li key={item.task_id}>
-                            <button
-                              onClick={() => handleLoadHistory(item.task_id)}
-                              className="w-full text-left p-4 hover:bg-nm-bg/50 transition-colors group"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1 min-w-0 pr-4">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === 'completed' ? 'bg-green-500' :
-                                        item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
-                                      }`} />
-                                    <span className="text-[11px] text-nm-text-secondary">
-                                      {new Date(item.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                    {item.transcription_type && item.transcription_type !== 'sermon' && (
-                                      <span className="nm-flat px-2 py-0.5 text-[11px] text-nm-text-secondary font-medium">
-                                        {item.transcription_type === 'phonecall' ? 'Call' : 'Meeting'}
-                                      </span>
-                                    )}
-                                    {item.characters > 0 && (
+                            <div className="p-4 flex items-start gap-3">
+                              <button
+                                type="button"
+                                onClick={() => handleLoadHistory(item.task_id)}
+                                className="flex-1 min-w-0 text-left hover:bg-nm-bg/50 transition-colors group rounded-2xl"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1 min-w-0 pr-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.status === 'completed' ? 'bg-green-500' :
+                                          item.status === 'error' ? 'bg-red-500' : 'bg-amber-500'
+                                        }`} />
                                       <span className="text-[11px] text-nm-text-secondary">
-                                        {item.characters?.toLocaleString()} chars
+                                        {new Date(item.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                       </span>
-                                    )}
+                                      {item.transcription_type && item.transcription_type !== 'sermon' && (
+                                        <span className="nm-flat px-2 py-0.5 text-[11px] text-nm-text-secondary font-medium">
+                                          {item.transcription_type === 'phonecall' ? 'Call' : 'Meeting'}
+                                        </span>
+                                      )}
+                                      {item.characters > 0 && (
+                                        <span className="text-[11px] text-nm-text-secondary">
+                                          {item.characters?.toLocaleString()} chars
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-nm-text-primary truncate group-hover:text-nm-accent transition-colors">
+                                      {item.summary_preview || 'Open the transcript to view details.'}
+                                    </p>
                                   </div>
-                                  <p className="text-sm text-nm-text-primary truncate group-hover:text-nm-accent transition-colors">
-                                    {item.summary_preview || 'Open the transcript to view details.'}
-                                  </p>
+                                  <svg className="w-4 h-4 text-nm-text-secondary group-hover:text-nm-accent shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
                                 </div>
-                                <svg className="w-4 h-4 text-nm-text-secondary group-hover:text-nm-accent shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </div>
-                            </button>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm('Delete this transcription history item?')) {
+                                    handleDeleteHistory(item.task_id)
+                                  }
+                                }}
+                                disabled={historyDeletingTaskId === item.task_id || ['queued', 'processing'].includes(item.status)}
+                                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                  historyDeletingTaskId === item.task_id
+                                    ? 'bg-nm-bg/60 text-nm-text-secondary cursor-wait'
+                                    : ['queued', 'processing'].includes(item.status)
+                                      ? 'bg-nm-bg/60 text-nm-text-secondary cursor-not-allowed'
+                                      : 'bg-red-50 text-red-600 hover:bg-red-100'
+                                }`}
+                              >
+                                {historyDeletingTaskId === item.task_id ? 'Deleting...' : ['queued', 'processing'].includes(item.status) ? 'Active' : 'Delete'}
+                              </button>
+                            </div>
                           </li>
                         ))}
-                      </ul>
+                        </ul>
+                      </>
                     )}
                   </div>
                 )}

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Clipboard,
   Platform,
   ScrollView,
@@ -72,6 +73,8 @@ function App() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyDeletingTaskId, setHistoryDeletingTaskId] = useState("");
+  const [historyBulkDeleting, setHistoryBulkDeleting] = useState(false);
 
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -264,6 +267,8 @@ function App() {
     invalidatePollingSession();
     setHistory([]);
     setHistoryLoaded(false);
+    setHistoryDeletingTaskId("");
+    setHistoryBulkDeleting(false);
     setRecords([]);
     setRecordsLoaded(false);
     resetResultWorkspace(true);
@@ -619,6 +624,104 @@ function App() {
       unlockWorkspaceScroll();
     }
   };
+
+  const handleDeleteHistoryItem = useCallback((taskId) => {
+    if (!authToken) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    Alert.alert(
+      copy.historyDeleteConfirmTitle,
+      copy.historyDeleteConfirmMessage,
+      [
+        { text: language === "en" ? "Cancel" : "취소", style: "cancel" },
+        {
+          text: copy.delete,
+          style: "destructive",
+          onPress: async () => {
+            clearMessages();
+            unlockWorkspaceScroll();
+            setHistoryDeletingTaskId(taskId);
+            try {
+              await requestApi(`/api/history/${taskId}`, {
+                method: "DELETE",
+                token: authToken,
+              });
+
+              setHistory((prev) => prev.filter((item) => item.task_id !== taskId));
+              setHistoryLoaded(true);
+
+              if ((result?.task_id || "") === taskId) {
+                resetResultWorkspace(true);
+              }
+
+              setNotice(copy.notices.historyDeleted);
+            } catch (e) {
+              setError(e.message || copy.errors.historyDeleteFailed);
+            } finally {
+              setHistoryDeletingTaskId("");
+              unlockWorkspaceScroll();
+            }
+          },
+        },
+      ]
+    );
+  }, [authToken, clearMessages, copy.delete, copy.errors.authRequired, copy.errors.historyDeleteFailed, copy.historyDeleteConfirmMessage, copy.historyDeleteConfirmTitle, copy.notices.historyDeleted, language, resetResultWorkspace, result?.task_id, setError, unlockWorkspaceScroll]);
+
+  const handleDeleteAllHistory = useCallback(() => {
+    if (!authToken) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    Alert.alert(
+      copy.historyDeleteAllConfirmTitle,
+      copy.historyDeleteAllConfirmMessage,
+      [
+        { text: language === "en" ? "Cancel" : "취소", style: "cancel" },
+        {
+          text: copy.deleteAll,
+          style: "destructive",
+          onPress: async () => {
+            clearMessages();
+            unlockWorkspaceScroll();
+            setHistoryBulkDeleting(true);
+            try {
+              const data = await requestApi("/api/history", {
+                method: "DELETE",
+                token: authToken,
+              });
+
+              const deletedTaskIds = Array.isArray(data?.deleted_task_ids) ? data.deleted_task_ids : [];
+              const skippedActiveCount = Number(data?.skipped_active_count) || 0;
+              const deletedCount = Number(data?.deleted_count) || deletedTaskIds.length;
+
+              setHistory((prev) => prev.filter((item) => !deletedTaskIds.includes(item.task_id)));
+              setHistoryLoaded(true);
+
+              if (deletedTaskIds.includes(result?.task_id || "")) {
+                resetResultWorkspace(true);
+              }
+
+              const successMessage = skippedActiveCount > 0
+                ? copy.notices.historyClearedPartial
+                    .replace("{deletedCount}", String(deletedCount))
+                    .replace("{skippedCount}", String(skippedActiveCount))
+                : copy.notices.historyCleared;
+
+              setNotice(successMessage);
+            } catch (e) {
+              setError(e.message || copy.errors.historyDeleteAllFailed);
+            } finally {
+              setHistoryBulkDeleting(false);
+              unlockWorkspaceScroll();
+            }
+          },
+        },
+      ]
+    );
+  }, [authToken, clearMessages, copy.deleteAll, copy.errors.authRequired, copy.errors.historyDeleteAllFailed, copy.historyDeleteAllConfirmMessage, copy.historyDeleteAllConfirmTitle, copy.notices.historyCleared, copy.notices.historyClearedPartial, language, resetResultWorkspace, result?.task_id, setError, unlockWorkspaceScroll]);
 
   const resolveContentStyleKey = (payload) => {
     const explicit = String(payload?.content_style || "").trim().toLowerCase();
@@ -1530,9 +1633,20 @@ function App() {
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <View style={styles.inlineBetween}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.historyTitle}</Text>
-                    <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? copy.loading : copy.refresh}</Text>
-                    </NmPressable>
+                    <View style={styles.historyHeaderActions}>
+                      <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? copy.loading : copy.refresh}</Text>
+                      </NmPressable>
+                      <NmPressable
+                        style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, historyBulkDeleting || history.length === 0 ? styles.buttonDisabled : null]}
+                        onPress={handleDeleteAllHistory}
+                        disabled={historyBulkDeleting || history.length === 0}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {historyBulkDeleting ? copy.deleting : copy.deleteAll}
+                        </Text>
+                      </NmPressable>
+                    </View>
                   </View>
 
                   {history.length === 0 ? (
@@ -1545,9 +1659,32 @@ function App() {
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>
                           {item.summary_preview || (language === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}
                         </Text>
-                        <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => handleLoadHistoryItem(item.task_id)}>
-                          <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.load}</Text>
-                        </NmPressable>
+                        <View style={styles.historyActionRow}>
+                          <NmPressable
+                            style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            onPress={() => handleLoadHistoryItem(item.task_id)}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.load}</Text>
+                          </NmPressable>
+                          <NmPressable
+                            style={[
+                              styles.tinyButton,
+                              styles.billingActionButton,
+                              { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                              historyDeletingTaskId === item.task_id || ["queued", "processing"].includes(String(item.status || "").toLowerCase()) ? styles.buttonDisabled : null,
+                            ]}
+                            onPress={() => handleDeleteHistoryItem(item.task_id)}
+                            disabled={historyDeletingTaskId === item.task_id || ["queued", "processing"].includes(String(item.status || "").toLowerCase())}
+                          >
+                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                              {historyDeletingTaskId === item.task_id
+                                ? copy.deleting
+                                : ["queued", "processing"].includes(String(item.status || "").toLowerCase())
+                                  ? copy.active
+                                  : copy.delete}
+                            </Text>
+                          </NmPressable>
+                        </View>
                       </View>
                     ))
                   )}
@@ -2455,6 +2592,15 @@ const styles = StyleSheet.create({
   billingActionRow: {
     flexDirection: "row",
     gap: 6,
+  },
+  historyHeaderActions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  historyActionRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 2,
   },
   billingActionButton: {
     flex: 1,

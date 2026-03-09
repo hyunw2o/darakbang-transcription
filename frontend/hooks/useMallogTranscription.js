@@ -22,6 +22,11 @@ const TRANSCRIPTION_MESSAGES = {
     transcribeFailed: '변환 실패',
     loadHistoryFailed: '해당 기록을 불러올 수 없습니다.',
     loadHistoryGeneric: '불러오기 실패',
+    deleteHistoryFailed: '기록 삭제 실패',
+    deleteAllHistoryFailed: '전체 기록 삭제 실패',
+    deleteHistorySuccess: '변환 기록을 삭제했습니다.',
+    deleteAllHistorySuccess: '삭제 가능한 기록을 모두 삭제했습니다.',
+    deleteAllHistoryPartial: '삭제 가능한 기록 {deletedCount}건을 삭제했습니다. 진행 중인 {skippedCount}건은 유지했습니다.',
     summarizeLoginRequired: '요약은 로그인 후 이용할 수 있습니다.',
     summarizeFailed: '요약 실패',
     draftLoginRequired: '기록본 초안 생성은 로그인 후 이용할 수 있습니다.',
@@ -53,6 +58,11 @@ const TRANSCRIPTION_MESSAGES = {
     transcribeFailed: 'Transcription failed.',
     loadHistoryFailed: 'Unable to load this record.',
     loadHistoryGeneric: 'Failed to load record.',
+    deleteHistoryFailed: 'Failed to delete history item.',
+    deleteAllHistoryFailed: 'Failed to delete all history items.',
+    deleteHistorySuccess: 'Transcription history item deleted.',
+    deleteAllHistorySuccess: 'All deletable history items were removed.',
+    deleteAllHistoryPartial: 'Deleted {deletedCount} history item(s). Kept {skippedCount} active item(s).',
     summarizeLoginRequired: 'Please log in to generate summaries.',
     summarizeFailed: 'Summary generation failed.',
     draftLoginRequired: 'Please log in to generate record drafts.',
@@ -93,6 +103,8 @@ export default function useMallogTranscription({
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [historyDeletingTaskId, setHistoryDeletingTaskId] = useState('')
+  const [historyBulkDeleting, setHistoryBulkDeleting] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -172,6 +184,8 @@ export default function useMallogTranscription({
     setHistory([])
     setHistoryLoaded(false)
     setHistoryLoading(false)
+    setHistoryDeletingTaskId('')
+    setHistoryBulkDeleting(false)
     setSavedRecords([])
     setRecordsLoaded(false)
     setRecordsLoading(false)
@@ -502,6 +516,90 @@ export default function useMallogTranscription({
     }
   }, [apiUrl, getAuthHeaders, invalidatePollingSession, messages.loadHistoryFailed, messages.loadHistoryGeneric, readResponseData, resetResultWorkspace, setError, setNotice])
 
+  const handleDeleteHistory = useCallback(async (taskId) => {
+    if (!authToken) {
+      setError(messages.signinRequired)
+      return
+    }
+
+    setHistoryDeletingTaskId(taskId)
+    setError(null)
+    setNotice(null)
+
+    try {
+      await readResponseData(
+        await apiFetch(`${apiUrl}/api/history/${taskId}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(authToken),
+        }),
+        messages.deleteHistoryFailed
+      )
+
+      setHistory((prev) => prev.filter((item) => item.task_id !== taskId))
+      setHistoryLoaded(true)
+
+      if ((result?.task_id || '') === taskId) {
+        resetResultWorkspace(true)
+        setCurrentStep(0)
+        setLoading(false)
+      }
+
+      setNotice(messages.deleteHistorySuccess)
+      showToast(messages.deleteHistorySuccess)
+    } catch (error) {
+      setError(error?.message || messages.deleteHistoryFailed)
+    } finally {
+      setHistoryDeletingTaskId('')
+    }
+  }, [apiUrl, authToken, getAuthHeaders, messages.deleteHistoryFailed, messages.deleteHistorySuccess, messages.signinRequired, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
+
+  const handleDeleteAllHistory = useCallback(async () => {
+    if (!authToken) {
+      setError(messages.signinRequired)
+      return
+    }
+
+    setHistoryBulkDeleting(true)
+    setError(null)
+    setNotice(null)
+
+    try {
+      const data = await readResponseData(
+        await apiFetch(`${apiUrl}/api/history`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(authToken),
+        }),
+        messages.deleteAllHistoryFailed
+      )
+
+      const deletedTaskIds = Array.isArray(data?.deleted_task_ids) ? data.deleted_task_ids : []
+      const skippedActiveCount = Number(data?.skipped_active_count) || 0
+      const deletedCount = Number(data?.deleted_count) || deletedTaskIds.length
+
+      setHistory((prev) => prev.filter((item) => !deletedTaskIds.includes(item.task_id)))
+      setHistoryLoaded(true)
+
+      if (deletedTaskIds.includes(result?.task_id || '')) {
+        resetResultWorkspace(true)
+        setCurrentStep(0)
+        setLoading(false)
+      }
+
+      const successMessage = skippedActiveCount > 0
+        ? messages.deleteAllHistoryPartial
+          .replace('{deletedCount}', String(deletedCount))
+          .replace('{skippedCount}', String(skippedActiveCount))
+        : messages.deleteAllHistorySuccess
+
+      setNotice(successMessage)
+      showToast(successMessage)
+    } catch (error) {
+      setError(error?.message || messages.deleteAllHistoryFailed)
+    } finally {
+      setHistoryBulkDeleting(false)
+    }
+  }, [apiUrl, authToken, getAuthHeaders, messages.deleteAllHistoryFailed, messages.deleteAllHistoryPartial, messages.deleteAllHistorySuccess, messages.signinRequired, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
+
   const exportAsTxt = useCallback(() => {
     if (!result) return
     const text = (result.corrected_text || result.raw_text || '').trim()
@@ -692,6 +790,8 @@ export default function useMallogTranscription({
     history,
     historyLoading,
     historyLoaded,
+    historyDeletingTaskId,
+    historyBulkDeleting,
     currentStep,
     dragOver,
     showHistory,
@@ -719,6 +819,8 @@ export default function useMallogTranscription({
     handleDragLeave,
     handleSubmit,
     handleLoadHistory,
+    handleDeleteHistory,
+    handleDeleteAllHistory,
     exportAsTxt,
     exportAsDocx,
     exportTextByLabel,

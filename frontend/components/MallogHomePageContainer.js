@@ -140,6 +140,8 @@ export default function MallogHomePageContainer({
     history,
     historyLoading,
     historyLoaded,
+    historyDeletingTaskId,
+    historyBulkDeleting,
     currentStep,
     dragOver,
     showHistory,
@@ -159,6 +161,8 @@ export default function MallogHomePageContainer({
     handleDragOver,
     handleDragLeave,
     handleLoadHistory,
+    handleDeleteHistory,
+    handleDeleteAllHistory,
     exportAsTxt,
     exportAsDocx,
     exportTextByLabel,
@@ -337,6 +341,8 @@ export default function MallogHomePageContainer({
       history={history}
       historyLoading={historyLoading}
       historyLoaded={historyLoaded}
+      historyDeletingTaskId={historyDeletingTaskId}
+      historyBulkDeleting={historyBulkDeleting}
       currentStep={currentStep}
       dragOver={dragOver}
       showHistory={showHistory}
@@ -370,6 +376,8 @@ export default function MallogHomePageContainer({
       handleDragOver={handleDragOver}
       handleDragLeave={handleDragLeave}
       handleLoadHistory={handleLoadHistory}
+      handleDeleteHistory={handleDeleteHistory}
+      handleDeleteAllHistory={handleDeleteAllHistory}
       exportAsTxt={exportAsTxt}
       exportAsDocx={exportAsDocx}
       exportTextByLabel={exportTextByLabel}

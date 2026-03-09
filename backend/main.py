@@ -3548,6 +3548,105 @@ async def get_history(authorization: str | None = Header(default=None)):
     return history
 
 
+@app.delete("/api/history/{task_id}")
+async def delete_history_item(task_id: str, authorization: str | None = Header(default=None)):
+    """로그인 사용자 개별 변환 기록 삭제"""
+    _ensure_transcriptions_user_scope_ready()
+    user = await _get_current_user(authorization)
+    user_id = user["id"]
+
+    client = _get_supabase_client()
+    fetch_query = (
+        client.table("transcriptions")
+        .select("task_id, status")
+        .eq("task_id", task_id)
+        .eq("user_id", user_id)
+        .limit(1)
+    )
+    response = await asyncio.to_thread(fetch_query.execute)
+    if not response.data:
+        raise HTTPException(status_code=404, detail="삭제할 변환 기록을 찾을 수 없습니다.")
+
+    row = response.data[0]
+    runtime_status = str(task_status.get(task_id) or "")
+    row_status = str(row.get("status") or "")
+    if runtime_status in {"queued", "processing"} or row_status in {"queued", "processing"}:
+        raise HTTPException(status_code=409, detail="진행 중인 작업은 삭제할 수 없습니다.")
+
+    delete_query = (
+        client.table("transcriptions")
+        .delete()
+        .eq("task_id", task_id)
+        .eq("user_id", user_id)
+    )
+    await asyncio.to_thread(delete_query.execute)
+    _clear_task_runtime_state(task_id)
+
+    return {
+        "success": True,
+        "deleted_task_id": task_id,
+        "message": "변환 기록을 삭제했습니다.",
+    }
+
+
+@app.delete("/api/history")
+async def delete_all_history(authorization: str | None = Header(default=None)):
+    """로그인 사용자 전체 변환 기록 삭제 (진행 중 작업 제외)"""
+    _ensure_transcriptions_user_scope_ready()
+    user = await _get_current_user(authorization)
+    user_id = user["id"]
+
+    client = _get_supabase_client()
+    fetch_query = (
+        client.table("transcriptions")
+        .select("task_id, status")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+    )
+    response = await asyncio.to_thread(fetch_query.execute)
+    rows = response.data or []
+
+    deletable_ids: list[str] = []
+    skipped_ids: list[str] = []
+    for row in rows:
+        task_id = str(row.get("task_id") or "").strip()
+        row_status = str(row.get("status") or "")
+        runtime_status = str(task_status.get(task_id) or "")
+        if not task_id:
+            continue
+        if runtime_status in {"queued", "processing"} or row_status in {"queued", "processing"}:
+            skipped_ids.append(task_id)
+            continue
+        deletable_ids.append(task_id)
+
+    if deletable_ids:
+        delete_query = (
+            client.table("transcriptions")
+            .delete()
+            .eq("user_id", user_id)
+            .in_("task_id", deletable_ids)
+        )
+        await asyncio.to_thread(delete_query.execute)
+        for deletable_task_id in deletable_ids:
+            _clear_task_runtime_state(deletable_task_id)
+
+    if not deletable_ids and skipped_ids:
+        message = "진행 중인 작업만 남아 있어 삭제할 기록이 없습니다."
+    elif skipped_ids:
+        message = "진행 중인 작업을 제외한 변환 기록을 삭제했습니다."
+    else:
+        message = "전체 변환 기록을 삭제했습니다."
+
+    return {
+        "success": True,
+        "deleted_count": len(deletable_ids),
+        "deleted_task_ids": deletable_ids,
+        "skipped_active_count": len(skipped_ids),
+        "skipped_active_task_ids": skipped_ids,
+        "message": message,
+    }
+
+
 @app.get("/api/usage")
 async def get_usage(authorization: str | None = Header(default=None)):
     """로그인 사용자 월간 음성 사용량 조회"""
