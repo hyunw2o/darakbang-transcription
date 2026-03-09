@@ -6,6 +6,7 @@ import { apiFetch, safeReadJson } from '../utils/network'
 
 const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
+const STATUS_POLL_INTERVAL_MS = 3000
 
 const TRANSCRIPTION_MESSAGES = {
   ko: {
@@ -409,7 +410,7 @@ export default function useMallogTranscription({
         }
         console.error('Polling error', error)
       }
-    }, 2000)
+    }, STATUS_POLL_INTERVAL_MS)
   }, [apiUrl, fetchHistory, fetchUsage, getAuthHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
 
   const handleSubmit = useCallback(async (event, usage) => {

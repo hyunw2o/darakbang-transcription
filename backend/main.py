@@ -47,6 +47,8 @@ from church_terms import (
     ALL_CHURCH_TERMS,
     DARAKBANG_CORE,
     COMMON_MISTAKES,
+    PASTORS,
+    HISTORICAL_PEOPLE,
     print_terms_summary
 )
 
@@ -381,7 +383,7 @@ _model_cache = {"model": None, "cached_at": 0}
 MODEL_CACHE_TTL = 3600
 AUTH_TIMEOUT = max(1, int(os.getenv("AUTH_TIMEOUT", "20")))
 AUTH_CONNECT_TIMEOUT = max(1, int(os.getenv("AUTH_CONNECT_TIMEOUT", "8")))
-AUTH_USER_CACHE_TTL_SECONDS = max(0, int(os.getenv("AUTH_USER_CACHE_TTL_SECONDS", "20")))
+AUTH_USER_CACHE_TTL_SECONDS = max(0, int(os.getenv("AUTH_USER_CACHE_TTL_SECONDS", "60")))
 ALLOWED_RECORD_CATEGORIES = {
     "meeting_keywords",
     "clinical_notes",
@@ -2757,11 +2759,27 @@ def whisper_transcribe(
     language: str = "ko",
     transcription_type: str = "sermon",
     task_id: str | None = None,
+    custom_terms: list[str] = None,
 ) -> str:
     """
     OpenAI Whisper API로 오디오 → 텍스트 변환.
     25MB 초과 시 자동 분할 처리 + 청크 재시도/타임아웃 보호.
     """
+    
+    custom_names_str = ""
+    if language == "ko":
+        names = list(PASTORS) + list(HISTORICAL_PEOPLE)
+        if custom_terms:
+            names.extend(custom_terms)
+        seen = set()
+        unique_names = [n for n in names if not (n in seen or seen.add(n))]
+        custom_names_str = ", ".join(unique_names) + ", "
+    elif language == "en":
+        if custom_terms:
+            seen = set()
+            unique_names = [n for n in custom_terms if not (n in seen or seen.add(n))]
+            custom_names_str = ", ".join(unique_names) + ", "
+
     if openai_client is None:
         raise RuntimeError("Whisper client is not configured.")
 
@@ -2835,6 +2853,7 @@ def whisper_transcribe(
                 f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
 
+    whisper_prompt = custom_names_str + whisper_prompt
     chunks = split_audio_file(file_path, transcription_type)
     all_text: list[str] = []
 
@@ -2919,6 +2938,7 @@ async def gemini_correct_and_structure(
     transcription_type: str = "sermon",
     language: str = "ko",
     correction_mode: str = "normal",
+    custom_terms: list[str] = None,
 ) -> str:
     """
     Gemini로 텍스트 교정 + 구조화 (2단계).
@@ -2927,7 +2947,7 @@ async def gemini_correct_and_structure(
     target_model = get_optimal_model()
     print(f"[{task_id}] Gemini correction model: {target_model}, type: {transcription_type}, lang: {language}")
 
-    correction_prompt = get_correction_prompt_by_type(transcription_type, language)
+    correction_prompt = get_correction_prompt_by_type(transcription_type, language, custom_terms)
     normalized_mode = (correction_mode or "normal").strip().lower()
     if normalized_mode != "strict":
         if language == "en":
@@ -2999,6 +3019,7 @@ def _transcribe_with_gemini_only(
     transcription_type: str,
     language: str,
     correction_mode: str,
+    custom_terms: list[str] = None,
 ) -> tuple[str, str]:
     mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
     audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
@@ -3006,12 +3027,12 @@ def _transcribe_with_gemini_only(
         target_model = get_optimal_model()
         model = genai.GenerativeModel(
             target_model,
-            system_instruction=get_gemini_prompt(),
+            system_instruction=get_gemini_prompt(custom_terms),
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             ),
         )
-        content_prompt = get_gemini_content_prompt()
+        content_prompt = get_gemini_content_prompt(custom_terms)
 
         response = None
         max_retries = 5
@@ -3081,6 +3102,7 @@ def _process_transcription_sync(
     correction_mode: str = "normal",
     source_mime_type: str = "",
     audio_seconds: int = 0,
+    custom_terms: list[str] = None,
 ):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     raw_text = ""
@@ -3122,6 +3144,7 @@ def _process_transcription_sync(
                     language,
                     transcription_type,
                     task_id=task_id,
+                    custom_terms=custom_terms,
                 )
                 print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
                 _log_stage_memory(task_id, "after_whisper")
@@ -3141,6 +3164,7 @@ def _process_transcription_sync(
                         transcription_type,
                         language,
                         correction_mode=correction_mode,
+                        custom_terms=custom_terms,
                     )
                 )
                 _touch_task_runtime_state(task_id)
@@ -3169,6 +3193,7 @@ def _process_transcription_sync(
                     transcription_type=transcription_type,
                     language=language,
                     correction_mode=correction_mode,
+                    custom_terms=custom_terms,
                 )
                 _log_stage_memory(task_id, "after_gemini_fallback")
 
@@ -3191,6 +3216,7 @@ def _process_transcription_sync(
                 transcription_type=transcription_type,
                 language=language,
                 correction_mode=correction_mode,
+                custom_terms=custom_terms,
             )
             _log_stage_memory(task_id, "after_postprocess")
 
@@ -3255,6 +3281,7 @@ async def process_transcription(
     correction_mode: str = "normal",
     source_mime_type: str = "",
     audio_seconds: int = 0,
+    custom_terms: list[str] = None,
 ):
     """이벤트 루프를 막지 않도록 변환 로직을 별도 스레드에서 실행한다."""
     async with transcription_semaphore:
@@ -3269,6 +3296,7 @@ async def process_transcription(
             correction_mode,
             source_mime_type,
             audio_seconds,
+            custom_terms,
         )
 
 
@@ -3414,6 +3442,7 @@ async def get_task_status(
                     "transcription_type": "conversation",
                 }
             runtime_status = status
+            return {"task_id": task_id, "status": runtime_status}
 
     response = (
         _get_supabase_client().table("transcriptions")

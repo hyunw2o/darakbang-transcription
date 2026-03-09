@@ -807,7 +807,27 @@ EN_MEDICAL_CORRECTIONS = {
     "frontal lob epilepsy": "frontal lobe epilepsy",
 }
 
-def get_gemini_prompt():
+def _build_name_correction_instruction(custom_terms: list[str] = None, language: str = "ko") -> str:
+    global PASTORS, HISTORICAL_PEOPLE
+    names = list(PASTORS) + list(HISTORICAL_PEOPLE)
+    if custom_terms:
+        names.extend(custom_terms)
+    
+    seen = set()
+    unique_names = []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            unique_names.append(n)
+            
+    names_str = ", ".join(unique_names)
+    
+    if language == "ko":
+        return f"\n\n[인명 및 고유명사 최우선 교정]\n- 다음 목록에 있는 이름이나 고유명사와 발음이 유사한 단어가 인식되면, STT 결과를 무시하고 반드시 아래의 정확한 표기로 교정하라:\n  {names_str}\n"
+    else:
+        return f"\n\n[Proper Nouns Priority Correction]\n- If you hear words that sound similar to the names or proper nouns in the following list, you MUST correct them to these exact spellings:\n  {names_str}\n"
+
+def get_gemini_prompt(custom_terms: list[str] = None):
     """
     Gemini용 시스템 프롬프트 (음성 인식 + 교정 + 구조화)
     """
@@ -853,10 +873,10 @@ def get_gemini_prompt():
 9. 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 누락 없이 기록하라.
    - 음절이 붙어 들리면 단어 경계를 문맥으로 복원하라.
    - 짧은 기능어(은/는/이/가/을/를/에/에서/에게/에게는)와 어미를 임의로 삭제하지 마라.
-   - 통역이 없는 구간에서 한 사람이 길게 연속 발화하면 단일 화자로 간주하고 문장을 이어서 복원하라."""
+   - 통역이 없는 구간에서 한 사람이 길게 연속 발화하면 단일 화자로 간주하고 문장을 이어서 복원하라.""" + _build_name_correction_instruction(custom_terms, "ko")
 
 
-def get_gemini_content_prompt():
+def get_gemini_content_prompt(custom_terms: list[str] = None):
     """
     Gemini에게 전달할 콘텐츠 프롬프트 (출력 형식 + 예시)
     """
@@ -909,9 +929,9 @@ def get_gemini_content_prompt():
 5. '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 6. 매우 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 음절 단위로 끊어 문맥을 복원하고 누락 없이 기록하라.
 7. 통역이 없는 단독 화자 구간은 문장을 짧게 끊어 요약하지 말고, 원문 흐름대로 연결해 기록하라.
-8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라."""
+8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라.""" + _build_name_correction_instruction(custom_terms, "ko")
 
-def get_gemini_correction_prompt():
+def get_gemini_correction_prompt(custom_terms: list[str] = None):
     """
     Gemini 텍스트 교정 전용 프롬프트 (2단계 방식)
     Whisper가 받아쓴 raw 텍스트를 교정 + 구조화하는 용도.
@@ -1000,7 +1020,7 @@ def get_gemini_correction_prompt():
 기도하시겠습니다.
 하나님께 감사드립니다.
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라."""
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + _build_name_correction_instruction(custom_terms, "ko")
 
 
 # ===== 일반 한국어 교정 (모든 유형 공통) =====
@@ -1048,7 +1068,7 @@ GENERAL_CORRECTIONS = {
 }
 
 
-def get_phonecall_correction_prompt():
+def get_phonecall_correction_prompt(custom_terms: list[str] = None):
     """통화 녹취 교정 프롬프트"""
     return """당신은 전문 통화 녹취록 편집자입니다.
 
@@ -1174,10 +1194,10 @@ def get_phonecall_correction_prompt():
 2. 참석 인원: 5명 확정
 3. 자료 공유: 회의 전날까지
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라."""
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + _build_name_correction_instruction(custom_terms, "ko")
 
 
-def get_conversation_correction_prompt():
+def get_conversation_correction_prompt(custom_terms: list[str] = None):
     """대화/회의 녹취 교정 프롬프트"""
     return """당신은 전문 회의록 편집자입니다.
 
@@ -1310,12 +1330,12 @@ def get_conversation_correction_prompt():
 1. 담당: 이대리 - 온라인 마케팅 세부 계획 수립 (2주 내)
 2. 담당: 박과장 - 오프라인 매장 분석 보고서 작성 (1주 내)
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라."""
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + _build_name_correction_instruction(custom_terms, "ko")
 
 
 # ===== 영어 교정 프롬프트 =====
 
-def get_en_sermon_correction_prompt():
+def get_en_sermon_correction_prompt(custom_terms: list[str] = None):
     """English sermon/lecture correction prompt"""
     return """You are an expert sermon and lecture transcript editor.
 
@@ -1379,10 +1399,10 @@ Correct and structure this text following the rules below.
 - Separate paragraphs with blank lines when the topic changes.
 - Colloquial expressions should be smoothed into natural sentences while preserving meaning.
 
-Correct the [Original Text] following this format. Do NOT shorten the content."""
+Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
 
 
-def get_en_phonecall_correction_prompt():
+def get_en_phonecall_correction_prompt(custom_terms: list[str] = None):
     """English phone call correction prompt"""
     return """You are an expert phone call transcript editor.
 
@@ -1472,10 +1492,10 @@ Key Points
 2. Second key point
 3. Third key point
 
-Correct the [Original Text] following this format. Do NOT shorten the content."""
+Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
 
 
-def get_en_conversation_correction_prompt():
+def get_en_conversation_correction_prompt(custom_terms: list[str] = None):
     """English conversation/meeting correction prompt"""
     return """You are an expert meeting minutes editor.
 
@@ -1571,7 +1591,7 @@ Action Items
 1. Owner: Name - Task (Deadline)
 2. Owner: Name - Task (Deadline)
 
-Correct the [Original Text] following this format. Do NOT shorten the content."""
+Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
 
 
 KO_BIBLE_BOOK_ABBREVIATIONS = {
@@ -2234,22 +2254,22 @@ def _normalize_english_contextual_terms(text: str) -> str:
     return corrected
 
 
-def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko") -> str:
+def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko", custom_terms: list[str] = None) -> str:
     """녹취 유형별 + 언어별 Gemini 교정 프롬프트 반환"""
     if language == "en":
         if transcription_type == "phonecall":
-            return get_en_phonecall_correction_prompt()
+            return get_en_phonecall_correction_prompt(custom_terms)
         elif transcription_type == "conversation":
-            return get_en_conversation_correction_prompt()
+            return get_en_conversation_correction_prompt(custom_terms)
         else:
-            return get_en_sermon_correction_prompt()
+            return get_en_sermon_correction_prompt(custom_terms)
     else:
         if transcription_type == "phonecall":
-            return get_phonecall_correction_prompt()
+            return get_phonecall_correction_prompt(custom_terms)
         elif transcription_type == "conversation":
-            return get_conversation_correction_prompt()
+            return get_conversation_correction_prompt(custom_terms)
         else:
-            return get_gemini_correction_prompt()
+            return get_gemini_correction_prompt(custom_terms)
 
 
 def correct_text(

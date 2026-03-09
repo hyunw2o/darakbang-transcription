@@ -30,6 +30,7 @@ import {
   PRIVACY_CONSENT_KEY,
   PRIVACY_POLICY_VERSION,
   RECORD_CATEGORIES,
+  STATUS_POLL_INTERVAL_MS,
   TRANSCRIBE_POLL_TIMEOUT_MS,
   TRANSCRIPTION_TYPES,
   UI_THEME_KEY,
@@ -533,7 +534,7 @@ function App() {
         setTaskStateText("");
         setError(e.message || copy.errors.statusFailed);
       }
-    }, 2000);
+    }, STATUS_POLL_INTERVAL_MS);
   };
 
   const handleTranscribe = async () => {
