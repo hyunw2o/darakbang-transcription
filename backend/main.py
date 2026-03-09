@@ -3444,13 +3444,13 @@ async def get_task_status(
             runtime_status = status
             return {"task_id": task_id, "status": runtime_status}
 
-    response = (
+    query = (
         _get_supabase_client().table("transcriptions")
         .select("*")
         .eq("task_id", task_id)
         .eq("user_id", user_id)
-        .execute()
     )
+    response = await asyncio.to_thread(query.execute)
     if response.data:
         row = response.data[0]
         row_status = str(row.get("status") or runtime_status or "")
@@ -3525,13 +3525,13 @@ async def get_history(authorization: str | None = Header(default=None)):
     user = await _get_current_user(authorization)
     user_id = user["id"]
 
-    response = (
+    query = (
         _get_supabase_client().table("transcriptions")
         .select("task_id, status, created_at, characters, engine, transcription_type")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
-        .execute()
     )
+    response = await asyncio.to_thread(query.execute)
 
     history = []
     for row in response.data:
@@ -5265,7 +5265,8 @@ async def save_record(
     }
 
     try:
-        response = _get_supabase_client().table("saved_records").insert(insert_row).execute()
+        query = _get_supabase_client().table("saved_records").insert(insert_row)
+        response = await asyncio.to_thread(query.execute)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"saved_records 저장 실패: {str(e)}")
 
@@ -5295,7 +5296,7 @@ async def get_records(
         )
         if normalized_category:
             query = query.eq("category", normalized_category)
-        response = query.execute()
+        response = await asyncio.to_thread(query.execute)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"saved_records 조회 실패: {str(e)}")
 
