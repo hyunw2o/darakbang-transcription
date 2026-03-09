@@ -18,6 +18,7 @@ import NmPressable from "./components/NmPressable";
 import FadeInView from "./components/FadeInView";
 import Banner from "./components/Banner";
 import SegmentButton from "./components/SegmentButton";
+import SocialAuthButton from "./components/SocialAuthButton";
 import {
   APP_TABS,
   FREE_MONTHLY_LIMIT_SECONDS,
@@ -1244,43 +1245,23 @@ function App() {
               <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>{copy.orSocial}</Text>
 
               <View style={styles.socialRow}>
-                <NmPressable
-                  style={[
-                    styles.socialButton,
-                    { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                    socialLoading ? styles.buttonDisabled : null,
-                  ]}
+                <SocialAuthButton
+                  provider="google"
+                  label={copy.continueGoogle}
+                  loading={socialLoading === "google"}
+                  loadingLabel={copy.connecting}
                   onPress={() => handleSocialLogin("google")}
                   disabled={!!socialLoading}
-                >
-                  <View style={styles.socialButtonInner}>
-                    <View style={styles.googleIconBubble}>
-                      <Text style={styles.socialIconText}>G</Text>
-                    </View>
-                    <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>
-                      {socialLoading === "google" ? copy.connecting : copy.continueGoogle}
-                    </Text>
-                  </View>
-                </NmPressable>
+                />
 
-                <NmPressable
-                  style={[
-                    styles.socialButton,
-                    { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                    socialLoading ? styles.buttonDisabled : null,
-                  ]}
+                <SocialAuthButton
+                  provider="kakao"
+                  label={copy.continueKakao}
+                  loading={socialLoading === "kakao"}
+                  loadingLabel={copy.connecting}
                   onPress={() => handleSocialLogin("kakao")}
                   disabled={!!socialLoading}
-                >
-                  <View style={styles.socialButtonInner}>
-                    <View style={styles.kakaoIconBubble}>
-                      <Text style={styles.socialIconText}>K</Text>
-                    </View>
-                    <Text style={[styles.socialButtonText, { color: activeTheme.textPrimary }]}>
-                      {socialLoading === "kakao" ? copy.connecting : copy.continueKakao}
-                    </Text>
-                  </View>
-                </NmPressable>
+                />
               </View>
             </View>
           </FadeInView>
@@ -2413,52 +2394,6 @@ const styles = StyleSheet.create({
   socialRow: {
     flexDirection: "column",
     gap: 10,
-  },
-  socialButton: {
-    borderRadius: 999,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    backgroundColor: NM.surface,
-    borderWidth: 1,
-    borderColor: NM.inputBorder,
-    shadowColor: NM.shadowTint,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 2,
-  },
-  socialButtonInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  googleIconBubble: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  kakaoIconBubble: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-    backgroundColor: "#FEE500",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  socialIconText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  socialButtonText: {
-    color: NM.textPrimary,
-    fontSize: 12,
-    fontWeight: "800",
   },
   helpText: {
     color: NM.textSecondary,

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import HeaderMenuControls from './HeaderMenuControls'
 import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
+import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
 import { EN_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
@@ -248,18 +249,14 @@ export default function MallogHomeEnView(props) {
               <div className="mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {socialProviders.map((provider) => (
-                    <button
+                    <SocialProviderButton
                       key={provider.key}
-                      type="button"
                       onClick={() => handleSocialLogin(provider.key)}
                       disabled={authLoading || Boolean(socialLoading)}
-                      className="nm-btn w-full min-h-[44px] px-3 py-2 text-sm font-semibold text-nm-text-primary disabled:opacity-50 inline-flex items-center justify-center gap-2 text-center leading-snug"
-                    >
-                      <span className={`w-5 h-5 rounded-full text-[11px] font-bold inline-flex items-center justify-center ${provider.iconClass}`}>
-                        {provider.icon}
-                      </span>
-                      {socialLoading === provider.key ? 'Redirecting...' : provider.label}
-                    </button>
+                      provider={provider.key}
+                      label={provider.label}
+                      loadingLabel={socialLoading === provider.key ? 'Redirecting...' : ''}
+                    />
                   ))}
                 </div>
               </div>

@@ -263,12 +263,12 @@ export default function MallogHomePageContainer({
       ]
   const socialProviders = isEnglish
     ? [
-        { key: 'google', label: 'Continue with Google', icon: 'G', iconClass: 'bg-white text-slate-700' },
-        { key: 'kakao', label: 'Continue with Kakao', icon: 'K', iconClass: 'bg-yellow-300 text-slate-900' },
+        { key: 'google', label: 'Sign in with Google' },
+        { key: 'kakao', label: 'Log in with Kakao' },
       ]
     : [
-        { key: 'google', label: 'Google로 계속하기', icon: 'G', iconClass: 'bg-white text-slate-700' },
-        { key: 'kakao', label: 'Kakao로 계속하기', icon: 'K', iconClass: 'bg-yellow-300 text-slate-900' },
+        { key: 'google', label: 'Google로 로그인' },
+        { key: 'kakao', label: '카카오로 로그인' },
       ]
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치', 'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
 

@@ -31,11 +31,6 @@ import resource
 from collections import defaultdict, deque
 
 try:
-    from mutagen import File as MutagenFile
-except Exception:
-    MutagenFile = None
-
-try:
     import stripe
 except Exception:
     stripe = None
@@ -2196,30 +2191,10 @@ def _increment_user_usage_seconds(user_id: str, upload_audio_seconds: int) -> No
 
 
 def _extract_audio_duration_seconds(file_path: str) -> int:
-    duration_seconds = 0.0
-
-    if MutagenFile is not None:
-        try:
-            parsed = MutagenFile(file_path)
-            info = getattr(parsed, "info", None)
-            parsed_length = getattr(info, "length", 0) if info else 0
-            if parsed_length:
-                duration_seconds = float(parsed_length)
-        except Exception:
-            pass
+    duration_seconds = _extract_duration_with_ffprobe(file_path)
 
     if duration_seconds <= 0:
-        try:
-            with wave.open(file_path, "rb") as wav_file:
-                frames = wav_file.getnframes()
-                frame_rate = wav_file.getframerate()
-                if frames > 0 and frame_rate > 0:
-                    duration_seconds = frames / float(frame_rate)
-        except Exception:
-            pass
-
-    if duration_seconds <= 0:
-        duration_seconds = _extract_duration_with_ffprobe(file_path)
+        duration_seconds = _extract_duration_with_wave(file_path)
 
     if duration_seconds <= 0:
         raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없는 파일입니다.")
@@ -2253,6 +2228,18 @@ def _extract_duration_with_ffprobe(file_path: str) -> float:
         return max(0.0, float(raw))
     except Exception:
         return 0.0
+
+
+def _extract_duration_with_wave(file_path: str) -> float:
+    try:
+        with wave.open(file_path, "rb") as wav_file:
+            frames = wav_file.getnframes()
+            frame_rate = wav_file.getframerate()
+            if frames > 0 and frame_rate > 0:
+                return frames / float(frame_rate)
+    except Exception:
+        return 0.0
+    return 0.0
 
 
 def _resolve_audio_mime_type(file_path: str) -> str:
