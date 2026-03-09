@@ -174,6 +174,7 @@ const I18N = {
     usageRequestRefund: "환불 요청",
     usageOpenPricing: "요금제 안내 보기",
     billingUnsupported: "현재 결제 설정에서는 앱 내 결제 호출이 비활성화되어 있습니다.",
+    iosBillingReviewNotice: "iOS 심사 버전에서는 앱 내 웹결제 및 구독 관리 버튼을 숨깁니다. 구독 안내는 웹 또는 고객지원에서 확인할 수 있습니다.",
     planLabels: {
       free: "Free",
       pro: "Pro",
@@ -467,6 +468,7 @@ const I18N = {
     usageRequestRefund: "Request refund",
     usageOpenPricing: "Open pricing page",
     billingUnsupported: "In-app checkout is currently disabled for this billing setup.",
+    iosBillingReviewNotice: "In iOS review builds, in-app web checkout and subscription management buttons are hidden. Subscription guidance is available on the web or through support.",
     planLabels: {
       free: "Free",
       pro: "Pro",

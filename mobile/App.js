@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Clipboard,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -208,6 +209,7 @@ function App() {
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
+  const isIosAppStoreReviewMode = Platform.OS === "ios";
   const isPrivacyGateVisible = !privacyAccepted && !activeLegalDoc;
   const transcriptionTypeOptions = useMemo(
     () => TRANSCRIPTION_TYPES.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
@@ -1119,12 +1121,14 @@ function App() {
               </View>
 
               <View style={[styles.authLandingActionRow, compactLayout ? styles.authLandingActionRowCompact : null]}>
-                <NmPressable
-                  style={[styles.primaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
-                  onPress={handleOpenPricing}
-                >
-                  <Text style={styles.primaryButtonText}>{copy.authLanding.pricingCta}</Text>
-                </NmPressable>
+                {!isIosAppStoreReviewMode ? (
+                  <NmPressable
+                    style={[styles.primaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
+                    onPress={handleOpenPricing}
+                  >
+                    <Text style={styles.primaryButtonText}>{copy.authLanding.pricingCta}</Text>
+                  </NmPressable>
+                ) : null}
                 <NmPressable
                   style={[styles.secondaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={handleOpenOurs}
@@ -1132,6 +1136,11 @@ function App() {
                   <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.authLanding.oursCta}</Text>
                 </NmPressable>
               </View>
+              {isIosAppStoreReviewMode ? (
+                <Text style={[styles.helpText, { color: activeTheme.textSecondary, marginTop: 10 }]}>
+                  {copy.iosBillingReviewNotice}
+                </Text>
+              ) : null}
             </View>
           </FadeInView>
 
@@ -1654,6 +1663,9 @@ function App() {
                   {!billingCheckoutSupported ? (
                     <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.billingUnsupported}</Text>
                   ) : null}
+                  {isIosAppStoreReviewMode ? (
+                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.iosBillingReviewNotice}</Text>
+                  ) : null}
 
                   <View style={styles.billingActionRow}>
                     <NmPressable
@@ -1668,79 +1680,85 @@ function App() {
                         {usageLoading || billingLoading ? copy.loading : copy.usageRefresh}
                       </Text>
                     </NmPressable>
-                    <NmPressable
-                      style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, billingActionLoading ? styles.buttonDisabled : null]}
-                      onPress={handleBillingCheckout}
-                      disabled={!!billingActionLoading}
-                    >
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                        {billingActionLoading === "checkout" ? copy.processing : copy.usageUpgrade}
-                      </Text>
-                    </NmPressable>
+                    {!isIosAppStoreReviewMode ? (
+                      <NmPressable
+                        style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, billingActionLoading ? styles.buttonDisabled : null]}
+                        onPress={handleBillingCheckout}
+                        disabled={!!billingActionLoading}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {billingActionLoading === "checkout" ? copy.processing : copy.usageUpgrade}
+                        </Text>
+                      </NmPressable>
+                    ) : null}
                   </View>
 
-                  <View style={styles.billingActionRow}>
-                    <NmPressable
-                      style={[
-                        styles.tinyButton,
-                        styles.billingActionButton,
-                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                        !billingPortalSupported || !billingManageSupported || !!billingActionLoading
-                          ? styles.buttonDisabled
-                          : null,
-                      ]}
-                      onPress={handleBillingPortal}
-                      disabled={!billingPortalSupported || !billingManageSupported || !!billingActionLoading}
-                    >
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                        {billingActionLoading === "portal" ? copy.processing : copy.usageManageSubscription}
-                      </Text>
-                    </NmPressable>
-                    <NmPressable
-                      style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                      onPress={() => {
-                        clearMessages();
-                        handleOpenPricing();
-                      }}
-                    >
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.usageOpenPricing}</Text>
-                    </NmPressable>
-                  </View>
+                  {!isIosAppStoreReviewMode ? (
+                    <View style={styles.billingActionRow}>
+                      <NmPressable
+                        style={[
+                          styles.tinyButton,
+                          styles.billingActionButton,
+                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                          !billingPortalSupported || !billingManageSupported || !!billingActionLoading
+                            ? styles.buttonDisabled
+                            : null,
+                        ]}
+                        onPress={handleBillingPortal}
+                        disabled={!billingPortalSupported || !billingManageSupported || !!billingActionLoading}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {billingActionLoading === "portal" ? copy.processing : copy.usageManageSubscription}
+                        </Text>
+                      </NmPressable>
+                      <NmPressable
+                        style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        onPress={() => {
+                          clearMessages();
+                          handleOpenPricing();
+                        }}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.usageOpenPricing}</Text>
+                      </NmPressable>
+                    </View>
+                  ) : null}
 
-                  <View style={styles.billingActionRow}>
-                    <NmPressable
-                      style={[
-                        styles.tinyButton,
-                        styles.billingActionButton,
-                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                        !canRunBillingAction || !!billingActionLoading
-                          ? styles.buttonDisabled
-                          : null,
-                      ]}
-                      onPress={handleBillingCancel}
-                      disabled={!canRunBillingAction || !!billingActionLoading}
-                    >
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                        {billingActionLoading === "cancel" ? copy.processing : copy.usageCancelSubscription}
-                      </Text>
-                    </NmPressable>
-                    <NmPressable
-                      style={[
-                        styles.tinyButton,
-                        styles.billingActionButton,
-                        { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                        !canRunBillingAction || !!billingActionLoading
-                          ? styles.buttonDisabled
-                          : null,
-                      ]}
-                      onPress={handleBillingRefund}
-                      disabled={!canRunBillingAction || !!billingActionLoading}
-                    >
-                      <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                        {billingActionLoading === "refund" ? copy.processing : copy.usageRequestRefund}
-                      </Text>
-                    </NmPressable>
-                  </View>
+                  {!isIosAppStoreReviewMode ? (
+                    <View style={styles.billingActionRow}>
+                      <NmPressable
+                        style={[
+                          styles.tinyButton,
+                          styles.billingActionButton,
+                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                          !canRunBillingAction || !!billingActionLoading
+                            ? styles.buttonDisabled
+                            : null,
+                        ]}
+                        onPress={handleBillingCancel}
+                        disabled={!canRunBillingAction || !!billingActionLoading}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {billingActionLoading === "cancel" ? copy.processing : copy.usageCancelSubscription}
+                        </Text>
+                      </NmPressable>
+                      <NmPressable
+                        style={[
+                          styles.tinyButton,
+                          styles.billingActionButton,
+                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                          !canRunBillingAction || !!billingActionLoading
+                            ? styles.buttonDisabled
+                            : null,
+                        ]}
+                        onPress={handleBillingRefund}
+                        disabled={!canRunBillingAction || !!billingActionLoading}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {billingActionLoading === "refund" ? copy.processing : copy.usageRequestRefund}
+                        </Text>
+                      </NmPressable>
+                    </View>
+                  ) : null}
                 </View>
               </FadeInView>
 
