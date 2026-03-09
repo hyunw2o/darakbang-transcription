@@ -153,7 +153,8 @@ ALLOWED_CONTENT_STYLES = {"sermon", "lecture", "phonecall", "meeting", "forum", 
 
 SERMON_CONTEXT_HINTS = (
     "설교", "말씀", "본문", "은혜", "복음", "기도", "예배", "목사", "아멘",
-    "sermon", "scripture", "gospel", "pastor", "amen", "worship",
+    "sermon", "scripture", "gospel", "pastor", "amen", "worship", "benediction",
+    "fellowship", "discipleship", "congregation", "message",
 )
 LECTURE_CONTEXT_HINTS = (
     "강의", "수업", "교안", "학습", "학기", "과제", "교육",
@@ -161,10 +162,12 @@ LECTURE_CONTEXT_HINTS = (
 )
 FORUM_CONTEXT_HINTS = (
     "포럼", "패널", "발제", "질의응답", "q&a", "session", "forum", "panel",
+    "moderator", "panelist", "keynote",
 )
 DEBATE_CONTEXT_HINTS = (
     "토론", "논제", "쟁점", "찬성", "반대", "반박", "재반박",
     "debate", "motion", "proposition", "opposition", "rebuttal",
+    "counterargument", "cross examination", "closing statement",
 )
 FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
 FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
@@ -435,7 +438,8 @@ KO_DOMAIN_CONTEXT_TERMS = (
 )
 EN_DAILY_CONTEXT_TERMS = (
     "hello, hi, hold on, could you repeat that, please confirm, please share, "
-    "schedule coordination, cost inquiry, contract review, owner assignment, follow-up action"
+    "schedule coordination, cost inquiry, contract review, owner assignment, follow-up action, "
+    "walk us through, circle back, follow up, send it over, let's confirm, let me check"
 )
 EN_DOMAIN_CONTEXT_TERMS = (
     "economics(inflation, interest rate, exchange rate, supply chain, aggregate demand), "
@@ -444,9 +448,12 @@ EN_DOMAIN_CONTEXT_TERMS = (
     "IT(API, SDK, CI/CD, cloud, Docker, Kubernetes, database, cybersecurity), "
     "environment(carbon neutrality, greenhouse gas, renewable energy, ESG, emissions trading), "
     "medicine(diagnosis, prescription, dosage, CT, MRI, side effects, CDE(Common Data Elements), distinguish from CD), "
+    "medical data(CDE, Common Data Elements, CRF, eCRF, CDISC, registry, cohort, case report form), "
     "humanities(philosophy, ethics, literacy, narrative, interpretation), "
     "education(curriculum, assessment, learning objective, feedback), "
-    "business/finance(KPI, ROI, P&L, cash flow, operating profit)"
+    "business/finance(KPI, ROI, P&L, cash flow, operating profit), "
+    "church/ministry(Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, "
+    "Prayer Journal, Blessing, Immanuel, presbytery, deacon, elder, pastoral staff, sermon, fellowship)"
 )
 STRUCTURED_SUMMARY_HEADERS = {
     "요약",
@@ -2779,15 +2786,18 @@ def whisper_transcribe(
             whisper_prompt = (
                 "This is a sermon or lecture recording. "
                 "Infer unclear words from context. "
+                "A single speaker may talk very fast for a long stretch; preserve word boundaries and do not drop content. "
                 "Bible, Scripture, Gospel, salvation, grace, faith, prayer, blessing, congregation, "
                 "sermon, worship, fellowship, testimony, discipleship, ministry, mission, "
                 "Troas Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, "
-                "Mission Home, Prenatal Mission Home, Prayer Journal"
+                "Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing, "
+                "Acts 1:8, Psalm 23:1, Romans 8:28"
             )
         elif transcription_type == "phonecall":
             whisper_prompt = (
                 "This is a phone call recording with two speakers. "
                 "Audio quality may be low. Infer unclear words from context. "
+                "Recover fast reduced speech, confirmations, scheduling language, and practical everyday phrases accurately. "
                 "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
                 "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
                 "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
@@ -2798,6 +2808,7 @@ def whisper_transcribe(
             whisper_prompt = (
                 "This is a meeting or conversation recording with multiple speakers. "
                 "Audio may have echo or overlapping voices. Infer unclear words from context. "
+                "Multiple speakers may alternate quickly in a meeting, forum, or discussion; preserve turn changes and recover specialized terms from context. "
                 "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
                 "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
                 "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "

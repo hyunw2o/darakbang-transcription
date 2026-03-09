@@ -642,6 +642,19 @@ EN_COMMON_CORRECTIONS = {
     "dunno": "don't know",
     "lemme": "let me",
     "gimme": "give me",
+    "c d e": "CDE",
+    "r e a": "REA",
+    "h m c": "HMC",
+    "h m i s": "HMIS",
+    "h m v s": "HMVS",
+    "r r t s": "RRTS",
+    "r v i s": "RVIS",
+    "r s t s": "RSTS",
+    "r b s": "RBS",
+    "r v s": "RVS",
+    "r p s": "RPS",
+    "r l s": "RLS",
+    "r g s": "RGS",
     # Church / school acronyms
     "hmc": "HMC",
     "hmis": "HMIS",
@@ -660,6 +673,38 @@ EN_COMMON_CORRECTIONS = {
     "droah church": "Troas Church",
     "drowa church": "Troas Church",
     "droas church": "Troas Church",
+    "troaz church": "Troas Church",
+    "trows church": "Troas Church",
+    "trose church": "Troas Church",
+    "trous church": "Troas Church",
+    "harvestor mission church": "Harvester Mission Church",
+    "harvister mission church": "Harvester Mission Church",
+    "missionhome": "Mission Home",
+    "prayerjournal": "Prayer Journal",
+    "pre natal mission home": "Prenatal Mission Home",
+}
+
+EN_MINISTRY_CORRECTIONS = {
+    "blessin": "Blessing",
+    "blasing": "Blessing",
+    "blassing": "Blessing",
+    "bless sing": "Blessing",
+    "imanuel": "Immanuel",
+    "imanual": "Immanuel",
+    "immanual": "Immanuel",
+    "emmanual": "Immanuel",
+    "prayer journal": "Prayer Journal",
+    "prayer jernal": "Prayer Journal",
+    "prayer jurnal": "Prayer Journal",
+    "player journal": "Prayer Journal",
+    "player jernal": "Prayer Journal",
+    "player jurnal": "Prayer Journal",
+    "mission home": "Mission Home",
+    "prenatal mission home": "Prenatal Mission Home",
+    "harvester mission church": "Harvester Mission Church",
+    "troas church": "Troas Church",
+    "common data element": "Common Data Elements",
+    "common data elements": "Common Data Elements",
 }
 
 # ===== 영어 의료 용어 STT 오류 교정 =====
@@ -1298,17 +1343,28 @@ Correct and structure this text following the rules below.
 - Correct grammar, spelling, and punctuation while preserving the speaker's meaning.
 - Proper nouns (names, places, book titles) should be accurately spelled.
 - Bible verse references should use standard format: "John 3:16", "Romans 8:28", "Acts 1:8", "Psalm 23:1".
+- Convert spoken-number scripture references into canonical form when possible:
+  "Acts chapter one verse eight" -> "Acts 1:8", "Psalm twenty three verse one" -> "Psalm 23:1".
 - Use canonical English Bible book names for all 66 books (Genesis ... Revelation). If uncertain or misspelled, normalize to canonical names.
 - If church name appears, normalize "Droa Church" (and similar misspellings) to "Troas Church".
+- Keep ministry terms exact if mentioned:
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing,
+  HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, REA
 - Medical terminology must be accurately spelled if mentioned:
   Drug names (acetaminophen, metformin, amoxicillin, etc.)
   Disease names (hypertension, diabetes, epilepsy, seizure, etc.)
   Test names (CT, MRI, EEG, etc.)
+  Data standards: CDE (Common Data Elements), CRF, eCRF, CDISC
 
 [Filler Removal]
-- Remove habitual fillers at sentence starts: "um", "uh", "so", "like", "you know"
+- Remove habitual fillers at sentence starts: "um", "uh", "so", "like", "you know", "well", "actually", "basically", "I mean"
 - Keep meaningful responses: "yes", "amen", "right"
 - Do NOT delete actual content sentences when removing fillers.
+
+[Fast Monologue Handling]
+- If a single speaker talks very fast for a long stretch, do not fragment or drop content.
+- Restore word boundaries from reduced or blurred speech if the context is clear.
+- Avoid arbitrary line breaks in the middle of a thought. Break only at paragraph or section boundaries.
 
 [Structuring - Must Apply]
 - Insert section markers on separate lines based on the sermon flow:
@@ -1363,6 +1419,9 @@ Correct and structure this text following the rules below.
 - Medicine: diagnosis, prescription, dosage, side effects, follow-up
 - Humanities/Education: philosophy, ethics, interpretation, curriculum, assessment
 - Business/Finance: KPI, ROI, P&L, cash flow, operating profit
+- Church/Ministry: Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home,
+  Prayer Journal, Blessing, Immanuel, presbytery, sermon note, prayer topic
+- Medical data standards: CDE (Common Data Elements), CRF, eCRF, CDISC
 
 [Speaker Separation - Must Apply]
 - Identify and label speakers: "Speaker A:" and "Speaker B:"
@@ -1392,7 +1451,7 @@ Correct and structure this text following the rules below.
   Tests: CT, MRI, EEG, CBC, ECG, X-ray
 
 [Filler Removal]
-- Remove habitual fillers: "um", "uh", "like", "you know"
+- Remove habitual fillers: "um", "uh", "like", "you know", "well", "actually", "basically", "I mean"
 - Also remove fillers at the start of speaker-labeled utterances:
   "Speaker A: um, ..." -> "Speaker A: ..."
   "Speaker B: uh... got it" -> "Speaker B: got it"
@@ -1453,6 +1512,9 @@ Correct and structure this text following the rules below.
 - Environment/ESG: carbon neutrality, Scope 1/2/3, emissions trading, sustainability
 - Medicine/Healthcare: diagnosis, protocol, adverse event, CT, MRI, follow-up
 - Humanities/Education: philosophy, ethics, literacy, interpretation, curriculum, rubric
+- Church/Ministry: Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home,
+  Prayer Journal, Blessing, Immanuel, presbytery, sermon note, prayer topic, fellowship
+- Medical data standards: CDE (Common Data Elements), CRF, eCRF, CDISC
 
 [Speaker Separation - Must Apply]
 - Label meeting participants: "Participant 1:", "Participant 2:", "Participant 3:", etc.
@@ -1480,6 +1542,8 @@ Correct and structure this text following the rules below.
 
 [Filler Removal]
 - Remove habitual fillers at sentence starts.
+- Also remove habitual English discourse fillers when they do not carry content:
+  "well", "actually", "basically", "literally", "you know", "I mean"
 - Also remove fillers at the start of participant utterances:
   "Participant 1: um, ..." -> "Participant 1: ..."
   "Participant 2: uh... let me add" -> "Participant 2: let me add"
@@ -1769,6 +1833,79 @@ EN_BIBLE_BOOK_ALIASES = {
     "revelation": "Revelation",
 }
 
+EN_NUMBER_WORD_VALUES = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+EN_NUMBER_WORD_SEQUENCE_PATTERN = (
+    r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
+    r"fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|"
+    r"sixty|seventy|eighty|ninety|hundred|and)(?:[\s-]+(?:zero|one|two|three|four|five|"
+    r"six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|"
+    r"seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|"
+    r"ninety|hundred|and))*"
+)
+
+
+def _parse_english_number_words(raw: str) -> int | None:
+    import re
+
+    if not raw:
+        return None
+
+    normalized = re.sub(r"[-]+", " ", raw.strip().lower())
+    tokens = [token for token in re.split(r"\s+", normalized) if token and token != "and"]
+    if not tokens:
+        return None
+
+    total = 0
+    current = 0
+    for token in tokens:
+        if token == "hundred":
+            if current == 0:
+                current = 1
+            current *= 100
+            continue
+        value = EN_NUMBER_WORD_VALUES.get(token)
+        if value is None:
+            return None
+        if value >= 20 and current >= 100:
+            total += current
+            current = value
+        else:
+            current += value
+
+    value = total + current
+    if value <= 0 or value > 200:
+        return None
+    return value
+
 
 def _normalize_korean_bible_references(text: str) -> str:
     import re
@@ -1820,6 +1957,7 @@ def _normalize_english_bible_references(text: str) -> str:
 
     sorted_keys = sorted(EN_BIBLE_BOOK_ALIASES.keys(), key=len, reverse=True)
     book_pattern = "|".join(re.escape(key) for key in sorted_keys)
+    number_word_pattern = EN_NUMBER_WORD_SEQUENCE_PATTERN
 
     def to_canonical(raw_book: str) -> str:
         normalized = re.sub(r"\s+", " ", (raw_book or "").strip().lower())
@@ -1833,6 +1971,17 @@ def _normalize_english_bible_references(text: str) -> str:
         if verse_end:
             return f"{book} {chapter}:{verse_start}-{verse_end}"
         return f"{book} {chapter}:{verse_start}"
+
+    def repl_en_word_ref(match):
+        book = to_canonical(match.group(1))
+        chapter_value = _parse_english_number_words(match.group(2))
+        verse_start_value = _parse_english_number_words(match.group(3))
+        verse_end_value = _parse_english_number_words(match.group(4)) if match.lastindex and match.lastindex >= 4 and match.group(4) else None
+        if chapter_value is None or verse_start_value is None:
+            return match.group(0)
+        if verse_end_value is not None:
+            return f"{book} {chapter_value}:{verse_start_value}-{verse_end_value}"
+        return f"{book} {chapter_value}:{verse_start_value}"
 
     corrected = text
     corrected = re.sub(
@@ -1850,6 +1999,18 @@ def _normalize_english_bible_references(text: str) -> str:
     corrected = re.sub(
         rf"\b({book_pattern})\s+(\d+)\s*[:\.,]\s*(\d+)(?:\s*(?:-|~|–)\s*(\d+))?\b",
         repl_en_ref,
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(
+        rf"\b({book_pattern})\s+chapter\s+({number_word_pattern})\s*,?\s*verse\s+({number_word_pattern})(?:\s*(?:to|through|-|~|–)\s*({number_word_pattern}))?\b",
+        repl_en_word_ref,
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(
+        rf"\b({book_pattern})\s+({number_word_pattern})\s*,?\s*verse\s+({number_word_pattern})(?:\s*(?:to|through|-|~|–)\s*({number_word_pattern}))?\b",
+        repl_en_word_ref,
         corrected,
         flags=re.IGNORECASE,
     )
@@ -2008,6 +2169,71 @@ def _normalize_contextual_homophones(text: str) -> str:
     return corrected
 
 
+def _normalize_english_contextual_terms(text: str) -> str:
+    import re
+
+    if not text:
+        return text
+
+    corrected = text
+    segments = re.split(r"(\n+|(?<=[.!?])\s+)", corrected)
+    normalized_segments: list[str] = []
+
+    church_context = (
+        r"(church|sermon|scripture|gospel|pastor|prayer|worship|ministry|grace|faith|"
+        r"mission|fellowship|congregation|elder|deacon|benediction|remnant|covenant|"
+        r"immanuel|troas|harvester|blessing|prayer journal|acts|psalm|romans|john)"
+    )
+    medical_info_context = (
+        r"(medical data|clinical data|clinical research|common data elements|data standard|"
+        r"registry|cohort|CRF|eCRF|CDISC|case report form)"
+    )
+
+    for segment in segments:
+        if not segment or re.fullmatch(r"\n+|\s+", segment):
+            normalized_segments.append(segment)
+            continue
+
+        has_church_context = re.search(church_context, segment, flags=re.IGNORECASE) is not None
+        has_medical_info_context = re.search(medical_info_context, segment, flags=re.IGNORECASE) is not None
+
+        if has_church_context:
+            segment = re.sub(r"\bsalmon\b", "sermon", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bplayer journal\b", "Prayer Journal", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bplayer jernal\b", "Prayer Journal", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bplayer jurnal\b", "Prayer Journal", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bplayer meeting\b", "prayer meeting", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bplayer request(s)?\b", r"prayer request\1", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bplayer topic(s)?\b", r"prayer topic\1", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bclosing player\b", "closing prayer", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bopening player\b", "opening prayer", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\b(?:i|im|em)e?manual\b", "Immanuel", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bblessin[g]?\b", "Blessing", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bbless sing\b", "Blessing", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bmission home\b", "Mission Home", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bprenatal mission home\b", "Prenatal Mission Home", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bharvester mission church\b", "Harvester Mission Church", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\btroas church\b", "Troas Church", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\btrose church\b", "Troas Church", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\btrous church\b", "Troas Church", segment, flags=re.IGNORECASE)
+
+        if has_medical_info_context:
+            segment = re.sub(r"\bcommon data element(?:s)?\b", "Common Data Elements", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bc d e\b", "CDE", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bCD\b", "CDE", segment, flags=re.IGNORECASE)
+
+        normalized_segments.append(segment)
+
+    corrected = "".join(normalized_segments)
+    corrected = re.sub(r"(?m)^\s*(well|actually|basically|literally|so|like|you know|i mean)\s*[,.\-:;~?!]+\s*", "", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(
+        r"(?mi)^((?:Speaker|Participant)\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?\s*[:：]\s*)(?:well|actually|basically|literally|so|like|you know|i mean)\s*[,.\-:;~?!]+\s*",
+        r"\1",
+        corrected,
+    )
+    return corrected
+
+
 def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko") -> str:
     """녹취 유형별 + 언어별 Gemini 교정 프롬프트 반환"""
     if language == "en":
@@ -2051,17 +2277,29 @@ def correct_text(
         for wrong, right in EN_COMMON_CORRECTIONS.items():
             corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
 
+        # 영어 사역/교회 고유명사 교정
+        for wrong, right in EN_MINISTRY_CORRECTIONS.items():
+            corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
+
         # 영어 의료 용어 교정
         for wrong, right in EN_MEDICAL_CORRECTIONS.items():
             corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
+
+        # 영어 문맥 기반 고유명사/약어 교정
+        corrected = _normalize_english_contextual_terms(corrected)
 
         # 영어 성경 구절/책명 형식 정규화
         corrected = _normalize_english_bible_references(corrected)
 
         # 영어 추임새 제거
-        corrected = re.sub(r'(?m)^(Um|Uh|So|Like|You know|I mean)[,.\s~?!]+', '', corrected, flags=re.IGNORECASE)
         corrected = re.sub(
-            r'(?mi)^((?:Speaker|Participant)\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?\s*[:：]\s*)(?:um+|uh+|er+|ah+|hmm+|you know|i mean|like)[,.\s~?!]+',
+            r'(?m)^(Um|Uh|So|Like|You know|I mean|Well|Actually|Basically|Literally)[,.\s~?!]+',
+            '',
+            corrected,
+            flags=re.IGNORECASE,
+        )
+        corrected = re.sub(
+            r'(?mi)^((?:Speaker|Participant)\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?\s*[:：]\s*)(?:um+|uh+|er+|ah+|hmm+|you know|i mean|like|well|actually|basically|literally)[,.\s~?!]+',
             r'\1',
             corrected,
         )
