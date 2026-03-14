@@ -70,6 +70,8 @@ export default function MallogHomeKoView(props) {
     historyLoaded,
     historyDeletingTaskId,
     historyBulkDeleting,
+    pendingDeleteTaskId,
+    pendingDeleteAll,
     currentStep,
     dragOver,
     showHistory,
@@ -105,6 +107,8 @@ export default function MallogHomeKoView(props) {
     handleLoadHistory,
     handleDeleteHistory,
     handleDeleteAllHistory,
+    cancelPendingDeleteTask,
+    cancelPendingDeleteAll,
     exportAsTxt,
     exportAsDocx,
     exportTextByLabel,
@@ -720,33 +724,46 @@ export default function MallogHomeKoView(props) {
                       <p className="text-sm text-nm-text-secondary p-4">아직 변환 기록이 없습니다.</p>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-nm-dark/10">
-                          <p className="text-xs text-nm-text-secondary">삭제는 계정별 기록에만 반영됩니다.</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm('최근 변환 기록을 모두 삭제할까요? 진행 중인 작업은 유지됩니다.')) {
-                                handleDeleteAllHistory()
-                              }
-                            }}
-                            disabled={historyBulkDeleting}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              historyBulkDeleting
-                                ? 'bg-nm-light/40 text-nm-text-secondary cursor-not-allowed'
-                                : 'bg-red-50 text-red-600 hover:bg-red-100'
-                            }`}
-                          >
-                            {historyBulkDeleting ? '삭제 중...' : '전체 삭제'}
-                          </button>
+                        <div className="flex flex-col gap-3 px-4 py-3 border-b border-nm-dark/10 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs leading-5 text-nm-text-secondary">
+                              {pendingDeleteAll ? '한 번 더 누르면 진행 중 항목을 제외한 삭제 가능한 기록이 모두 제거됩니다.' : '삭제는 현재 로그인한 계정의 기록에만 반영되며, 진행 중 작업은 유지됩니다.'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 shrink-0 sm:justify-end">
+                            {pendingDeleteAll && !historyBulkDeleting && (
+                              <button
+                                type="button"
+                                onClick={cancelPendingDeleteAll}
+                                className="min-w-[84px] rounded-full px-3 py-1.5 text-xs font-semibold bg-nm-light/40 text-nm-text-secondary hover:bg-nm-light/70 transition-colors"
+                              >
+                                취소
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleDeleteAllHistory}
+                              disabled={historyBulkDeleting}
+                              className={`min-w-[96px] rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                historyBulkDeleting
+                                  ? 'bg-nm-light/40 text-nm-text-secondary cursor-not-allowed'
+                                  : pendingDeleteAll
+                                    ? 'bg-red-600 text-white hover:bg-red-700'
+                                    : 'bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                            >
+                              {historyBulkDeleting ? '삭제 중...' : pendingDeleteAll ? '전체 삭제 확인' : '전체 삭제'}
+                            </button>
+                          </div>
                         </div>
                         <ul className="divide-y divide-nm-dark/20">
                         {history.map((item) => (
                           <li key={item.task_id}>
-                            <div className="p-4 flex items-start gap-3">
+                            <div className="p-4">
                               <button
                                 type="button"
                                 onClick={() => handleLoadHistory(item.task_id)}
-                                className="flex-1 min-w-0 text-left hover:bg-nm-light/20 transition-colors group rounded-2xl"
+                                className="w-full text-left hover:bg-nm-light/20 transition-colors group rounded-2xl"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex-1 min-w-0 pr-4">
@@ -777,24 +794,36 @@ export default function MallogHomeKoView(props) {
                                   </svg>
                                 </div>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (window.confirm('이 변환 기록을 삭제할까요?')) {
-                                    handleDeleteHistory(item.task_id)
-                                  }
-                                }}
-                                disabled={historyDeletingTaskId === item.task_id || ['queued', 'processing'].includes(item.status)}
-                                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                  historyDeletingTaskId === item.task_id
-                                    ? 'bg-nm-light/40 text-nm-text-secondary cursor-wait'
-                                    : ['queued', 'processing'].includes(item.status)
-                                      ? 'bg-nm-light/40 text-nm-text-secondary cursor-not-allowed'
-                                      : 'bg-red-50 text-red-600 hover:bg-red-100'
-                                }`}
-                              >
-                                {historyDeletingTaskId === item.task_id ? '삭제 중...' : ['queued', 'processing'].includes(item.status) ? '진행 중' : '삭제'}
-                              </button>
+                              <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-nm-dark/10 pt-3">
+                                {pendingDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id && (
+                                  <p className="mr-auto text-[11px] leading-4 text-red-500">다시 누르면 이 계정의 기록에서 바로 제거됩니다.</p>
+                                )}
+                                {pendingDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id && (
+                                  <button
+                                    type="button"
+                                    onClick={cancelPendingDeleteTask}
+                                    className="min-w-[84px] shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold bg-nm-light/40 text-nm-text-secondary hover:bg-nm-light/70 transition-colors"
+                                  >
+                                    취소
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteHistory(item.task_id)}
+                                  disabled={historyDeletingTaskId === item.task_id || ['queued', 'processing'].includes(item.status)}
+                                  className={`min-w-[88px] shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                    historyDeletingTaskId === item.task_id
+                                      ? 'bg-nm-light/40 text-nm-text-secondary cursor-wait'
+                                      : ['queued', 'processing'].includes(item.status)
+                                        ? 'bg-nm-light/40 text-nm-text-secondary cursor-not-allowed'
+                                        : pendingDeleteTaskId === item.task_id
+                                          ? 'bg-red-600 text-white hover:bg-red-700'
+                                          : 'bg-red-50 text-red-600 hover:bg-red-100'
+                                  }`}
+                                >
+                                  {historyDeletingTaskId === item.task_id ? '삭제 중...' : ['queued', 'processing'].includes(item.status) ? '진행 중' : pendingDeleteTaskId === item.task_id ? '삭제 확인' : '삭제'}
+                                </button>
+                              </div>
                             </div>
                           </li>
                         ))}

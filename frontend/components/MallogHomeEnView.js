@@ -70,6 +70,8 @@ export default function MallogHomeEnView(props) {
     historyLoaded,
     historyDeletingTaskId,
     historyBulkDeleting,
+    pendingDeleteTaskId,
+    pendingDeleteAll,
     currentStep,
     dragOver,
     showHistory,
@@ -105,6 +107,8 @@ export default function MallogHomeEnView(props) {
     handleLoadHistory,
     handleDeleteHistory,
     handleDeleteAllHistory,
+    cancelPendingDeleteTask,
+    cancelPendingDeleteAll,
     exportAsTxt,
     exportAsDocx,
     exportTextByLabel,
@@ -724,33 +728,46 @@ export default function MallogHomeEnView(props) {
                       <p className="text-sm text-nm-text-secondary p-4">No transcriptions yet.</p>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-nm-text-secondary/10">
-                          <p className="text-xs text-nm-text-secondary">Deletes apply only to this account history.</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm('Delete all transcription history for this account? Active tasks will be kept.')) {
-                                handleDeleteAllHistory()
-                              }
-                            }}
-                            disabled={historyBulkDeleting}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              historyBulkDeleting
-                                ? 'bg-nm-bg/60 text-nm-text-secondary cursor-not-allowed'
-                                : 'bg-red-50 text-red-600 hover:bg-red-100'
-                            }`}
-                          >
-                            {historyBulkDeleting ? 'Deleting...' : 'Delete all'}
-                          </button>
+                        <div className="flex flex-col gap-3 px-4 py-3 border-b border-nm-text-secondary/10 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-xs leading-5 text-nm-text-secondary">
+                              {pendingDeleteAll ? 'Press Delete all again to remove every deletable item while keeping active tasks.' : 'Deletes apply only to the currently signed-in account, and active tasks stay in place.'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 shrink-0 sm:justify-end">
+                            {pendingDeleteAll && !historyBulkDeleting && (
+                              <button
+                                type="button"
+                                onClick={cancelPendingDeleteAll}
+                                className="min-w-[84px] rounded-full px-3 py-1.5 text-xs font-semibold bg-nm-bg/60 text-nm-text-secondary hover:bg-nm-bg transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleDeleteAllHistory}
+                              disabled={historyBulkDeleting}
+                              className={`min-w-[96px] rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                historyBulkDeleting
+                                  ? 'bg-nm-bg/60 text-nm-text-secondary cursor-not-allowed'
+                                  : pendingDeleteAll
+                                    ? 'bg-red-600 text-white hover:bg-red-700'
+                                    : 'bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                            >
+                              {historyBulkDeleting ? 'Deleting...' : pendingDeleteAll ? 'Confirm delete all' : 'Delete all'}
+                            </button>
+                          </div>
                         </div>
                         <ul className="divide-y divide-nm-text-secondary/10">
                         {history.map((item) => (
                           <li key={item.task_id}>
-                            <div className="p-4 flex items-start gap-3">
+                            <div className="p-4">
                               <button
                                 type="button"
                                 onClick={() => handleLoadHistory(item.task_id)}
-                                className="flex-1 min-w-0 text-left hover:bg-nm-bg/50 transition-colors group rounded-2xl"
+                                className="w-full text-left hover:bg-nm-bg/50 transition-colors group rounded-2xl"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex-1 min-w-0 pr-4">
@@ -781,24 +798,36 @@ export default function MallogHomeEnView(props) {
                                   </svg>
                                 </div>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (window.confirm('Delete this transcription history item?')) {
-                                    handleDeleteHistory(item.task_id)
-                                  }
-                                }}
-                                disabled={historyDeletingTaskId === item.task_id || ['queued', 'processing'].includes(item.status)}
-                                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                  historyDeletingTaskId === item.task_id
-                                    ? 'bg-nm-bg/60 text-nm-text-secondary cursor-wait'
-                                    : ['queued', 'processing'].includes(item.status)
-                                      ? 'bg-nm-bg/60 text-nm-text-secondary cursor-not-allowed'
-                                      : 'bg-red-50 text-red-600 hover:bg-red-100'
-                                }`}
-                              >
-                                {historyDeletingTaskId === item.task_id ? 'Deleting...' : ['queued', 'processing'].includes(item.status) ? 'Active' : 'Delete'}
-                              </button>
+                              <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-nm-text-secondary/10 pt-3">
+                                {pendingDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id && (
+                                  <p className="mr-auto text-[11px] leading-4 text-red-500">Press Delete again to remove this item from your account history.</p>
+                                )}
+                                {pendingDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id && (
+                                  <button
+                                    type="button"
+                                    onClick={cancelPendingDeleteTask}
+                                    className="min-w-[84px] shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold bg-nm-bg/60 text-nm-text-secondary hover:bg-nm-bg transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteHistory(item.task_id)}
+                                  disabled={historyDeletingTaskId === item.task_id || ['queued', 'processing'].includes(item.status)}
+                                  className={`min-w-[88px] shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                    historyDeletingTaskId === item.task_id
+                                      ? 'bg-nm-bg/60 text-nm-text-secondary cursor-wait'
+                                      : ['queued', 'processing'].includes(item.status)
+                                        ? 'bg-nm-bg/60 text-nm-text-secondary cursor-not-allowed'
+                                        : pendingDeleteTaskId === item.task_id
+                                          ? 'bg-red-600 text-white hover:bg-red-700'
+                                          : 'bg-red-50 text-red-600 hover:bg-red-100'
+                                  }`}
+                                >
+                                  {historyDeletingTaskId === item.task_id ? 'Deleting...' : ['queued', 'processing'].includes(item.status) ? 'Active' : pendingDeleteTaskId === item.task_id ? 'Confirm delete' : 'Delete'}
+                                </button>
+                              </div>
                             </div>
                           </li>
                         ))}

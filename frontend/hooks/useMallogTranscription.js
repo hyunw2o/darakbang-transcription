@@ -7,6 +7,7 @@ import { apiFetch, safeReadJson } from '../utils/network'
 const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
 const STATUS_POLL_INTERVAL_MS = 3000
+const HISTORY_DELETE_CONFIRM_WINDOW_MS = 5000
 
 const TRANSCRIPTION_MESSAGES = {
   ko: {
@@ -27,6 +28,8 @@ const TRANSCRIPTION_MESSAGES = {
     deleteHistorySuccess: '변환 기록을 삭제했습니다.',
     deleteAllHistorySuccess: '삭제 가능한 기록을 모두 삭제했습니다.',
     deleteAllHistoryPartial: '삭제 가능한 기록 {deletedCount}건을 삭제했습니다. 진행 중인 {skippedCount}건은 유지했습니다.',
+    deleteHistoryConfirmPrompt: '삭제를 한 번 더 누르면 이 기록이 제거됩니다.',
+    deleteAllHistoryConfirmPrompt: '전체 삭제를 한 번 더 누르면 삭제 가능한 기록이 제거됩니다.',
     summarizeLoginRequired: '요약은 로그인 후 이용할 수 있습니다.',
     summarizeFailed: '요약 실패',
     draftLoginRequired: '기록본 초안 생성은 로그인 후 이용할 수 있습니다.',
@@ -63,6 +66,8 @@ const TRANSCRIPTION_MESSAGES = {
     deleteHistorySuccess: 'Transcription history item deleted.',
     deleteAllHistorySuccess: 'All deletable history items were removed.',
     deleteAllHistoryPartial: 'Deleted {deletedCount} history item(s). Kept {skippedCount} active item(s).',
+    deleteHistoryConfirmPrompt: 'Press Delete once more to remove this history item.',
+    deleteAllHistoryConfirmPrompt: 'Press Delete all once more to remove every deletable history item.',
     summarizeLoginRequired: 'Please log in to generate summaries.',
     summarizeFailed: 'Summary generation failed.',
     draftLoginRequired: 'Please log in to generate record drafts.',
@@ -105,6 +110,8 @@ export default function useMallogTranscription({
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const [historyDeletingTaskId, setHistoryDeletingTaskId] = useState('')
   const [historyBulkDeleting, setHistoryBulkDeleting] = useState(false)
+  const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState('')
+  const [pendingDeleteAll, setPendingDeleteAll] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -126,6 +133,8 @@ export default function useMallogTranscription({
   const pollFailureCountRef = useRef(0)
   const fileDurationProbeRef = useRef(0)
   const resultEpochRef = useRef(0)
+  const historyDeleteConfirmTimerRef = useRef(null)
+  const historyDeleteAllConfirmTimerRef = useRef(null)
 
   const readResponseData = useCallback(async (response, fallbackMessage) => {
     const data = await safeReadJson(response)
@@ -149,6 +158,42 @@ export default function useMallogTranscription({
       pollResultCommitTimerRef.current = null
     }
   }, [])
+
+  const clearPendingDeleteTask = useCallback(() => {
+    if (historyDeleteConfirmTimerRef.current) {
+      window.clearTimeout(historyDeleteConfirmTimerRef.current)
+      historyDeleteConfirmTimerRef.current = null
+    }
+    setPendingDeleteTaskId('')
+  }, [])
+
+  const clearPendingDeleteAll = useCallback(() => {
+    if (historyDeleteAllConfirmTimerRef.current) {
+      window.clearTimeout(historyDeleteAllConfirmTimerRef.current)
+      historyDeleteAllConfirmTimerRef.current = null
+    }
+    setPendingDeleteAll(false)
+  }, [])
+
+  const armPendingDeleteTask = useCallback((taskId) => {
+    clearPendingDeleteAll()
+    clearPendingDeleteTask()
+    setPendingDeleteTaskId(taskId)
+    historyDeleteConfirmTimerRef.current = window.setTimeout(() => {
+      setPendingDeleteTaskId('')
+      historyDeleteConfirmTimerRef.current = null
+    }, HISTORY_DELETE_CONFIRM_WINDOW_MS)
+  }, [clearPendingDeleteAll, clearPendingDeleteTask])
+
+  const armPendingDeleteAll = useCallback(() => {
+    clearPendingDeleteTask()
+    clearPendingDeleteAll()
+    setPendingDeleteAll(true)
+    historyDeleteAllConfirmTimerRef.current = window.setTimeout(() => {
+      setPendingDeleteAll(false)
+      historyDeleteAllConfirmTimerRef.current = null
+    }, HISTORY_DELETE_CONFIRM_WINDOW_MS)
+  }, [clearPendingDeleteAll, clearPendingDeleteTask])
 
   const stopPolling = useCallback(() => {
     if (pollInterval.current) {
@@ -176,6 +221,8 @@ export default function useMallogTranscription({
 
   const resetState = useCallback(() => {
     invalidatePollingSession()
+    clearPendingDeleteTask()
+    clearPendingDeleteAll()
     setLoading(false)
     setCurrentStep(0)
     setResult(null)
@@ -194,13 +241,15 @@ export default function useMallogTranscription({
     setSavingCategory('')
     setShowHistory(false)
     setShowRecords(false)
-  }, [invalidatePollingSession])
+  }, [clearPendingDeleteAll, clearPendingDeleteTask, invalidatePollingSession])
 
   useEffect(() => {
     return () => {
       stopPolling()
+      clearPendingDeleteTask()
+      clearPendingDeleteAll()
     }
-  }, [stopPolling])
+  }, [clearPendingDeleteAll, clearPendingDeleteTask, stopPolling])
 
   const fetchHistory = useCallback(async (token = authToken) => {
     if (!token) {
@@ -522,9 +571,18 @@ export default function useMallogTranscription({
       return
     }
 
+    if (pendingDeleteTaskId !== taskId) {
+      setError(null)
+      setNotice(null)
+      armPendingDeleteTask(taskId)
+      showToast(messages.deleteHistoryConfirmPrompt)
+      return
+    }
+
     setHistoryDeletingTaskId(taskId)
     setError(null)
     setNotice(null)
+    clearPendingDeleteTask()
 
     try {
       await readResponseData(
@@ -551,7 +609,7 @@ export default function useMallogTranscription({
     } finally {
       setHistoryDeletingTaskId('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, messages.deleteHistoryFailed, messages.deleteHistorySuccess, messages.signinRequired, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
+  }, [apiUrl, armPendingDeleteTask, authToken, clearPendingDeleteTask, getAuthHeaders, messages.deleteHistoryConfirmPrompt, messages.deleteHistoryFailed, messages.deleteHistorySuccess, messages.signinRequired, pendingDeleteTaskId, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
 
   const handleDeleteAllHistory = useCallback(async () => {
     if (!authToken) {
@@ -559,9 +617,18 @@ export default function useMallogTranscription({
       return
     }
 
+    if (!pendingDeleteAll) {
+      setError(null)
+      setNotice(null)
+      armPendingDeleteAll()
+      showToast(messages.deleteAllHistoryConfirmPrompt)
+      return
+    }
+
     setHistoryBulkDeleting(true)
     setError(null)
     setNotice(null)
+    clearPendingDeleteAll()
 
     try {
       const data = await readResponseData(
@@ -598,7 +665,7 @@ export default function useMallogTranscription({
     } finally {
       setHistoryBulkDeleting(false)
     }
-  }, [apiUrl, authToken, getAuthHeaders, messages.deleteAllHistoryFailed, messages.deleteAllHistoryPartial, messages.deleteAllHistorySuccess, messages.signinRequired, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
+  }, [apiUrl, armPendingDeleteAll, authToken, clearPendingDeleteAll, getAuthHeaders, messages.deleteAllHistoryConfirmPrompt, messages.deleteAllHistoryFailed, messages.deleteAllHistoryPartial, messages.deleteAllHistorySuccess, messages.signinRequired, pendingDeleteAll, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
 
   const exportAsTxt = useCallback(() => {
     if (!result) return
@@ -792,6 +859,8 @@ export default function useMallogTranscription({
     historyLoaded,
     historyDeletingTaskId,
     historyBulkDeleting,
+    pendingDeleteTaskId,
+    pendingDeleteAll,
     currentStep,
     dragOver,
     showHistory,
@@ -821,6 +890,8 @@ export default function useMallogTranscription({
     handleLoadHistory,
     handleDeleteHistory,
     handleDeleteAllHistory,
+    cancelPendingDeleteTask: clearPendingDeleteTask,
+    cancelPendingDeleteAll: clearPendingDeleteAll,
     exportAsTxt,
     exportAsDocx,
     exportTextByLabel,

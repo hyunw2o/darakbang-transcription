@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Clipboard,
   Platform,
   ScrollView,
@@ -52,6 +51,8 @@ function App() {
   const activeTaskIdRef = useRef("");
   const resultEpochRef = useRef(0);
   const scrollUnlockTimerRef = useRef(null);
+  const historyDeleteConfirmTimerRef = useRef(null);
+  const historyDeleteAllConfirmTimerRef = useRef(null);
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
 
@@ -75,6 +76,8 @@ function App() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyDeletingTaskId, setHistoryDeletingTaskId] = useState("");
   const [historyBulkDeleting, setHistoryBulkDeleting] = useState(false);
+  const [pendingHistoryDeleteTaskId, setPendingHistoryDeleteTaskId] = useState("");
+  const [pendingHistoryBulkDelete, setPendingHistoryBulkDelete] = useState(false);
 
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -105,6 +108,38 @@ function App() {
       scrollUnlockTimerRef.current = null;
     }
   }, []);
+  const clearHistoryDeleteConfirmTimer = useCallback(() => {
+    if (historyDeleteConfirmTimerRef.current) {
+      clearTimeout(historyDeleteConfirmTimerRef.current);
+      historyDeleteConfirmTimerRef.current = null;
+    }
+    setPendingHistoryDeleteTaskId("");
+  }, []);
+  const clearHistoryDeleteAllConfirmTimer = useCallback(() => {
+    if (historyDeleteAllConfirmTimerRef.current) {
+      clearTimeout(historyDeleteAllConfirmTimerRef.current);
+      historyDeleteAllConfirmTimerRef.current = null;
+    }
+    setPendingHistoryBulkDelete(false);
+  }, []);
+  const armHistoryDeleteConfirm = useCallback((taskId) => {
+    clearHistoryDeleteAllConfirmTimer();
+    clearHistoryDeleteConfirmTimer();
+    setPendingHistoryDeleteTaskId(taskId);
+    historyDeleteConfirmTimerRef.current = setTimeout(() => {
+      setPendingHistoryDeleteTaskId("");
+      historyDeleteConfirmTimerRef.current = null;
+    }, 5000);
+  }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer]);
+  const armHistoryDeleteAllConfirm = useCallback(() => {
+    clearHistoryDeleteConfirmTimer();
+    clearHistoryDeleteAllConfirmTimer();
+    setPendingHistoryBulkDelete(true);
+    historyDeleteAllConfirmTimerRef.current = setTimeout(() => {
+      setPendingHistoryBulkDelete(false);
+      historyDeleteAllConfirmTimerRef.current = null;
+    }, 5000);
+  }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer]);
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
@@ -357,7 +392,14 @@ function App() {
 
   useEffect(() => {
     setOpenSettingsMenu("");
-  }, [isLoggedIn]);
+    clearHistoryDeleteConfirmTimer();
+    clearHistoryDeleteAllConfirmTimer();
+  }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer, isLoggedIn]);
+
+  useEffect(() => () => {
+    clearHistoryDeleteConfirmTimer();
+    clearHistoryDeleteAllConfirmTimer();
+  }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer]);
 
   useEffect(() => {
     if (activeTab !== "transcribe") {
@@ -630,98 +672,90 @@ function App() {
       setError(copy.errors.authRequired);
       return;
     }
+    if (pendingHistoryDeleteTaskId !== taskId) {
+      clearMessages();
+      unlockWorkspaceScroll();
+      armHistoryDeleteConfirm(taskId);
+      return;
+    }
 
-    Alert.alert(
-      copy.historyDeleteConfirmTitle,
-      copy.historyDeleteConfirmMessage,
-      [
-        { text: language === "en" ? "Cancel" : "취소", style: "cancel" },
-        {
-          text: copy.delete,
-          style: "destructive",
-          onPress: async () => {
-            clearMessages();
-            unlockWorkspaceScroll();
-            setHistoryDeletingTaskId(taskId);
-            try {
-              await requestApi(`/api/history/${taskId}`, {
-                method: "DELETE",
-                token: authToken,
-              });
+    clearMessages();
+    unlockWorkspaceScroll();
+    clearHistoryDeleteConfirmTimer();
+    setHistoryDeletingTaskId(taskId);
+    (async () => {
+      try {
+        await requestApi(`/api/history/${taskId}`, {
+          method: "DELETE",
+          token: authToken,
+        });
 
-              setHistory((prev) => prev.filter((item) => item.task_id !== taskId));
-              setHistoryLoaded(true);
+        setHistory((prev) => prev.filter((item) => item.task_id !== taskId));
+        setHistoryLoaded(true);
 
-              if ((result?.task_id || "") === taskId) {
-                resetResultWorkspace(true);
-              }
+        if ((result?.task_id || "") === taskId) {
+          resetResultWorkspace(true);
+        }
 
-              setNotice(copy.notices.historyDeleted);
-            } catch (e) {
-              setError(e.message || copy.errors.historyDeleteFailed);
-            } finally {
-              setHistoryDeletingTaskId("");
-              unlockWorkspaceScroll();
-            }
-          },
-        },
-      ]
-    );
-  }, [authToken, clearMessages, copy.delete, copy.errors.authRequired, copy.errors.historyDeleteFailed, copy.historyDeleteConfirmMessage, copy.historyDeleteConfirmTitle, copy.notices.historyDeleted, language, resetResultWorkspace, result?.task_id, setError, unlockWorkspaceScroll]);
+        setNotice(copy.notices.historyDeleted);
+      } catch (e) {
+        setError(e.message || copy.errors.historyDeleteFailed);
+      } finally {
+        setHistoryDeletingTaskId("");
+        unlockWorkspaceScroll();
+      }
+    })();
+  }, [armHistoryDeleteConfirm, authToken, clearHistoryDeleteConfirmTimer, clearMessages, copy.errors.authRequired, copy.errors.historyDeleteFailed, copy.notices.historyDeleteConfirmPrompt, copy.notices.historyDeleted, pendingHistoryDeleteTaskId, resetResultWorkspace, result?.task_id, setError, unlockWorkspaceScroll]);
 
   const handleDeleteAllHistory = useCallback(() => {
     if (!authToken) {
       setError(copy.errors.authRequired);
       return;
     }
+    if (!pendingHistoryBulkDelete) {
+      clearMessages();
+      unlockWorkspaceScroll();
+      armHistoryDeleteAllConfirm();
+      return;
+    }
 
-    Alert.alert(
-      copy.historyDeleteAllConfirmTitle,
-      copy.historyDeleteAllConfirmMessage,
-      [
-        { text: language === "en" ? "Cancel" : "취소", style: "cancel" },
-        {
-          text: copy.deleteAll,
-          style: "destructive",
-          onPress: async () => {
-            clearMessages();
-            unlockWorkspaceScroll();
-            setHistoryBulkDeleting(true);
-            try {
-              const data = await requestApi("/api/history", {
-                method: "DELETE",
-                token: authToken,
-              });
+    clearMessages();
+    unlockWorkspaceScroll();
+    clearHistoryDeleteAllConfirmTimer();
+    setHistoryBulkDeleting(true);
+    (async () => {
+      try {
+        const data = await requestApi("/api/history", {
+          method: "DELETE",
+          token: authToken,
+        });
 
-              const deletedTaskIds = Array.isArray(data?.deleted_task_ids) ? data.deleted_task_ids : [];
-              const skippedActiveCount = Number(data?.skipped_active_count) || 0;
-              const deletedCount = Number(data?.deleted_count) || deletedTaskIds.length;
+        const deletedTaskIds = Array.isArray(data?.deleted_task_ids) ? data.deleted_task_ids : [];
+        const skippedActiveCount = Number(data?.skipped_active_count) || 0;
+        const deletedCount = Number(data?.deleted_count) || deletedTaskIds.length;
 
-              setHistory((prev) => prev.filter((item) => !deletedTaskIds.includes(item.task_id)));
-              setHistoryLoaded(true);
+        setHistory((prev) => prev.filter((item) => !deletedTaskIds.includes(item.task_id)));
+        setHistoryLoaded(true);
 
-              if (deletedTaskIds.includes(result?.task_id || "")) {
-                resetResultWorkspace(true);
-              }
+        if (deletedTaskIds.includes(result?.task_id || "")) {
+          resetResultWorkspace(true);
+        }
 
-              const successMessage = skippedActiveCount > 0
-                ? copy.notices.historyClearedPartial
-                    .replace("{deletedCount}", String(deletedCount))
-                    .replace("{skippedCount}", String(skippedActiveCount))
-                : copy.notices.historyCleared;
+        const successMessage = skippedActiveCount > 0
+          ? copy.notices.historyClearedPartial
+              .replace("{deletedCount}", String(deletedCount))
+              .replace("{skippedCount}", String(skippedActiveCount))
+          : copy.notices.historyCleared;
 
-              setNotice(successMessage);
-            } catch (e) {
-              setError(e.message || copy.errors.historyDeleteAllFailed);
-            } finally {
-              setHistoryBulkDeleting(false);
-              unlockWorkspaceScroll();
-            }
-          },
-        },
-      ]
-    );
-  }, [authToken, clearMessages, copy.deleteAll, copy.errors.authRequired, copy.errors.historyDeleteAllFailed, copy.historyDeleteAllConfirmMessage, copy.historyDeleteAllConfirmTitle, copy.notices.historyCleared, copy.notices.historyClearedPartial, language, resetResultWorkspace, result?.task_id, setError, unlockWorkspaceScroll]);
+        setNotice(successMessage);
+      } catch (e) {
+        setError(e.message || copy.errors.historyDeleteAllFailed);
+      } finally {
+        setHistoryBulkDeleting(false);
+        unlockWorkspaceScroll();
+      }
+    })();
+  }, [armHistoryDeleteAllConfirm, authToken, clearHistoryDeleteAllConfirmTimer, clearMessages, copy.errors.authRequired, copy.errors.historyDeleteAllFailed, copy.notices.historyCleared, copy.notices.historyClearedPartial, copy.notices.historyDeleteAllConfirmPrompt, pendingHistoryBulkDelete, resetResultWorkspace, result?.task_id, setError, unlockWorkspaceScroll]);
 
   const resolveContentStyleKey = (payload) => {
     const explicit = String(payload?.content_style || "").trim().toLowerCase();
@@ -739,6 +773,11 @@ function App() {
       styleKey
     );
   };
+
+  const resolveHistoryStatusLabel = useCallback((statusValue) => {
+    const normalizedStatus = String(statusValue || "").trim().toLowerCase();
+    return copy.historyStatusLabels?.[normalizedStatus] || normalizedStatus || "-";
+  }, [copy.historyStatusLabels]);
 
   const handleSummarize = async () => {
     clearMessages();
@@ -1631,21 +1670,39 @@ function App() {
             <ScrollView contentContainerStyle={styles.scrollContent} nestedScrollEnabled>
               <FadeInView key="history">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                  <View style={styles.inlineBetween}>
-                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.historyTitle}</Text>
+                  <View style={styles.historyHeader}>
+                    <View style={styles.historyHeaderText}>
+                      <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.historyTitle}</Text>
+                      <Text style={[styles.historyScopeText, { color: pendingHistoryBulkDelete ? "#dc2626" : activeTheme.textSecondary }]}>
+                        {pendingHistoryBulkDelete ? copy.historyDeleteAllConfirmHint : copy.historyScopeHint}
+                      </Text>
+                    </View>
                     <View style={styles.historyHeaderActions}>
                       <NmPressable style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={() => fetchHistory(authToken)}>
                         <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{historyLoading ? copy.loading : copy.refresh}</Text>
                       </NmPressable>
                       <NmPressable
-                        style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, historyBulkDeleting || history.length === 0 ? styles.buttonDisabled : null]}
+                        style={[
+                          styles.tinyButton,
+                          pendingHistoryBulkDelete ? styles.destructiveConfirmButton : null,
+                          { backgroundColor: pendingHistoryBulkDelete ? "#dc2626" : activeTheme.surface, borderColor: pendingHistoryBulkDelete ? "#dc2626" : activeTheme.inputBorder },
+                          historyBulkDeleting || history.length === 0 ? styles.buttonDisabled : null
+                        ]}
                         onPress={handleDeleteAllHistory}
                         disabled={historyBulkDeleting || history.length === 0}
                       >
-                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                          {historyBulkDeleting ? copy.deleting : copy.deleteAll}
+                        <Text style={[styles.tinyButtonText, { color: pendingHistoryBulkDelete ? "#ffffff" : activeTheme.textPrimary }]}>
+                          {historyBulkDeleting ? copy.deleting : pendingHistoryBulkDelete ? copy.deleteAllConfirm : copy.deleteAll}
                         </Text>
                       </NmPressable>
+                      {pendingHistoryBulkDelete && !historyBulkDeleting ? (
+                        <NmPressable
+                          style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                          onPress={clearHistoryDeleteAllConfirmTimer}
+                        >
+                          <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.cancelAction}</Text>
+                        </NmPressable>
+                      ) : null}
                     </View>
                   </View>
 
@@ -1654,8 +1711,18 @@ function App() {
                   ) : (
                     history.map((item) => (
                       <View key={item.task_id} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                        <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.transcription_type || "conversation"} · {item.status}</Text>
-                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
+                        <View style={styles.historyItemHeader}>
+                          <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{resolveTypeLabel(item)}</Text>
+                          <View style={[styles.historyStatusBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                            <Text style={[styles.historyStatusBadgeText, { color: activeTheme.textSecondary }]}>
+                              {resolveHistoryStatusLabel(item.status)}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
+                          {formatDate(item.created_at)}
+                          {item.characters ? ` · ${Number(item.characters).toLocaleString()}${language === "en" ? " chars" : "자"}` : ""}
+                        </Text>
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>
                           {item.summary_preview || (language === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}
                         </Text>
@@ -1670,21 +1737,35 @@ function App() {
                             style={[
                               styles.tinyButton,
                               styles.billingActionButton,
-                              { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                              pendingHistoryDeleteTaskId === item.task_id ? styles.destructiveConfirmButton : null,
+                              { backgroundColor: pendingHistoryDeleteTaskId === item.task_id ? "#dc2626" : activeTheme.surface, borderColor: pendingHistoryDeleteTaskId === item.task_id ? "#dc2626" : activeTheme.inputBorder },
                               historyDeletingTaskId === item.task_id || ["queued", "processing"].includes(String(item.status || "").toLowerCase()) ? styles.buttonDisabled : null,
                             ]}
                             onPress={() => handleDeleteHistoryItem(item.task_id)}
                             disabled={historyDeletingTaskId === item.task_id || ["queued", "processing"].includes(String(item.status || "").toLowerCase())}
                           >
-                            <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                            <Text style={[styles.tinyButtonText, { color: pendingHistoryDeleteTaskId === item.task_id ? "#ffffff" : activeTheme.textPrimary }]}>
                               {historyDeletingTaskId === item.task_id
                                 ? copy.deleting
                                 : ["queued", "processing"].includes(String(item.status || "").toLowerCase())
                                   ? copy.active
-                                  : copy.delete}
+                                  : pendingHistoryDeleteTaskId === item.task_id
+                                    ? copy.deleteConfirm
+                                    : copy.delete}
                             </Text>
                           </NmPressable>
+                          {pendingHistoryDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id ? (
+                            <NmPressable
+                              style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                              onPress={clearHistoryDeleteConfirmTimer}
+                            >
+                              <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.cancelAction}</Text>
+                            </NmPressable>
+                          ) : null}
                         </View>
+                        {pendingHistoryDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id ? (
+                          <Text style={[styles.historyDeleteHint, { color: "#dc2626" }]}>{copy.historyDeleteConfirmHint}</Text>
+                        ) : null}
                       </View>
                     ))
                   )}
@@ -2595,17 +2676,45 @@ const styles = StyleSheet.create({
   },
   historyHeaderActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
+    justifyContent: "flex-end",
   },
   historyActionRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
-    marginTop: 2,
+    marginTop: 4,
+  },
+  historyDeleteHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15,
+  },
+  historyHeader: {
+    gap: 10,
+  },
+  historyHeaderText: {
+    gap: 4,
+  },
+  historyScopeText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
   },
   billingActionButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 88,
     alignItems: "center",
     justifyContent: "center",
+  },
+  destructiveConfirmButton: {
+    shadowColor: "#dc2626",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 3,
   },
   userBar: {
     marginHorizontal: 16,
@@ -2798,6 +2907,23 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontSize: 13,
     fontWeight: "800",
+  },
+  historyItemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  historyStatusBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  historyStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
   previewText: {
     color: NM.textPrimary,
