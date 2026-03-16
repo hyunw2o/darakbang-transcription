@@ -1594,6 +1594,154 @@ Action Items
 Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
 
 
+def get_ja_sermon_correction_prompt(custom_terms: list[str] = None):
+    """Japanese sermon/lecture correction prompt"""
+    return """あなたは日本語の説教・講義文字起こしを整える専門エディターです。
+
+[元の文字起こし] は音声認識結果です。以下の規則に従って補正・整形してください。
+
+[最重要規則 - 内容保持]
+- 元の内容を削除しないでください。
+- 要約せず、できるだけ全文を保ってください。
+- 繰り返しは実際に繰り返されているなら残してください。
+
+[低音質・不明瞭発話の復元]
+- 崩れた語、途切れた語、聞き取りにくい音節は前後文脈から自然な語に復元してください。
+- 断定できない場合は過剰補正せず、元の語形を優先してください。
+- 聖書箇所は可能なら一般的な表記に整えてください。
+
+[本文補正]
+- 句読点、改行、語境界を整えて読みやすい日本語にしてください。
+- 固有名詞、聖書用語、教会名、薬剤名、検査名があれば文脈に合わせて正確に補正してください。
+- 以下の語が出たら正確に維持してください:
+  Blessing, Immanuel, Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal,
+  Acts 1:8, Psalm 23:1, Romans 8:28, CDE, Common Data Elements
+
+[フィラー除去]
+- 文頭の口癖だけを必要最小限で除去してください: 「えー」「えっと」「あの」「その」「まあ」
+- 内容語は削除しないでください。
+
+[構成整理]
+- 説教や講義の流れが明確なら、必要に応じて次の見出しを独立行で入れてください:
+  本論
+  結論
+  祈り
+- 見出しの前後は空行を入れてください。
+
+[出力形式]
+- プレーンテキストのみ
+- Markdown 記号は禁止
+- 話題が変わる箇所では空行で段落を分けてください。
+
+[元の文字起こし] を上記の形式で補正してください。""" + _build_name_correction_instruction(custom_terms, "ja")
+
+
+def get_ja_phonecall_correction_prompt(custom_terms: list[str] = None):
+    """Japanese phone call correction prompt"""
+    return """あなたは日本語の通話文字起こしを整える専門エディターです。
+
+[元の文字起こし] は通話録音の音声認識結果です。以下の規則に従って補正・整形してください。
+
+[最重要規則 - 内容保持]
+- 元の発話内容を削除しないでください。
+- 要約せず、可能な限り全文を保持してください。
+
+[低音質通話の復元]
+- こもり音、雑音、途切れた語は会話文脈から復元してください。
+- 日程調整、確認、依頼、折り返し、共有、受付などの実務表現を正確に復元してください。
+- 医療・業務・教会関連の専門語があれば文脈から自然に復元してください。
+
+[話者分離]
+- 発話は必ず次の形式でラベルを付けてください:
+  話者A:
+  話者B:
+- 話者が切り替わるたびに空行を入れてください。
+- 相槌だけの短い返答でも、できるだけ適切な話者に付けてください。
+
+[本文補正]
+- 語境界、句読点、日付、時間、数量、固有名詞を自然な日本語に整えてください。
+- 以下の語が出たら正確に維持してください:
+  Blessing, Immanuel, Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal,
+  CDE, Common Data Elements, CT, MRI, EEG
+
+[フィラー除去]
+- 文頭の不要なフィラーだけ除去してください: 「えー」「えっと」「あの」「その」「まあ」
+- 意味を持つ返答や確認表現は残してください。
+
+[出力形式]
+- プレーンテキストのみ
+- Markdown 記号は禁止
+
+[構成整理]
+本文のあとに空行を二つ入れて、次を追加してください:
+
+通話要約
+（通話目的と主要内容を2〜3文）
+
+主要ポイント
+1. ...
+2. ...
+3. ...
+
+[元の文字起こし] を上記の形式で補正してください。""" + _build_name_correction_instruction(custom_terms, "ja")
+
+
+def get_ja_conversation_correction_prompt(custom_terms: list[str] = None):
+    """Japanese conversation/meeting correction prompt"""
+    return """あなたは日本語の会議録文字起こしを整える専門エディターです。
+
+[元の文字起こし] は会議・対話録音の音声認識結果です。以下の規則に従って補正・整形してください。
+
+[最重要規則 - 内容保持]
+- 元の内容を削除しないでください。
+- 要約せず、全文に近い形で保持してください。
+
+[会議音声の復元]
+- 重なり、反響、遠い声があっても前後文脈から語を復元してください。
+- 進捗報告、課題、決定、担当、期限などの会議語彙を優先して復元してください。
+- フォーラムや討論に近い場合も、発言の切れ目を保って整形してください。
+
+[話者分離]
+- 発話は次の形式でラベルを付けてください:
+  参加者1:
+  参加者2:
+  参加者3:
+- 話者が切り替わるたびに空行を入れてください。
+- 話者の役割や流れから最も自然な参加者に割り当ててください。
+
+[本文補正]
+- 句読点、語境界、数値、固有名詞を自然な日本語に整えてください。
+- KPI, ROI, OKR, project, sprint, deadline, budget, revenue, CDE, Common Data Elements などの語が出たら正確に維持してください。
+
+[フィラー除去]
+- 文頭の不要なフィラーだけ除去してください: 「えー」「えっと」「あの」「その」「まあ」
+- 合意・承認・保留など意味のある短文は残してください。
+
+[出力形式]
+- プレーンテキストのみ
+- Markdown 記号は禁止
+
+[構成整理]
+本文のあとに空行を二つ入れて、次を追加してください:
+
+会議要約
+（会議の目的と背景を2〜3文）
+
+議題
+1. ...
+2. ...
+
+決定事項
+1. ...
+2. ...
+
+次の対応
+1. 担当: ... - 作業内容（期限）
+2. 担当: ... - 作業内容（期限）
+
+[元の文字起こし] を上記の形式で補正してください。""" + _build_name_correction_instruction(custom_terms, "ja")
+
+
 KO_BIBLE_BOOK_ABBREVIATIONS = {
     "창세기": "창",
     "출애굽기": "출",
@@ -2263,6 +2411,13 @@ def get_correction_prompt_by_type(transcription_type: str = "sermon", language: 
             return get_en_conversation_correction_prompt(custom_terms)
         else:
             return get_en_sermon_correction_prompt(custom_terms)
+    elif language == "ja":
+        if transcription_type == "phonecall":
+            return get_ja_phonecall_correction_prompt(custom_terms)
+        elif transcription_type == "conversation":
+            return get_ja_conversation_correction_prompt(custom_terms)
+        else:
+            return get_ja_sermon_correction_prompt(custom_terms)
     else:
         if transcription_type == "phonecall":
             return get_phonecall_correction_prompt(custom_terms)
@@ -2281,7 +2436,7 @@ def correct_text(
     """
     1차 텍스트 교정 (규칙 기반)
     transcription_type: "sermon" | "phonecall" | "conversation"
-    language: "ko" | "en"
+    language: "ko" | "en" | "ja"
     """
     corrected = text
     import re
@@ -2325,6 +2480,15 @@ def correct_text(
         )
         corrected = re.sub(r'\n{3,}', '\n\n', corrected)
 
+    elif language == "ja":
+        corrected = re.sub(r"(?m)^\s*(?:えー+|えっと+|あの+|その+|まあ+)\s*[,、。\-:;~?!？！]*\s*", "", corrected)
+        corrected = re.sub(
+            r"(?m)^((?:話者|参加者)\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?\s*[:：]\s*)(?:えー+|えっと+|あの+|その+|まあ+)\s*[,、。\-:;~?!？！]*\s*",
+            r"\1",
+            corrected,
+        )
+        corrected = re.sub(r"[ \t]+\n", "\n", corrected)
+        corrected = re.sub(r"\n{3,}", "\n\n", corrected)
     else:
         # ===== 한국어 교정 =====
         if transcription_type == "sermon":
@@ -2792,6 +2956,180 @@ Rules:
 2) Do not infer beyond source evidence."""
 
 
+def _ja_sermon_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次の説教記録を簡潔に要約してください。
+
+出力形式:
+説教要約
+1. 核心メッセージ（3〜5文）
+2. 聖書箇所（原文にある場合のみ）
+3. 適用ポイント（1〜2項目）
+
+規則:
+1) 原文にない事実や解釈を追加しないでください。
+2) 語彙の有無を評価するメタコメントを書かないでください。"""
+
+    return """次の説教記録を詳しく要約してください。
+
+出力形式:
+1. 説教要約
+2. 主要ポイント
+3. 聖書箇所
+4. 実践ポイント
+
+規則:
+1) 原文にない事実や推測を加えないでください。
+2) メタ評価文を書かないでください。"""
+
+
+def _ja_lecture_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次の講義記録を学習・教育の観点で要約してください。
+
+出力形式:
+講義要約
+1. 主題/目的
+2. 核心概念
+3. 主要な例示・根拠
+4. 実務/学習への適用
+
+規則:
+1) 原文にない内容を補わないでください。
+2) メタコメントを書かないでください。"""
+
+    return """次の講義記録を詳しく要約してください。
+
+出力形式:
+1. 背景/目的
+2. 概念別整理
+3. 例示/ケース
+4. 実務・学習への適用
+5. 後続課題（ある場合のみ）
+
+規則:
+1) 原文にない推測を加えないでください。
+2) メタコメントを書かないでください。"""
+
+
+def _ja_phonecall_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次の通話記録を業務向けに要約してください。
+
+出力形式:
+通話要約
+1. 通話目的
+2. 主要論点
+3. 決定/合意事項
+4. 後続対応（担当/期限があれば含む）
+
+規則:
+1) 原文にない判断や推測を追加しないでください。
+2) 特定語彙の有無を評価する文を書かないでください。"""
+
+    return """次の通話記録を詳しく要約してください。
+
+出力形式:
+1. 背景/目的
+2. 議論内容
+3. 決定/合意事項
+4. 未解決事項
+5. 後続対応
+
+規則:
+1) 原文にない推測を追加しないでください。
+2) メタコメントを書かないでください。"""
+
+
+def _ja_conversation_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次の会議/対話記録を会議録形式で要約してください。
+
+出力形式:
+会議要約
+1. 目的/背景
+2. 主要議題
+3. 決定事項
+4. 次の対応
+
+規則:
+1) 原文にない事実や推測を追加しないでください。
+2) 語彙不足などのメタ評価を書かないでください。"""
+
+    return """次の会議/対話記録を詳しく要約してください。
+
+出力形式:
+1. 目的/背景
+2. 議題別の議論内容
+3. 決定事項
+4. 未解決事項
+5. 次の対応
+
+規則:
+1) 原文にない判断を追加しないでください。
+2) メタコメントを書かないでください。"""
+
+
+def _ja_forum_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次のフォーラム記録を要約してください。
+
+出力形式:
+フォーラム要約
+1. 主題/背景
+2. 発表の核心
+3. パネル/参加者の主な意見
+4. 質疑応答の要点
+5. 後続課題（ある場合のみ）
+
+規則:
+1) 原文にない意見や事実を加えないでください。
+2) メタコメントを書かないでください。"""
+
+    return """次のフォーラム記録を詳しく要約してください。
+
+出力形式:
+1. フォーラムの目的/背景
+2. 発表内容の要点
+3. パネル別主要意見
+4. 質疑応答
+5. 合意事項/次の対応
+
+規則:
+1) 原文にない推測を加えないでください。
+2) メタコメントを書かないでください。"""
+
+
+def _ja_debate_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次の討論記録を論点中心で要約してください。
+
+出力形式:
+討論要約
+1. 主要論題
+2. 賛成側の主張
+3. 反対側の主張
+4. 共通認識/残課題
+5. 結論/次の対応（ある場合のみ）
+
+規則:
+1) 中立的に書いてください。
+2) 原文にない主張を加えないでください。"""
+
+    return """次の討論記録を詳しく要約してください。
+
+出力形式:
+1. 議題/背景
+2. 賛成側の主張と根拠
+3. 反対側の主張と根拠
+4. 反論の要点
+5. 合意点/未解決事項/次の対応
+
+規則:
+1) 中立的に書いてください。
+2) 原文にない推測を加えないでください。"""
+
+
 def _normalize_summary_content_style(
     transcription_type: str = "sermon",
     content_style: str = "",
@@ -2826,7 +3164,7 @@ def get_summary_prompt(
     content_style: str = "",
 ):
     """
-    유형별 + 세부 스타일별 + 언어별(ko/en) 요약 프롬프트
+    유형별 + 세부 스타일별 + 언어별(ko/en/ja) 요약 프롬프트
     """
     normalized_summary_type = (summary_type or "short").strip().lower()
     if normalized_summary_type not in {"short", "detailed"}:
@@ -2839,6 +3177,7 @@ def get_summary_prompt(
 
     normalized_lang = (language or "ko").strip().lower()
     is_en = normalized_lang.startswith("en")
+    is_ja = normalized_lang.startswith("ja")
 
     if is_en:
         prompt_map = {
@@ -2848,6 +3187,15 @@ def get_summary_prompt(
             "meeting": _en_conversation_summary_prompt,
             "forum": _en_forum_summary_prompt,
             "debate": _en_debate_summary_prompt,
+        }
+    elif is_ja:
+        prompt_map = {
+            "sermon": _ja_sermon_summary_prompt,
+            "lecture": _ja_lecture_summary_prompt,
+            "phonecall": _ja_phonecall_summary_prompt,
+            "meeting": _ja_conversation_summary_prompt,
+            "forum": _ja_forum_summary_prompt,
+            "debate": _ja_debate_summary_prompt,
         }
     else:
         prompt_map = {

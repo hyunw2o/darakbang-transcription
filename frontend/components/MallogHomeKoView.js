@@ -422,6 +422,7 @@ export default function MallogHomeKoView(props) {
                     >
                       <option value="ko">한국어</option>
                       <option value="en">English</option>
+                      <option value="ja">日本語</option>
                     </select>
                   </div>
                   <div className="flex-1 relative">
@@ -925,7 +926,7 @@ export default function MallogHomeKoView(props) {
           <div className="space-y-1 text-[11px] text-nm-text-secondary mb-2">
             <p>상호: {BUSINESS_NAME}</p>
             <p>사업자등록번호: {BUSINESS_REG_NUMBER}</p>
-            {LANDLINE_PHONE && <p>유선전화번호: {LANDLINE_PHONE}</p>}
+            {LANDLINE_PHONE && <p>대표자 전화번호: {LANDLINE_PHONE}</p>}
             <p>사업장주소: {BUSINESS_ADDRESS}</p>
             <p>대표: {REPRESENTATIVE_NAME}</p>
             <p>통신판매신고번호: {ECOMMERCE_REG_NUMBER}</p>

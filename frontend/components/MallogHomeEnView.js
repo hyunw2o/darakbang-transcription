@@ -423,6 +423,7 @@ export default function MallogHomeEnView(props) {
                     >
                       <option value="ko">Korean</option>
                       <option value="en">English</option>
+                      <option value="ja">Japanese</option>
                     </select>
                   </div>
                   <div className="flex-1 relative">
@@ -929,7 +930,7 @@ export default function MallogHomeEnView(props) {
           <div className="space-y-1 text-[11px] text-nm-text-secondary mb-2">
             <p>Company Name: {BUSINESS_NAME}</p>
             <p>Business Registration No.: {BUSINESS_REG_NUMBER}</p>
-            {LANDLINE_PHONE && <p>Landline: {LANDLINE_PHONE}</p>}
+            {LANDLINE_PHONE && <p>Representative Phone: {LANDLINE_PHONE}</p>}
             <p>Business Address: {BUSINESS_ADDRESS}</p>
             <p>Representative (CEO): {REPRESENTATIVE_NAME}</p>
             <p>E-commerce Registration No.: {ECOMMERCE_REG_NUMBER}</p>

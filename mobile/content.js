@@ -14,6 +14,11 @@ const I18N = {
   ko: {
     languageOptionKo: "한국어",
     languageOptionEn: "English",
+    transcriptionLanguageLabel: "전사 언어",
+    transcriptionLanguageHint: "인식 언어는 앱 표시 언어와 별개로 적용됩니다.",
+    transcriptionLanguageOptionKo: "한국어",
+    transcriptionLanguageOptionEn: "English",
+    transcriptionLanguageOptionJa: "日本語",
     legalMenu: "정책 메뉴",
     loadingApp: "앱 초기화 중...",
     authIntro: "AI 음성 기록, 지금 시작하세요.",
@@ -332,6 +337,11 @@ const I18N = {
   en: {
     languageOptionKo: "Korean",
     languageOptionEn: "English",
+    transcriptionLanguageLabel: "Transcription language",
+    transcriptionLanguageHint: "Recognition language is applied separately from the app display language.",
+    transcriptionLanguageOptionKo: "Korean",
+    transcriptionLanguageOptionEn: "English",
+    transcriptionLanguageOptionJa: "Japanese",
     legalMenu: "Legal menu",
     loadingApp: "Initializing app...",
     authIntro: "Start AI speech records now.",

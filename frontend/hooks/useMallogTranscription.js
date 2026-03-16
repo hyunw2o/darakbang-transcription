@@ -719,7 +719,7 @@ export default function useMallogTranscription({
       formData.append('summary_type', 'short')
       formData.append('transcription_type', normalizedType)
       formData.append('content_style', normalizedStyle)
-      formData.append('language', language || messages.defaultLanguage)
+      formData.append('language', result?.language || language || messages.defaultLanguage)
 
       const response = await apiFetch(`${apiUrl}/api/summarize`, {
         method: 'POST',
@@ -760,7 +760,7 @@ export default function useMallogTranscription({
       const formData = new FormData()
       formData.append('text', result.corrected_text || result.raw_text)
       formData.append('category', category)
-      formData.append('language', language)
+      formData.append('language', result?.language || language || messages.defaultLanguage)
 
       const response = await apiFetch(`${apiUrl}/api/records/draft`, {
         method: 'POST',
@@ -776,7 +776,7 @@ export default function useMallogTranscription({
     } finally {
       setDraftLoadingCategory('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, language, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice])
+  }, [apiUrl, authToken, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice])
 
   const handleRecordDraftChange = useCallback((category, value) => {
     setRecordDrafts((prev) => ({ ...prev, [category]: value }))

@@ -62,7 +62,8 @@ function App() {
   const [openSettingsMenu, setOpenSettingsMenu] = useState("");
 
   const [activeTab, setActiveTab] = useState("transcribe");
-  const [language, setLanguage] = useState("ko");
+  const [uiLanguage, setUiLanguage] = useState("ko");
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState("ko");
   const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
 
@@ -95,8 +96,8 @@ function App() {
   const [privacyConsentSaving, setPrivacyConsentSaving] = useState(false);
   const [legalModalDocType, setLegalModalDocType] = useState("");
 
-  const copy = I18N[language] || I18N.ko;
-  const legalDocs = LEGAL_DOCUMENTS[language] || LEGAL_DOCUMENTS.ko;
+  const copy = I18N[uiLanguage] || I18N.ko;
+  const legalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
   const clearMessages = useCallback(() => {
     setNotice("");
@@ -346,7 +347,7 @@ function App() {
     handleBillingRefund,
   } = useMobileAuth({
     copy,
-    language,
+    language: uiLanguage,
     clearMessages,
     setNotice,
     setError,
@@ -609,7 +610,7 @@ function App() {
         name: pickedFile.name,
         type: pickedFile.mimeType,
       });
-      body.append("language", language);
+      body.append("language", transcriptionLanguage);
       body.append("correct", "true");
       body.append("transcription_type", transcriptionType);
       body.append("correction_mode", "normal");
@@ -626,6 +627,9 @@ function App() {
         if (submitEpoch !== resultEpochRef.current) return;
         setSubmitting(false);
         setTaskStateText(copy.taskState.done);
+        if (data.language) {
+          setTranscriptionLanguage(String(data.language).toLowerCase());
+        }
         setResult(data);
         fetchHistory(authToken);
         refreshUsageAndBilling(authToken).catch(() => {});
@@ -655,6 +659,9 @@ function App() {
         throw new Error(copy.errors.historyLoadOnlyCompleted);
       }
       if (loadEpoch !== resultEpochRef.current) return;
+      if (data.language) {
+        setTranscriptionLanguage(String(data.language).toLowerCase());
+      }
       setResult(data);
       setActiveTab("transcribe");
       setNotice(copy.notices.historyLoaded);
@@ -806,7 +813,7 @@ function App() {
       body.append("summary_type", "short");
       body.append("transcription_type", normalizedType);
       body.append("content_style", normalizedStyle);
-      body.append("language", language || "ko");
+      body.append("language", result?.language || transcriptionLanguage || "ko");
 
       const data = await requestApi("/api/summarize", {
         method: "POST",
@@ -854,7 +861,7 @@ function App() {
       const body = new FormData();
       body.append("text", sourceText);
       body.append("category", category);
-      body.append("language", language);
+      body.append("language", result?.language || transcriptionLanguage || "ko");
 
       const data = await requestApi("/api/records/draft", {
         method: "POST",
@@ -1051,24 +1058,24 @@ function App() {
       {openSettingsMenu === "language" ? (
         <View style={[styles.quickMenu, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
           <NmPressable
-            style={[styles.quickMenuItem, language === "ko" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
+            style={[styles.quickMenuItem, uiLanguage === "ko" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
             onPress={() => {
-              setLanguage("ko");
+              setUiLanguage("ko");
               setOpenSettingsMenu("");
             }}
           >
-            <Text style={[styles.quickMenuText, { color: language === "ko" ? activeTheme.accent : activeTheme.textPrimary }]}>
+            <Text style={[styles.quickMenuText, { color: uiLanguage === "ko" ? activeTheme.accent : activeTheme.textPrimary }]}>
               {copy.languageOptionKo}
             </Text>
           </NmPressable>
           <NmPressable
-            style={[styles.quickMenuItem, language === "en" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
+            style={[styles.quickMenuItem, uiLanguage === "en" ? styles.quickMenuItemActive : null, { borderColor: activeTheme.inputBorder }]}
             onPress={() => {
-              setLanguage("en");
+              setUiLanguage("en");
               setOpenSettingsMenu("");
             }}
           >
-            <Text style={[styles.quickMenuText, { color: language === "en" ? activeTheme.accent : activeTheme.textPrimary }]}>
+            <Text style={[styles.quickMenuText, { color: uiLanguage === "en" ? activeTheme.accent : activeTheme.textPrimary }]}>
               {copy.languageOptionEn}
             </Text>
           </NmPressable>
@@ -1467,6 +1474,34 @@ function App() {
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
 
+                  <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.transcriptionLanguageLabel}</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.segmentScroll}
+                    contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
+                  >
+                    <SegmentButton
+                      label={copy.transcriptionLanguageOptionKo}
+                      active={transcriptionLanguage === "ko"}
+                      onPress={() => setTranscriptionLanguage("ko")}
+                      theme={activeTheme}
+                    />
+                    <SegmentButton
+                      label={copy.transcriptionLanguageOptionEn}
+                      active={transcriptionLanguage === "en"}
+                      onPress={() => setTranscriptionLanguage("en")}
+                      theme={activeTheme}
+                    />
+                    <SegmentButton
+                      label={copy.transcriptionLanguageOptionJa}
+                      active={transcriptionLanguage === "ja"}
+                      onPress={() => setTranscriptionLanguage("ja")}
+                      theme={activeTheme}
+                    />
+                  </ScrollView>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.transcriptionLanguageHint}</Text>
+
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -1721,10 +1756,10 @@ function App() {
                         </View>
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
                           {formatDate(item.created_at)}
-                          {item.characters ? ` · ${Number(item.characters).toLocaleString()}${language === "en" ? " chars" : "자"}` : ""}
+                          {item.characters ? ` · ${Number(item.characters).toLocaleString()}${uiLanguage === "en" ? " chars" : "자"}` : ""}
                         </Text>
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>
-                          {item.summary_preview || (language === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}
+                          {item.summary_preview || (uiLanguage === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}
                         </Text>
                         <View style={styles.historyActionRow}>
                           <NmPressable
@@ -2039,8 +2074,8 @@ function App() {
                     style={styles.segmentScroll}
                     contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
                   >
-                    <SegmentButton label={copy.languageOptionKo} active={language === "ko"} onPress={() => setLanguage("ko")} theme={activeTheme} />
-                    <SegmentButton label={copy.languageOptionEn} active={language === "en"} onPress={() => setLanguage("en")} theme={activeTheme} />
+                    <SegmentButton label={copy.languageOptionKo} active={uiLanguage === "ko"} onPress={() => setUiLanguage("ko")} theme={activeTheme} />
+                    <SegmentButton label={copy.languageOptionEn} active={uiLanguage === "en"} onPress={() => setUiLanguage("en")} theme={activeTheme} />
                   </ScrollView>
 
                   <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.settingsThemeLabel}</Text>

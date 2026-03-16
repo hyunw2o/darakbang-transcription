@@ -143,7 +143,7 @@ LANDING_STATS_TIME_SAVING_KO = (os.getenv("LANDING_STATS_TIME_SAVING_KO") or "")
 LANDING_STATS_TIME_SAVING_EN = (os.getenv("LANDING_STATS_TIME_SAVING_EN") or "").strip()
 LANDING_STATS_UPDATED_AT = (os.getenv("LANDING_STATS_UPDATED_AT") or "").strip()
 
-ALLOWED_LANGUAGES = {"ko", "en"}
+ALLOWED_LANGUAGES = {"ko", "en", "ja"}
 ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
 ALLOWED_CORRECTION_MODES = {"strict", "normal", "raw"}
 ALLOWED_CONTENT_STYLES = {"sermon", "lecture", "phonecall", "meeting", "forum", "debate"}
@@ -463,6 +463,11 @@ STRUCTURED_SUMMARY_HEADERS = {
     "Agenda Items",
     "Decisions",
     "Action Items",
+    "要約",
+    "主要ポイント",
+    "議題",
+    "決定事項",
+    "次の対応",
 }
 KO_RESPONSE_PREFIXES = (
     "네",
@@ -488,6 +493,15 @@ EN_RESPONSE_PREFIXES = (
     "got it",
     "understood",
     "sounds good",
+)
+JA_RESPONSE_PREFIXES = (
+    "はい",
+    "ええ",
+    "わかりました",
+    "承知しました",
+    "了解です",
+    "そうですね",
+    "なるほど",
 )
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -2256,9 +2270,9 @@ def _resolve_audio_mime_type(file_path: str) -> str:
 
 def _get_record_category_label(category: str, language: str = "ko") -> str:
     labels = {
-        "meeting_keywords": {"ko": "회의 중요 키워드", "en": "Meeting Keywords"},
-        "clinical_notes": {"ko": "진료 도움 기록", "en": "Clinical Notes"},
-        "sermon_core_summary": {"ko": "설교 핵심 요약", "en": "Sermon Core Summary"},
+        "meeting_keywords": {"ko": "회의 중요 키워드", "en": "Meeting Keywords", "ja": "会議重要キーワード"},
+        "clinical_notes": {"ko": "진료 도움 기록", "en": "Clinical Notes", "ja": "診療支援メモ"},
+        "sermon_core_summary": {"ko": "설교 핵심 요약", "en": "Sermon Core Summary", "ja": "説教核心要約"},
     }
     return labels.get(category, {}).get(language, category)
 
@@ -2291,6 +2305,33 @@ def _build_record_draft_prompt(category: str, language: str = "ko") -> str:
                 "4) Prayer Focus"
             ),
         }
+    elif language == "ja":
+        prompt_map = {
+            "meeting_keywords": (
+                "会議内容から実務上重要なキーワードとアクション項目を抽出してください。\n"
+                "形式:\n"
+                "1) 核心キーワード（5〜10個）\n"
+                "2) 主な決定事項\n"
+                "3) 次の対応（担当者/期限があれば含む)\n"
+                "簡潔かつ実行しやすい形で整理してください。"
+            ),
+            "clinical_notes": (
+                "会話内容から診療に役立つ核心記録を整理してください。\n"
+                "形式:\n"
+                "1) 主な症状・訴え\n"
+                "2) 薬剤・検査・経過観察に関する言及\n"
+                "3) 追加確認が必要なリスク信号・質問事項\n"
+                "診断を断定せず、事実中心で整理してください。"
+            ),
+            "sermon_core_summary": (
+                "説教の核心要約を牧会記録用に整理してください。\n"
+                "形式:\n"
+                "1) 核心メッセージ（1〜2文）\n"
+                "2) 主な聖書箇所/主題\n"
+                "3) 生活への適用\n"
+                "4) 祈りの課題"
+            ),
+        }
     else:
         prompt_map = {
             "meeting_keywords": (
@@ -2320,6 +2361,80 @@ def _build_record_draft_prompt(category: str, language: str = "ko") -> str:
         }
 
     return prompt_map.get(category, prompt_map["meeting_keywords"])
+
+
+def _build_gemini_only_system_instruction(
+    language: str,
+    transcription_type: str,
+    custom_terms: list[str] | None = None,
+) -> str:
+    if language == "ko":
+        return get_gemini_prompt(custom_terms)
+    if language == "ja":
+        if transcription_type == "phonecall":
+            return (
+                "あなたは日本語通話録音の高精度文字起こしエンジンです。"
+                "音声に含まれる内容を省略せず、話者の切り替わりを維持しながら全文を書き起こしてください。"
+                "聞き取りにくい単語は文脈から補正し、不要な要約や説明は加えないでください。"
+            )
+        if transcription_type == "conversation":
+            return (
+                "あなたは日本語会議録音の高精度文字起こしエンジンです。"
+                "複数話者の発言順を保ち、内容を省略せず全文を書き起こしてください。"
+                "不明瞭な語は前後文脈から自然に復元し、要約や説明を加えないでください。"
+            )
+        return (
+            "あなたは日本語説教・講義録音の高精度文字起こしエンジンです。"
+            "一人の話者の長い発話も途切れさせず、内容を省略せず全文を書き起こしてください。"
+            "不明瞭な語は文脈から復元し、不要な説明や要約は加えないでください。"
+        )
+    if transcription_type == "phonecall":
+        return (
+            "You are a high-accuracy English phone-call transcription engine. "
+            "Transcribe the full conversation without summarizing, preserve speaker turns, "
+            "and restore unclear words from context when confidence is reasonable."
+        )
+    if transcription_type == "conversation":
+        return (
+            "You are a high-accuracy English meeting transcription engine. "
+            "Transcribe all audible content without summarizing, preserve turn changes, "
+            "and recover unclear specialized terms from context when possible."
+        )
+    return (
+        "You are a high-accuracy English sermon and lecture transcription engine. "
+        "Transcribe all audible content without summarizing, preserving long monologues and "
+        "restoring unclear words from context when possible."
+    )
+
+
+def _build_gemini_only_content_prompt(
+    language: str,
+    transcription_type: str,
+    custom_terms: list[str] | None = None,
+) -> str:
+    if language == "ko":
+        return get_gemini_content_prompt(custom_terms)
+    custom_term_hint = ""
+    if custom_terms:
+        joined = ", ".join(term.strip() for term in custom_terms if term.strip())
+        if joined:
+            if language == "ja":
+                custom_term_hint = f"\n優先用語: {joined}"
+            else:
+                custom_term_hint = f"\nPriority terms: {joined}"
+    if language == "ja":
+        base_prompt = {
+            "sermon": "この音声を日本語で全文文字起こししてください。説教または講義として自然な段落で整理し、内容を省略しないでください。",
+            "phonecall": "この音声を日本語の通話記録として全文文字起こししてください。話者交代を保ち、日程・数量・固有名詞を正確に書いてください。",
+            "conversation": "この音声を日本語の会議記録として全文文字起こししてください。話者交代を保ち、決定・担当・期限に関わる情報を落とさないでください。",
+        }.get(transcription_type, "この音声を日本語で全文文字起こししてください。内容を省略しないでください。")
+        return f"{base_prompt}{custom_term_hint}"
+    base_prompt = {
+        "sermon": "Transcribe this audio fully in English. Treat it as a sermon or lecture, keep natural paragraph breaks, and do not summarize.",
+        "phonecall": "Transcribe this audio fully in English as a phone call. Preserve speaker turns and keep names, times, numbers, and commitments accurate.",
+        "conversation": "Transcribe this audio fully in English as a meeting or discussion. Preserve speaker turns and keep decisions, owners, and deadlines intact.",
+    }.get(transcription_type, "Transcribe this audio fully in English without summarizing.")
+    return f"{base_prompt}{custom_term_hint}"
 
 
 def _split_transcript_body_and_tail(text: str) -> tuple[list[str], list[str]]:
@@ -2408,16 +2523,30 @@ def _infer_content_style(
 
 
 def _default_speaker_label(transcription_type: str, language: str, turn_index: int) -> str:
+    def _phonecall_token(lang: str) -> str:
+        if lang == "en":
+            return "Speaker"
+        if lang == "ja":
+            return "話者"
+        return "화자"
+
+    def _conversation_token(lang: str) -> str:
+        if lang == "en":
+            return "Participant"
+        if lang == "ja":
+            return "参加者"
+        return "참석자"
+
     if transcription_type == "phonecall":
-        token = "Speaker" if language == "en" else "화자"
+        token = _phonecall_token(language)
         return f"{token} {'A' if turn_index % 2 == 0 else 'B'}"
 
-    token = "Participant" if language == "en" else "참석자"
+    token = _conversation_token(language)
     return f"{token} {1 if turn_index % 2 == 0 else 2}"
 
 
 def _flip_phonecall_label(label: str, language: str) -> str:
-    token = "Speaker" if language == "en" else "화자"
+    token = "Speaker" if language == "en" else "話者" if language == "ja" else "화자"
     current = "A"
     if re.search(r"\bB\b", label, flags=re.IGNORECASE):
         current = "B"
@@ -2434,6 +2563,8 @@ def _looks_like_short_response(content: str, language: str) -> bool:
     if language == "en":
         lowered = stripped.lower()
         return any(lowered.startswith(prefix) for prefix in EN_RESPONSE_PREFIXES)
+    if language == "ja":
+        return any(stripped.startswith(prefix) for prefix in JA_RESPONSE_PREFIXES)
 
     return any(stripped.startswith(prefix) for prefix in KO_RESPONSE_PREFIXES)
 
@@ -2448,7 +2579,7 @@ def _normalize_speaker_label(
     alias = parsed.get("speaker_alias") or ""
 
     if transcription_type == "phonecall":
-        token = "Speaker" if language == "en" else "화자"
+        token = "Speaker" if language == "en" else "話者" if language == "ja" else "화자"
         canonical = "A"
         if speaker_id.isdigit():
             canonical = "A" if int(speaker_id) <= 1 else "B"
@@ -2463,10 +2594,10 @@ def _normalize_speaker_label(
 
         base = f"{token} {canonical}"
         if alias:
-            return f"{base} ({alias})" if language == "en" else f"{base}({alias})"
+            return f"{base} ({alias})" if language in {"en", "ja"} else f"{base}({alias})"
         return base
 
-    token = "Participant" if language == "en" else "참석자"
+    token = "Participant" if language == "en" else "参加者" if language == "ja" else "참석자"
     if speaker_id.isdigit():
         number = max(1, int(speaker_id))
     else:
@@ -2480,7 +2611,7 @@ def _normalize_speaker_label(
 
     base = f"{token} {number}"
     if alias:
-        return f"{base} ({alias})" if language == "en" else f"{base}({alias})"
+        return f"{base} ({alias})" if language in {"en", "ja"} else f"{base}({alias})"
     return base
 
 
@@ -2774,7 +2905,7 @@ def whisper_transcribe(
         seen = set()
         unique_names = [n for n in names if not (n in seen or seen.add(n))]
         custom_names_str = ", ".join(unique_names) + ", "
-    elif language == "en":
+    elif language in {"en", "ja"}:
         if custom_terms:
             seen = set()
             unique_names = [n for n in custom_terms if not (n in seen or seen.add(n))]
@@ -2821,6 +2952,27 @@ def whisper_transcribe(
                 "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, profit margin, "
                 f"{EN_DAILY_CONTEXT_TERMS}, {EN_DOMAIN_CONTEXT_TERMS}"
             )
+    elif language == "ja":
+        if transcription_type == "sermon":
+            whisper_prompt = (
+                "これは日本語の説教または講義音声です。"
+                "不明瞭な語は文脈から復元し、内容を省略せずに全文を書き起こしてください。"
+                "一人の話者が長く速く話しても語境界を復元してください。"
+                "聖書, 福音, 救い, 恵み, 信仰, 祈り, 祝福, 説教, 礼拝, 宣教, "
+                "Acts 1:8, Psalm 23:1, Romans 8:28"
+            )
+        elif transcription_type == "phonecall":
+            whisper_prompt = (
+                "これは日本語の通話録音です。二人の話者が会話します。"
+                "音質が低くても文脈から単語を復元し、日常表現や予定調整、確認表現を正確に書き起こしてください。"
+                "hypertension, diabetes, epilepsy, seizure, stroke, CT, MRI, EEG, prescription, dosage, side effects"
+            )
+        else:
+            whisper_prompt = (
+                "これは日本語の会議または会話録音です。複数の話者が交互に発言します。"
+                "重なりや反響があっても文脈から用語を復元し、発言の切れ目を保って書き起こしてください。"
+                "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, operating profit"
+            )
     else:
         # ===== 한국어 프롬프트 =====
         if transcription_type == "sermon":
@@ -2861,6 +3013,10 @@ def whisper_transcribe(
         "초고속 발화 또는 랩처럼 빠른 한국어 발화가 포함될 수 있습니다. "
         "붙어 들리는 음절도 단어 경계를 복원하여 누락 없이 전부 기록하세요."
         if language == "ko"
+        else
+        "この音声には非常に速い日本語発話が含まれる可能性があります。"
+        "つながって聞こえる音節も文脈で区切り直し、聞こえる内容を省略せず書き起こしてください。"
+        if language == "ja"
         else
         "This audio may include very fast rap-like delivery. "
         "Recover word boundaries from merged syllables and transcribe every audible word."
@@ -2957,6 +3113,13 @@ async def gemini_correct_and_structure(
                 "- Do not replace terms unless confidence is high from context.\n"
                 "- If uncertain, keep the original token as-is."
             )
+        elif language == "ja":
+            correction_prompt += (
+                "\n\n[過剰補正防止]\n"
+                "- 元の語彙と口調をできるだけ維持してください。\n"
+                "- 文脈の確信が低い語を無理に別の固有名詞や専門用語へ置き換えないでください。\n"
+                "- 確信が低い場合は元の表記を優先してください。"
+            )
         else:
             correction_prompt += (
                 "\n\n[과교정 방지 규칙]\n"
@@ -2972,7 +3135,7 @@ async def gemini_correct_and_structure(
         )
     )
 
-    label = "Original Text" if language == "en" else "원본 텍스트"
+    label = "Original Text" if language == "en" else "元の文字起こし" if language == "ja" else "원본 텍스트"
     prompt_parts = [correction_prompt, f"[{label}]", raw_text]
 
     response = None
@@ -3027,12 +3190,20 @@ def _transcribe_with_gemini_only(
         target_model = get_optimal_model()
         model = genai.GenerativeModel(
             target_model,
-            system_instruction=get_gemini_prompt(custom_terms),
+            system_instruction=_build_gemini_only_system_instruction(
+                language,
+                transcription_type,
+                custom_terms,
+            ),
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             ),
         )
-        content_prompt = get_gemini_content_prompt(custom_terms)
+        content_prompt = _build_gemini_only_content_prompt(
+            language,
+            transcription_type,
+            custom_terms,
+        )
 
         response = None
         max_retries = 5
@@ -3322,7 +3493,7 @@ async def transcribe_audio(
 
         normalized_language = (language or "ko").strip().lower()
         if normalized_language not in ALLOWED_LANGUAGES:
-            raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko 또는 en만 가능합니다.")
+            raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko, en, ja만 가능합니다.")
 
         normalized_transcription_type = (transcription_type or "conversation").strip().lower()
         if normalized_transcription_type not in ALLOWED_TRANSCRIPTION_TYPES:
@@ -5290,7 +5461,7 @@ async def generate_record_draft(
     if normalized_category not in ALLOWED_RECORD_CATEGORIES:
         raise HTTPException(status_code=400, detail="지원하지 않는 기록 카테고리입니다.")
     if normalized_language not in ALLOWED_LANGUAGES:
-        raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko 또는 en만 가능합니다.")
+        raise HTTPException(status_code=400, detail="지원하지 않는 언어입니다. ko, en, ja만 가능합니다.")
     if not normalized_text:
         raise HTTPException(status_code=400, detail="원문 텍스트가 비어 있습니다.")
     if len(normalized_text) > MAX_TEXT_INPUT_CHARS:
@@ -5300,9 +5471,10 @@ async def generate_record_draft(
     target_model = get_optimal_model()
     model = genai.GenerativeModel(model_name=target_model)
 
+    source_label = "Original Text" if normalized_language == "en" else "元の文字起こし" if normalized_language == "ja" else "원문"
     full_prompt = f"""{prompt}
 
-[원문]
+[{source_label}]
 {normalized_text}
 """
 
@@ -5426,7 +5598,7 @@ async def summarize_text(
                 detail=f"지원하지 않는 transcription_type: {transcription_type}",
             )
         normalized_language = (language or "ko").strip().lower()
-        if normalized_language not in {"ko", "en"}:
+        if normalized_language not in ALLOWED_LANGUAGES:
             normalized_language = "ko"
         normalized_content_style = (content_style or "").strip().lower()
         if normalized_content_style not in ALLOWED_CONTENT_STYLES:
@@ -5445,7 +5617,7 @@ async def summarize_text(
             language=normalized_language,
             content_style=normalized_content_style,
         )
-        source_label = "원문" if normalized_language == "ko" else "Source Transcript"
+        source_label = "원문" if normalized_language == "ko" else "元の文字起こし" if normalized_language == "ja" else "Source Transcript"
         full_prompt = f"""{prompt}
 
 [{source_label}]
