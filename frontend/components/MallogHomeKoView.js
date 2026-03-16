@@ -32,6 +32,8 @@ export default function MallogHomeKoView(props) {
     BUSINESS_ADDRESS,
     REPRESENTATIVE_NAME,
     ECOMMERCE_REG_NUMBER,
+    TRADEMARK_APPLICATION_NO,
+    COPYRIGHT_REGISTRATION_NO,
     SUPPORT_EMAIL,
     CANONICAL_URL,
     ALTERNATE_URL,
@@ -930,6 +932,8 @@ export default function MallogHomeKoView(props) {
             <p>사업장주소: {BUSINESS_ADDRESS}</p>
             <p>대표: {REPRESENTATIVE_NAME}</p>
             <p>통신판매신고번호: {ECOMMERCE_REG_NUMBER}</p>
+            <p>상표 출원번호: {TRADEMARK_APPLICATION_NO}</p>
+            <p>저작권 등록번호: {COPYRIGHT_REGISTRATION_NO}</p>
             <p>비즈니스 문의 이메일: {SUPPORT_EMAIL}</p>
             <p>1:1 문의 이메일: {SUPPORT_EMAIL}</p>
           </div>

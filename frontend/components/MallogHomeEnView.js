@@ -32,6 +32,8 @@ export default function MallogHomeEnView(props) {
     BUSINESS_ADDRESS,
     REPRESENTATIVE_NAME,
     ECOMMERCE_REG_NUMBER,
+    TRADEMARK_APPLICATION_NO,
+    COPYRIGHT_REGISTRATION_NO,
     SUPPORT_EMAIL,
     CANONICAL_URL,
     ALTERNATE_URL,
@@ -934,6 +936,8 @@ export default function MallogHomeEnView(props) {
             <p>Business Address: {BUSINESS_ADDRESS}</p>
             <p>Representative (CEO): {REPRESENTATIVE_NAME}</p>
             <p>E-commerce Registration No.: {ECOMMERCE_REG_NUMBER}</p>
+            <p>Trademark Application No.: {TRADEMARK_APPLICATION_NO}</p>
+            <p>Copyright Registration No.: {COPYRIGHT_REGISTRATION_NO}</p>
             <p>Business Inquiry Email: {SUPPORT_EMAIL}</p>
             <p>1:1 Inquiry Email: {SUPPORT_EMAIL}</p>
           </div>
