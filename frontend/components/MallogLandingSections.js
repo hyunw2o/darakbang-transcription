@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import StepIndicator from './StepIndicator'
 
-export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats }) {
+export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats, appDownloadUrl = '' }) {
   const [openFaqIndex, setOpenFaqIndex] = useState(0)
   const [activePreviewIndex, setActivePreviewIndex] = useState(0)
   const localeTextClass = locale === 'kr' ? 'break-keep' : ''
@@ -77,6 +77,16 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
           >
             {content.secondaryCtaLabel}
           </Link>
+          {appDownloadUrl ? (
+            <a
+              href={appDownloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
+            >
+              {locale === 'kr' ? '앱 다운로드' : 'Download App'}
+            </a>
+          ) : null}
         </div>
         <a
           href={oursUrl}
@@ -296,6 +306,16 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
             >
               {content.ctaBannerSecondaryLabel}
             </Link>
+            {appDownloadUrl ? (
+              <a
+                href={appDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
+              >
+                {locale === 'kr' ? 'Google Play 다운로드' : 'Download on Google Play'}
+              </a>
+            ) : null}
           </div>
         </div>
       </div>

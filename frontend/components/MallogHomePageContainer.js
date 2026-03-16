@@ -23,6 +23,7 @@ export default function MallogHomePageContainer({
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
+  const APP_DOWNLOAD_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.mallog24.app&pcampaignid=web_share'
   const OURS_PRIVACY_URL = `${OURS_URL}/${isEnglish ? 'privacy-en' : 'privacy'}`
   const OURS_TERMS_URL = `${OURS_URL}/${isEnglish ? 'terms-en' : 'terms'}`
   const OURS_COMPANY_POLICY_URL = `${OURS_URL}/${isEnglish ? 'company-policy-en' : 'company-policy'}`
@@ -317,6 +318,7 @@ export default function MallogHomePageContainer({
       CANONICAL_URL={CANONICAL_URL}
       ALTERNATE_URL={ALTERNATE_URL}
       UPGRADE_CONTACT_URL={UPGRADE_CONTACT_URL}
+      APP_DOWNLOAD_URL={APP_DOWNLOAD_URL}
       LANGUAGE_SELECT_ID={LANGUAGE_SELECT_ID}
       TYPE_SELECT_ID={TYPE_SELECT_ID}
       authMode={authMode}

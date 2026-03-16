@@ -38,6 +38,7 @@ export default function MallogHomeKoView(props) {
     CANONICAL_URL,
     ALTERNATE_URL,
     UPGRADE_CONTACT_URL,
+    APP_DOWNLOAD_URL,
     LANGUAGE_SELECT_ID,
     TYPE_SELECT_ID,
     authMode,
@@ -167,15 +168,25 @@ export default function MallogHomeKoView(props) {
             <span className="text-nm-text-secondary">/</span>
             <Mallog24Logo className="h-[18px] w-auto shrink-0" />
           </div>
-          <HeaderMenuControls
-            darkMode={darkMode}
-            setDarkMode={setDarkMode}
-            uiTheme={uiTheme}
-            setUiTheme={setUiTheme}
-            uiThemeMode={uiThemeMode}
-            setUiThemeMode={setUiThemeMode}
-            locale="kr"
-          />
+          <div className="flex items-center gap-3">
+            <a
+              href={APP_DOWNLOAD_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden sm:inline-flex text-xs font-semibold text-nm-text-secondary hover:text-nm-accent transition-colors"
+            >
+              앱 다운로드
+            </a>
+            <HeaderMenuControls
+              darkMode={darkMode}
+              setDarkMode={setDarkMode}
+              uiTheme={uiTheme}
+              setUiTheme={setUiTheme}
+              uiThemeMode={uiThemeMode}
+              setUiThemeMode={setUiThemeMode}
+              locale="kr"
+            />
+          </div>
         </div>
       </header>
 
@@ -187,6 +198,7 @@ export default function MallogHomeKoView(props) {
             pricingUrl={UPGRADE_CONTACT_URL}
             oursUrl={OURS_URL}
             stats={landingStats}
+            appDownloadUrl={APP_DOWNLOAD_URL}
           />
         )}
 
