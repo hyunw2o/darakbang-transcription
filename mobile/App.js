@@ -1470,11 +1470,9 @@ function App() {
               nestedScrollEnabled
               scrollEnabled={workspaceScrollEnabled}
             >
-              <FadeInView key="transcribe-settings">
+              <FadeInView key="transcribe-language">
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
-
-                  <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{copy.transcriptionLanguageLabel}</Text>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcriptionLanguageLabel}</Text>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -1501,6 +1499,12 @@ function App() {
                     />
                   </ScrollView>
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.transcriptionLanguageHint}</Text>
+                </View>
+              </FadeInView>
+
+              <FadeInView key="transcribe-settings">
+                <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
 
                   <ScrollView
                     horizontal
