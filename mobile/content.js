@@ -7,6 +7,7 @@ import {
   LANDLINE_PHONE,
   LEGAL_DOC_VERSION,
   REPRESENTATIVE_NAME,
+  REPRESENTATIVE_NAME_EN,
   SUPPORT_EMAIL,
 } from "./config";
 
@@ -676,7 +677,7 @@ const BUSINESS_DISCLOSURE_EN = [
   `Business registration no.: ${BUSINESS_REG_NUMBER}`,
   `Landline: ${LANDLINE_PHONE}`,
   `Business address: ${BUSINESS_ADDRESS_EN}`,
-  `Representative (CEO): ${REPRESENTATIVE_NAME}`,
+  `Representative (CEO): ${REPRESENTATIVE_NAME_EN}`,
   `E-commerce registration no.: ${ECOMMERCE_REG_NUMBER}`,
 ];
 
