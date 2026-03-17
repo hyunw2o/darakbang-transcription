@@ -1,8 +1,8 @@
 export const KO_MALLOG_LANDING_CONTENT = {
-  heroBadges: ['무료 월 10시간', 'Pro 월 8,800원(VAT 포함) 무제한', '오픈 베타'],
+  heroBadges: ['무료 월 10시간', 'Pro 월 8,800원(VAT 포함) 무제한', '오픈 베타: 무료 플랜 제공 중'],
   heroTitle: '녹음만 올리세요. 바로 쓰는 구조화 녹취 문서가 나옵니다.',
   heroDescription:
-    '설교, 통화, 회의에 맞춰 AI가 듣고 교정하고 요약합니다. 결과는 TXT/DOCX와 기록본으로 바로 저장할 수 있습니다.',
+    '설교, 통화, 회의에 맞춰 AI가 듣고 교정하고 요약합니다. 결과는 TXT/DOCX, 기록본, 설교용 주보 초안까지 바로 이어집니다.',
   beforeLabel: 'Before',
   beforeText: '"이번 주 광고 예산이 15% 초과됐고, 다음 주 수정안을 다시 공유해 주세요."',
   afterLabel: 'After',
@@ -11,6 +11,7 @@ export const KO_MALLOG_LANDING_CONTENT = {
   primaryCtaLabel: '무료로 시작하기',
   secondaryCtaLabel: '요금제 보기',
   tertiaryCtaLabel: 'OURS 소개 보기',
+  heroBetaNote: '오픈 베타 기간에는 무료 플랜 월 10시간으로 기능을 직접 검증할 수 있습니다. Pro는 월 8,800원(VAT 포함)으로 바로 전환 가능합니다.',
   featureCards: [
     {
       title: '전문 용어 정확도',
@@ -18,7 +19,7 @@ export const KO_MALLOG_LANDING_CONTENT = {
     },
     {
       title: '구조화된 문서 출력',
-      body: '요약, 핵심 포인트, 후속 조치까지 바로 쓰는 형태로 정리합니다.',
+      body: '요약, 핵심 포인트, 후속 조치와 설교용 주보 초안까지 바로 쓰는 형태로 정리합니다.',
     },
     {
       title: '2단계 엔진',
@@ -106,7 +107,7 @@ export const KO_MALLOG_LANDING_CONTENT = {
   useCases: [
     {
       title: '목회자 / 설교',
-      body: '본문, 핵심 메시지, 적용 포인트를 정리한 설교 기록 요약으로 이어집니다.',
+      body: '본문, 핵심 메시지, 적용 포인트를 정리한 설교 기록 요약과 주보용 요약 초안으로 이어집니다.',
     },
     {
       title: 'PM / 회의',
@@ -152,10 +153,10 @@ export const KO_MALLOG_LANDING_CONTENT = {
 }
 
 export const EN_MALLOG_LANDING_CONTENT = {
-  heroBadges: ['Free 10h/month', 'Pro KRW 8,800/month (VAT included) Unlimited', 'Open Beta'],
+  heroBadges: ['Free 10h/month', 'Pro KRW 8,800/month (VAT included) Unlimited', 'Open beta: Free plan available'],
   heroTitle: 'Upload audio once. Get structured transcripts ready to use.',
   heroDescription:
-    'For sermons, calls, and meetings, AI listens, corrects, and summarizes. Export as TXT/DOCX and save structured records in one flow.',
+    'For sermons, calls, and meetings, AI listens, corrects, and summarizes. Export as TXT/DOCX, save structured records, and prepare bulletin-ready sermon notes in one flow.',
   beforeLabel: 'Before',
   beforeText: '"Ad budget was 15% over this week, and we need the revised plan by next week."',
   afterLabel: 'After',
@@ -164,6 +165,7 @@ export const EN_MALLOG_LANDING_CONTENT = {
   primaryCtaLabel: 'Start Free',
   secondaryCtaLabel: 'View Pricing',
   tertiaryCtaLabel: 'About OURS',
+  heroBetaNote: 'During open beta, visitors can validate the workflow with the free 10-hour monthly plan. Pro is available at KRW 8,800/month including VAT.',
   featureCards: [
     {
       title: 'Domain Term Accuracy',
@@ -171,7 +173,7 @@ export const EN_MALLOG_LANDING_CONTENT = {
     },
     {
       title: 'Structured Output',
-      body: 'Summaries, key points, and follow-up actions arrive in a format teams can reuse immediately.',
+      body: 'Summaries, key points, follow-up actions, and bulletin-ready sermon notes arrive in a format teams can reuse immediately.',
     },
     {
       title: 'Two-stage Engine',
@@ -259,7 +261,7 @@ export const EN_MALLOG_LANDING_CONTENT = {
   useCases: [
     {
       title: 'Pastor / Sermon',
-      body: 'Capture scripture flow, core message, and application points in a sermon-ready summary.',
+      body: 'Capture scripture flow, core message, application points, and bulletin-ready sermon note drafts in one sermon summary.',
     },
     {
       title: 'PM / Meeting',

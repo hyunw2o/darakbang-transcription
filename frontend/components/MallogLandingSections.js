@@ -3,11 +3,15 @@ import { useState } from 'react'
 import StepIndicator from './StepIndicator'
 
 export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats, appDownloadUrl = '' }) {
-  const [openFaqIndex, setOpenFaqIndex] = useState(0)
   const [activePreviewIndex, setActivePreviewIndex] = useState(0)
   const localeTextClass = locale === 'kr' ? 'break-keep' : ''
   const authUrl = locale === 'kr' ? '/#auth-card' : '/en#auth-card'
   const activePreview = content.previewCases?.[activePreviewIndex] || null
+  const hasStats = Boolean(
+    stats &&
+    [stats.hoursProcessed, stats.betaUsers, stats.avgTurnaround, stats.timeSaving]
+      .some((value) => String(value || '').trim())
+  )
   const statsCards = [
     {
       key: 'hoursProcessed',
@@ -48,53 +52,90 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
         <h1 className={`text-xl sm:text-2xl font-bold text-nm-text-primary leading-tight ${localeTextClass}`}>{content.heroTitle}</h1>
         <p className={`mt-2 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.heroDescription}</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
+          {content.previewCases.map((preview, index) => {
+            const isActive = activePreviewIndex === index
+            return (
+              <button
+                key={preview.key}
+                type="button"
+                onClick={() => setActivePreviewIndex(index)}
+                className={`px-3 py-2 rounded-full text-xs font-semibold transition-colors ${
+                  isActive ? 'nm-btn-primary text-white' : 'nm-btn text-nm-text-primary'
+                }`}
+                aria-pressed={isActive}
+              >
+                {preview.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
           <div className="nm-concave p-4">
-            <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">{content.beforeLabel}</p>
-            <p className={`text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.beforeText}</p>
+            <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">
+              {content.beforeLabel} {activePreview ? `· ${activePreview.label}` : ''}
+            </p>
+            <div className="space-y-2">
+              {(activePreview?.sourceLines || [content.beforeText]).map((line) => (
+                <p key={line} className={`text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{line}</p>
+              ))}
+            </div>
           </div>
           <div className="nm-concave p-4">
-            <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">{content.afterLabel}</p>
-            <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{content.afterTitle}</p>
+            <p className="text-[11px] font-semibold text-nm-text-secondary mb-2">
+              {content.afterLabel} {activePreview ? `· ${activePreview.label}` : ''}
+            </p>
+            <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{activePreview?.outputTitle || content.afterTitle}</p>
             <ul className="mt-2 text-xs text-nm-text-secondary space-y-1 leading-relaxed">
-              {content.afterItems.map((item) => (
+              {(activePreview?.outputSections?.length
+                ? activePreview.outputSections.map((section) => `${section.title}: ${section.items[0]}`)
+                : content.afterItems
+              ).map((item) => (
                 <li key={item} className={localeTextClass}>- {item}</li>
               ))}
             </ul>
+            {activePreview?.footer ? (
+              <p className={`mt-3 text-[11px] text-nm-accent leading-relaxed ${localeTextClass}`}>{activePreview.footer}</p>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col sm:flex-row gap-2">
+        <div className="mt-4">
           <Link
             href={authUrl}
             className="nm-btn-primary inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold"
           >
             {content.primaryCtaLabel}
           </Link>
-          <Link
-            href={pricingUrl}
-            className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
-          >
-            {content.secondaryCtaLabel}
-          </Link>
-          {appDownloadUrl ? (
-            <a
-              href={appDownloadUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="nm-btn inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-nm-text-primary"
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold">
+            <Link
+              href={pricingUrl}
+              className="text-nm-text-secondary hover:text-nm-accent transition-colors"
             >
-              {locale === 'kr' ? '앱 다운로드' : 'Download App'}
+              {content.secondaryCtaLabel}
+            </Link>
+            {appDownloadUrl ? (
+              <a
+                href={appDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-nm-text-secondary hover:text-nm-accent transition-colors"
+              >
+                {locale === 'kr' ? '앱 다운로드' : 'Download App'}
+              </a>
+            ) : null}
+            <a
+              href={oursUrl}
+              className="text-nm-text-secondary hover:text-nm-accent transition-colors"
+            >
+              {content.tertiaryCtaLabel}
             </a>
+          </div>
+          {content.heroBetaNote ? (
+            <p className={`mt-3 text-[11px] text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.heroBetaNote}</p>
           ) : null}
         </div>
-        <a
-          href={oursUrl}
-          className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-nm-text-secondary hover:text-nm-accent transition-colors"
-        >
-          {content.tertiaryCtaLabel}
-          <span aria-hidden="true">+</span>
-        </a>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -137,27 +178,29 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
         </div>
       </div>
 
-      <div className="nm-raised p-5 sm:p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.statsTitle}</h2>
-            <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.statsDescription}</p>
-          </div>
-          {stats?.updatedAt ? (
-            <p className="text-[11px] text-nm-text-secondary">
-              {content.statsUpdatedPrefix}: {stats.updatedAt}
-            </p>
-          ) : null}
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-          {statsCards.map((card) => (
-            <div key={card.key} className="nm-concave p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-nm-text-secondary">{card.label}</p>
-              <p className={`mt-2 text-base font-bold text-nm-text-primary leading-snug ${localeTextClass}`}>{card.value}</p>
+      {hasStats ? (
+        <div className="nm-raised p-5 sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.statsTitle}</h2>
+              <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.statsDescription}</p>
             </div>
-          ))}
+            {stats?.updatedAt ? (
+              <p className="text-[11px] text-nm-text-secondary">
+                {content.statsUpdatedPrefix}: {stats.updatedAt}
+              </p>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            {statsCards.map((card) => (
+              <div key={card.key} className="nm-concave p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-nm-text-secondary">{card.label}</p>
+                <p className={`mt-2 text-base font-bold text-nm-text-primary leading-snug ${localeTextClass}`}>{card.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="nm-raised p-5 sm:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -165,25 +208,6 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
             <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.previewTitle}</h2>
             <p className={`mt-1 text-sm text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{content.previewDescription}</p>
           </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {content.previewCases.map((preview, index) => {
-            const isActive = activePreviewIndex === index
-            return (
-              <button
-                key={preview.key}
-                type="button"
-                onClick={() => setActivePreviewIndex(index)}
-                className={`px-3 py-2 rounded-full text-xs font-semibold transition-colors ${
-                  isActive ? 'nm-btn-primary text-white' : 'nm-btn text-nm-text-primary'
-                }`}
-                aria-pressed={isActive}
-              >
-                {preview.label}
-              </button>
-            )
-          })}
         </div>
 
         {activePreview ? (
@@ -261,29 +285,14 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <div className="nm-raised p-5 sm:p-6">
         <h2 className={`text-lg font-bold text-nm-text-primary ${localeTextClass}`}>{content.faqTitle}</h2>
         <div className="mt-4 space-y-3">
-          {content.faqs.map((faq, index) => {
-            const isOpen = openFaqIndex === index
-            return (
-              <div key={faq.question} className="nm-concave overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setOpenFaqIndex(isOpen ? -1 : index)}
-                  className="w-full px-4 py-4 flex items-center justify-between gap-4 text-left"
-                  aria-expanded={isOpen}
-                >
-                  <span className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{faq.question}</span>
-                  <span className={`text-nm-text-secondary transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>
-                    +
-                  </span>
-                </button>
-                {isOpen ? (
-                  <div className="px-4 pb-4">
-                    <p className={`text-xs text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{faq.answer}</p>
-                  </div>
-                ) : null}
+          {content.faqs.map((faq) => (
+            <div key={faq.question} className="nm-concave p-4">
+              <p className={`text-sm font-semibold text-nm-text-primary ${localeTextClass}`}>{faq.question}</p>
+              <div className="mt-2">
+                <p className={`text-xs text-nm-text-secondary leading-relaxed ${localeTextClass}`}>{faq.answer}</p>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
 
