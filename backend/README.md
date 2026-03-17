@@ -147,6 +147,8 @@ Render Cron Job 스케줄 예시: `0 0 1 * *` (UTC 기준)
 1. 1차 운영(국내): `BILLING_PROVIDER=portone`로 설정하고 국내 PG 키를 적용
    - 필수값: `PORTONE_CHANNEL_KEY`, `PORTONE_STORE_ID`(또는 `PORTONE_MID`), `PORTONE_API_SECRET`
    - `BILLING_TEST_MODE=false`일 때 `/api/billing/checkout`이 실제 결제창 URL을 반환
+   - PortOne webhook URL: `https://<backend-domain>/api/billing/portone/webhook`
+   - webhook secret 발급 후 `PORTONE_WEBHOOK_SECRET` 설정
 2. 2차 글로벌: `BILLING_PROVIDER=stripe`로 전환 후 Stripe 키/Price/Webhook 설정
 3. Stripe Webhook URL: `https://<backend-domain>/api/billing/webhook`
    - 이벤트: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`

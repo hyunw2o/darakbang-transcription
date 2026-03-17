@@ -35,6 +35,11 @@ try:
 except Exception:
     stripe = None
 
+try:
+    from standardwebhooks.webhooks import Webhook as StandardWebhook
+except Exception:
+    StandardWebhook = None
+
 # 다락방 용어 임포트
 from church_terms import (
     get_gemini_prompt,
@@ -1372,6 +1377,7 @@ def _create_portone_checkout_session(
     checkout_flow = _get_portone_checkout_flow()
     normalized_pay_method = _normalize_portone_pay_method(pay_method or PORTONE_DEFAULT_PAY_METHOD)
     channel_key = _resolve_portone_channel_key_for_pay_method(normalized_pay_method)
+    customer_id = f"mallog24_{user_id}"
 
     order_name = PAID_PLAN_PRODUCT_NAME_EN if locale == "en" else PAID_PLAN_PRODUCT_NAME_KO
     portone_checkout_sessions[session_id] = {
@@ -1390,6 +1396,7 @@ def _create_portone_checkout_session(
         "checkout_flow": checkout_flow,
         "pay_method": normalized_pay_method,
         "channel_key": channel_key,
+        "customer_id": customer_id,
     }
 
     checkout_url = _build_redirect_url_from_request(request, f"/api/billing/portone/checkout/{session_id}")
@@ -1472,6 +1479,56 @@ def _extract_portone_customer_reference(payment: dict) -> str:
     return ""
 
 
+def _extract_portone_custom_data(payload: dict | None) -> dict:
+    source = payload or {}
+    if not isinstance(source, dict):
+        return {}
+    for key in ("customData", "custom_data"):
+        candidate = source.get(key)
+        if isinstance(candidate, dict):
+            return candidate
+        if isinstance(candidate, str):
+            try:
+                parsed = json.loads(candidate)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                return parsed
+    return {}
+
+
+def _extract_portone_user_id_from_customer_reference(customer_reference: str) -> str:
+    value = str(customer_reference or "").strip()
+    if not value.startswith("mallog24_"):
+        return ""
+    candidate = value[len("mallog24_"):].strip()
+    if re.fullmatch(r"[0-9a-fA-F-]{36}", candidate):
+        return candidate
+    return ""
+
+
+def _extract_portone_event_type(event: dict | None) -> str:
+    source = event or {}
+    if not isinstance(source, dict):
+        return ""
+    for key in ("type", "eventType", "event_type"):
+        value = str(source.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _extract_portone_event_data(event: dict | None) -> dict:
+    source = event or {}
+    if not isinstance(source, dict):
+        return {}
+    for key in ("data", "payload", "result", "event"):
+        candidate = source.get(key)
+        if isinstance(candidate, dict):
+            return candidate
+    return source
+
+
 async def _fetch_portone_payment_by_id(payment_id: str) -> dict:
     normalized_payment_id = str(payment_id or "").strip()
     if not normalized_payment_id:
@@ -1514,6 +1571,64 @@ async def _fetch_portone_payment_by_id(payment_id: str) -> dict:
     raise HTTPException(
         status_code=502,
         detail=f"PortOne 결제 조회 인증에 실패했습니다. api_secret 또는 권한을 확인하세요. ({last_error_message or 'unauthorized'})",
+    )
+
+
+def _normalize_portone_billing_key_payload(payload: dict | None) -> dict:
+    source = payload or {}
+    if not isinstance(source, dict):
+        return {}
+    if source.get("billingKey") or source.get("billing_key"):
+        return source
+    for key in ("billingKeyInfo", "billing_key_info", "data", "result"):
+        candidate = source.get(key)
+        if isinstance(candidate, dict) and (candidate.get("billingKey") or candidate.get("billing_key")):
+            return candidate
+    return source
+
+
+async def _fetch_portone_billing_key_by_id(billing_key: str) -> dict:
+    normalized_billing_key = str(billing_key or "").strip()
+    if not normalized_billing_key:
+        raise HTTPException(status_code=400, detail="billing_key 값이 필요합니다.")
+    if not PORTONE_API_SECRET:
+        raise HTTPException(status_code=503, detail="PORTONE_API_SECRET 설정이 필요합니다.")
+
+    endpoint = f"{PORTONE_API_BASE_URL}/billing-keys/{urllib.parse.quote(normalized_billing_key)}"
+    headers_candidates = [
+        {"Authorization": f"PortOne {PORTONE_API_SECRET}"},
+        {"Authorization": f"Bearer {PORTONE_API_SECRET}"},
+    ]
+    last_error_message = ""
+    for headers in headers_candidates:
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(endpoint, headers=headers)
+        except Exception as e:
+            last_error_message = str(e)
+            continue
+
+        if response.status_code in {401, 403}:
+            last_error_message = f"unauthorized({response.status_code})"
+            continue
+        if response.status_code >= 400:
+            body_text = (response.text or "").strip()
+            detail_text = body_text[:200] if body_text else f"status={response.status_code}"
+            raise HTTPException(status_code=502, detail=f"PortOne 빌링키 조회 실패: {detail_text}")
+
+        try:
+            payload = response.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="PortOne 빌링키 조회 응답(JSON)을 해석할 수 없습니다.")
+
+        billing_key_payload = _normalize_portone_billing_key_payload(payload)
+        if not billing_key_payload:
+            raise HTTPException(status_code=502, detail="PortOne 빌링키 조회 응답에 유효한 데이터가 없습니다.")
+        return billing_key_payload
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"PortOne 빌링키 조회 인증에 실패했습니다. api_secret 또는 권한을 확인하세요. ({last_error_message or 'unauthorized'})",
     )
 
 
@@ -1878,6 +1993,182 @@ def _fetch_billing_row_by_customer_id(customer_id: str) -> dict | None:
     if response.data:
         return response.data[0]
     return None
+
+
+def _verify_portone_webhook_signature_or_raise(payload: bytes, headers: dict[str, str]) -> None:
+    if StandardWebhook is None:
+        raise HTTPException(
+            status_code=503,
+            detail="PortOne 웹훅 검증 라이브러리가 없습니다. requirements.txt를 확인하세요.",
+        )
+    if not PORTONE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="PORTONE_WEBHOOK_SECRET 설정이 필요합니다.")
+    try:
+        StandardWebhook(PORTONE_WEBHOOK_SECRET).verify(payload.decode("utf-8"), headers)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"PortOne 웹훅 서명 검증 실패: {str(exc)}")
+
+
+def _resolve_portone_user_id(
+    *,
+    customer_reference: str = "",
+    subscription_id: str = "",
+    custom_data: dict | None = None,
+) -> tuple[str, dict | None]:
+    custom_payload = custom_data or {}
+    user_id = str(custom_payload.get("user_id") or "").strip()
+    if user_id:
+        return user_id, None
+
+    user_id = _extract_portone_user_id_from_customer_reference(customer_reference)
+    if user_id:
+        return user_id, None
+
+    billing_row = None
+    if subscription_id:
+        billing_row = _fetch_billing_row_by_subscription_id(subscription_id)
+    if not billing_row and customer_reference:
+        billing_row = _fetch_billing_row_by_customer_id(customer_reference)
+
+    if billing_row and billing_row.get("user_id"):
+        return str(billing_row.get("user_id") or ""), billing_row
+    return "", billing_row
+
+
+async def _apply_portone_paid_webhook(payment_id: str) -> dict:
+    normalized_payment_id = str(payment_id or "").strip()
+    if not normalized_payment_id:
+        return {"handled": False, "reason": "missing_payment_id"}
+
+    payment = await _fetch_portone_payment_by_id(normalized_payment_id)
+    payment_status = _extract_portone_payment_status(payment)
+    payment_amount = _extract_portone_total_amount(payment)
+    customer_reference = _extract_portone_customer_reference(payment)
+    custom_data = _extract_portone_custom_data(payment)
+    user_id, billing_row = _resolve_portone_user_id(
+        customer_reference=customer_reference,
+        subscription_id=normalized_payment_id,
+        custom_data=custom_data,
+    )
+    if not user_id:
+        return {
+            "handled": False,
+            "reason": "unmatched_user",
+            "payment_id": normalized_payment_id,
+            "customer_reference": customer_reference,
+        }
+
+    current_period_end = (datetime.utcnow() + timedelta(days=30)).isoformat()
+    _upsert_billing_row(
+        user_id,
+        {
+            "provider": "portone",
+            "customer_id": str(customer_reference)[:255] or normalized_payment_id,
+            "subscription_id": normalized_payment_id,
+            "price_id": f"portone_pro_{max(payment_amount, PAID_PLAN_AMOUNT_KRW)}",
+            "status": "active",
+            "plan_tier": PAID_PLAN_TIER,
+            "current_period_end": current_period_end,
+            "cancel_at_period_end": False,
+            "checkout_completed_at": datetime.utcnow().isoformat(),
+        },
+    )
+    _set_user_plan_tier(user_id, PAID_PLAN_TIER)
+    return {
+        "handled": True,
+        "user_id": user_id,
+        "payment_id": normalized_payment_id,
+        "payment_status": payment_status,
+        "matched_existing": bool(billing_row),
+    }
+
+
+async def _apply_portone_billing_key_issued_webhook(billing_key: str, customer_reference: str = "") -> dict:
+    normalized_billing_key = str(billing_key or "").strip()
+    if not normalized_billing_key:
+        return {"handled": False, "reason": "missing_billing_key"}
+
+    billing_key_payload = await _fetch_portone_billing_key_by_id(normalized_billing_key)
+    resolved_customer_reference = (
+        customer_reference
+        or _extract_portone_customer_reference(billing_key_payload)
+    )
+    custom_data = _extract_portone_custom_data(billing_key_payload)
+    user_id, billing_row = _resolve_portone_user_id(
+        customer_reference=resolved_customer_reference,
+        subscription_id=normalized_billing_key,
+        custom_data=custom_data,
+    )
+    if not user_id:
+        return {
+            "handled": False,
+            "reason": "unmatched_user",
+            "billing_key": normalized_billing_key,
+            "customer_reference": resolved_customer_reference,
+        }
+
+    status_value = "active" if PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE else "billing_key_issued"
+    plan_tier = PAID_PLAN_TIER if PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE else USAGE_FREE_PLAN
+    current_period_end = (
+        (datetime.utcnow() + timedelta(days=30)).isoformat()
+        if PORTONE_ACTIVATE_ON_BILLING_KEY_ISSUE
+        else None
+    )
+    _upsert_billing_row(
+        user_id,
+        {
+            "provider": "portone",
+            "customer_id": str(resolved_customer_reference or normalized_billing_key)[:255],
+            "subscription_id": normalized_billing_key[:255],
+            "price_id": f"portone_pro_{PAID_PLAN_AMOUNT_KRW}",
+            "status": status_value,
+            "plan_tier": plan_tier,
+            "current_period_end": current_period_end,
+            "cancel_at_period_end": False,
+            "checkout_completed_at": datetime.utcnow().isoformat(),
+        },
+    )
+    _set_user_plan_tier(user_id, plan_tier)
+    return {
+        "handled": True,
+        "user_id": user_id,
+        "billing_key": normalized_billing_key,
+        "status": status_value,
+        "matched_existing": bool(billing_row),
+    }
+
+
+def _apply_portone_cancellation_by_reference(subscription_id: str = "", customer_reference: str = "") -> dict:
+    billing_row = None
+    if subscription_id:
+        billing_row = _fetch_billing_row_by_subscription_id(subscription_id)
+    if not billing_row and customer_reference:
+        billing_row = _fetch_billing_row_by_customer_id(customer_reference)
+    if not billing_row or not billing_row.get("user_id"):
+        return {
+            "handled": False,
+            "reason": "unmatched_user",
+            "subscription_id": subscription_id,
+            "customer_reference": customer_reference,
+        }
+
+    user_id = str(billing_row.get("user_id") or "")
+    _upsert_billing_row(
+        user_id,
+        {
+            "provider": "portone",
+            "status": "canceled",
+            "plan_tier": USAGE_FREE_PLAN,
+            "cancel_at_period_end": False,
+            "current_period_end": None,
+        },
+    )
+    _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+    return {
+        "handled": True,
+        "user_id": user_id,
+        "subscription_id": subscription_id or str(billing_row.get("subscription_id") or ""),
+    }
 
 
 def _upsert_billing_row(user_id: str, patch: dict) -> dict:
@@ -4217,7 +4508,7 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     if cancel_url.startswith("/"):
         cancel_url = _build_redirect_url_from_request(request, cancel_url)
 
-    customer_id = f"mallog24_{str(session.get('user_id') or '')[:24]}"
+    customer_id = str(session.get("customer_id") or f"mallog24_{str(session.get('user_id') or '')}")
     payment_payload = {
         "storeId": PORTONE_STORE_ID,
         "channelKey": channel_key,
@@ -4227,6 +4518,8 @@ async def render_portone_checkout_page(request: Request, session_id: str):
             "provider": "portone",
             "mid": PORTONE_MID,
             "session_id": session_id,
+            "user_id": str(session.get("user_id") or ""),
+            "email": customer_email,
             "checkout_flow": checkout_flow,
             "requested_pay_method": pay_method,
         },
@@ -5138,6 +5431,68 @@ async def request_billing_refund(
     }
 
 
+@app.post("/api/billing/portone/webhook")
+async def portone_billing_webhook(request: Request):
+    """PortOne webhook 수신 및 결제 상태 반영"""
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    billing_provider = _get_billing_provider_or_raise()
+    if billing_provider != "portone":
+        raise HTTPException(
+            status_code=404,
+            detail=f"현재 BILLING_PROVIDER={billing_provider} 이므로 PortOne webhook이 비활성화되어 있습니다.",
+        )
+
+    payload = await request.body()
+    _verify_portone_webhook_signature_or_raise(payload, dict(request.headers))
+
+    try:
+        event = json.loads(payload.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="PortOne 웹훅 본문(JSON)을 해석할 수 없습니다.")
+
+    event_type = _extract_portone_event_type(event)
+    data = _extract_portone_event_data(event)
+    payment_id = str(
+        (data.get("paymentId") if isinstance(data, dict) else "")
+        or (data.get("payment_id") if isinstance(data, dict) else "")
+        or ""
+    ).strip()
+    billing_key = str(
+        (data.get("billingKey") if isinstance(data, dict) else "")
+        or (data.get("billing_key") if isinstance(data, dict) else "")
+        or ""
+    ).strip()
+    customer_reference = str(
+        (data.get("customerId") if isinstance(data, dict) else "")
+        or (data.get("customer_id") if isinstance(data, dict) else "")
+        or _extract_portone_customer_reference(data if isinstance(data, dict) else {})
+        or ""
+    ).strip()
+
+    if event_type == "Transaction.Paid":
+        result = await _apply_portone_paid_webhook(payment_id)
+    elif event_type == "BillingKey.Issued":
+        result = await _apply_portone_billing_key_issued_webhook(billing_key, customer_reference)
+    elif event_type in {"Transaction.Cancelled", "Transaction.Failed", "BillingKey.Deleted", "BillingKey.Failed"}:
+        subscription_reference = billing_key or payment_id
+        result = _apply_portone_cancellation_by_reference(
+            subscription_id=subscription_reference,
+            customer_reference=customer_reference,
+        )
+    else:
+        result = {"handled": False, "reason": "ignored_event"}
+
+    return JSONResponse(
+        {
+            "success": True,
+            "provider": "portone",
+            "event_type": event_type,
+            **result,
+        }
+    )
+
+
 @app.post("/api/billing/webhook")
 async def stripe_billing_webhook(request: Request):
     """Stripe webhook 수신 및 구독 상태 반영"""
@@ -5684,6 +6039,7 @@ async def health_check():
             "billing_enabled": billing_enabled,
             "billing_checkout_mode": billing_checkout_mode,
             "portone_checkout_flow": portone_checkout_flow,
+            "portone_webhook_configured": bool(PORTONE_WEBHOOK_SECRET),
             "billing_test_mode": BILLING_TEST_MODE,
             "stripe_billing": stripe_billing,
         }

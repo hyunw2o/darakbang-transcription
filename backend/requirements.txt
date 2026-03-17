@@ -8,3 +8,4 @@ openai>=1.0.0
 pydub>=0.25.1
 supabase>=2.0.0
 stripe>=11.5.0
+standardwebhooks>=1.0.0
