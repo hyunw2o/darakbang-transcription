@@ -53,7 +53,19 @@ export default function MallogHomePageContainer({
     )
   const ECOMMERCE_REG_NUMBER = process.env.NEXT_PUBLIC_ECOMMERCE_REG_NUMBER || (isEnglish ? 'No. 2026-Gyeonggi Gwangju-0442' : '제 2026-경기광주-0442 호')
   const TRADEMARK_APPLICATION_NO = process.env.NEXT_PUBLIC_TRADEMARK_APPLICATION_NO || '40-2026-0040381'
-  const COPYRIGHT_REGISTRATION_NO = process.env.NEXT_PUBLIC_COPYRIGHT_REGISTRATION_NO || '제 C-2026-013549 호'
+  const rawCopyrightRegistrationNo = isEnglish
+    ? (
+      process.env.NEXT_PUBLIC_COPYRIGHT_REGISTRATION_NO_EN ||
+      process.env.NEXT_PUBLIC_COPYRIGHT_REGISTRATION_NO ||
+      'C-2026-013549'
+    )
+    : (
+      process.env.NEXT_PUBLIC_COPYRIGHT_REGISTRATION_NO ||
+      '제 C-2026-013549 호'
+    )
+  const COPYRIGHT_REGISTRATION_NO = isEnglish
+    ? rawCopyrightRegistrationNo.replace(/^제\s*/u, '').replace(/\s*호$/u, '')
+    : rawCopyrightRegistrationNo
   const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'ours113814@gmail.com'
   const CANONICAL_URL = isEnglish ? `${SITE_URL}/en` : SITE_URL
   const ALTERNATE_URL = isEnglish ? SITE_URL : `${SITE_URL}/en`
