@@ -49,7 +49,7 @@ function ActionButton({ children, variant = 'secondary', className = '', ...prop
     ? 'bg-[linear-gradient(135deg,#3B82F6,#7C3AED)] text-white shadow-[0_14px_30px_rgba(59,130,246,0.22)] hover:-translate-y-[1px] hover:opacity-90'
     : variant === 'kakao'
       ? 'bg-[#FEE500] text-[#1D1D1F] hover:-translate-y-[1px] hover:opacity-95'
-      : 'border border-[#E2E8F0] bg-white text-[#0F172A] hover:bg-[#F8F9FF]'
+      : 'border border-[#E2E8F0] bg-white text-[#0F172A] hover:bg-[#F8F9FF] dark:border-white/10 dark:bg-[#111827] dark:text-white dark:hover:bg-white/10'
 
   return (
     <button {...props} className={`${baseClassName} ${variantClassName} ${className}`}>
@@ -242,7 +242,7 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFFFF] text-[#0F172A]">
+    <div className="min-h-screen bg-[#FFFFFF] text-[#0F172A] dark:bg-[#020617] dark:text-white">
       <Head>
         <title>mallog24 요금제</title>
       </Head>
@@ -275,33 +275,33 @@ export default function PricingPage() {
         </section>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
-          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">Current plan</p>
-            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A]">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
-            <p className="mt-3 text-base leading-7 text-[#64748B] mallog-keep">무료 플랜은 월 10시간까지 사용 가능합니다.</p>
-            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B]">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-[#0F172A] dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">Current plan</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] dark:text-white">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
+            <p className="mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 mallog-keep">무료 플랜은 월 10시간까지 사용 가능합니다.</p>
+            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B] dark:text-white/72">
               {PLAN_SUMMARY.free.map((item) => (
                 <li key={item} className="flex gap-2 mallog-keep"><span className="text-[#3B82F6]">•</span><span>{item}</span></li>
               ))}
             </ul>
             {statusLoading ? (
-              <p className="mt-6 text-sm text-[#64748B]">구독 상태를 확인하는 중입니다.</p>
+              <p className="mt-6 text-sm text-[#64748B] dark:text-white/60">구독 상태를 확인하는 중입니다.</p>
             ) : status ? (
-              <div className="mt-6 rounded-2xl bg-[#F8F9FF] p-4 text-sm text-[#64748B]">
-                <p>상태: <span className="font-semibold text-[#0F172A]">{status.status || 'inactive'}</span></p>
-                <p className="mt-2">갱신 예정일: <span className="font-semibold text-[#0F172A]">{status.current_period_end ? new Date(status.current_period_end).toLocaleString('ko-KR') : '없음'}</span></p>
-                <p className="mt-2">취소 예약: <span className="font-semibold text-[#0F172A]">{status.cancel_at_period_end ? '예' : '아니오'}</span></p>
+              <div className="mt-6 rounded-2xl bg-[#F8F9FF] p-4 text-sm text-[#64748B] dark:bg-white/[0.04] dark:text-white/72">
+                <p>상태: <span className="font-semibold text-[#0F172A] dark:text-white">{status.status || 'inactive'}</span></p>
+                <p className="mt-2">갱신 예정일: <span className="font-semibold text-[#0F172A] dark:text-white">{status.current_period_end ? new Date(status.current_period_end).toLocaleString('ko-KR') : '없음'}</span></p>
+                <p className="mt-2">취소 예약: <span className="font-semibold text-[#0F172A] dark:text-white">{status.cancel_at_period_end ? '예' : '아니오'}</span></p>
               </div>
             ) : (
-              <p className="mt-6 text-sm text-[#64748B]">로그인 후 구독 상태를 확인할 수 있습니다.</p>
+              <p className="mt-6 text-sm text-[#64748B] dark:text-white/60">로그인 후 구독 상태를 확인할 수 있습니다.</p>
             )}
           </section>
 
-          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">Upgrade</p>
-            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A]">Pro 월간 구독</h2>
-            <p className="mt-3 text-base leading-7 text-[#64748B] mallog-keep">무제한 사용, 우선 지원, 구독 관리와 환불 요청 흐름을 제공합니다.</p>
-            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B]">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-[#0F172A] dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">Upgrade</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] dark:text-white">Pro 월간 구독</h2>
+            <p className="mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 mallog-keep">무제한 사용, 우선 지원, 구독 관리와 환불 요청 흐름을 제공합니다.</p>
+            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B] dark:text-white/72">
               {PLAN_SUMMARY.pro.map((item) => (
                 <li key={item} className="flex gap-2 mallog-keep"><span className="text-[#3B82F6]">•</span><span>{item}</span></li>
               ))}
@@ -324,7 +324,7 @@ export default function PricingPage() {
               </ActionButton>
               <a
                 href={CONTACT_URL}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-5 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-5 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap dark:border-white/10 dark:bg-[#111827] dark:text-white dark:hover:bg-white/10"
               >
                 구독 문의 메일 보내기
               </a>
@@ -333,29 +333,29 @@ export default function PricingPage() {
         </div>
 
         {(message || error) ? (
-          <div className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+          <div className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'}`}>
             {error || message}
           </div>
         ) : null}
 
-        <section className="mt-8 rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8">
+        <section className="mt-8 rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 dark:bg-[#0B1220]">
           <div className="max-w-3xl">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Pricing comparison</p>
-            <h2 className="mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] mallog-keep">가입 전에 핵심 차이만 확인하세요</h2>
-            <p className="mt-3 text-base leading-7 text-[#64748B] mallog-keep">복잡한 옵션 없이 Free와 Pro 두 단계만 운영합니다.</p>
+            <h2 className="mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] mallog-keep">가입 전에 핵심 차이만 확인하세요</h2>
+            <p className="mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 mallog-keep">복잡한 옵션 없이 Free와 Pro 두 단계만 운영합니다.</p>
           </div>
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] dark:border-white/10 dark:bg-[#0F172A] dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
             <div className="min-w-[680px]">
-              <div className="grid grid-cols-[1.2fr,1fr,1fr] bg-[#F8F9FF] text-sm font-semibold text-[#64748B]">
+              <div className="grid grid-cols-[1.2fr,1fr,1fr] bg-[#F8F9FF] text-sm font-semibold text-[#64748B] dark:bg-white/[0.04] dark:text-white/60">
                 <div className="px-5 py-4">항목</div>
-                <div className="border-l border-[#E2E8F0] px-5 py-4">Free</div>
-                <div className="border-l border-[#E2E8F0] px-5 py-4">Pro</div>
+                <div className="border-l border-[#E2E8F0] px-5 py-4 dark:border-white/10">Free</div>
+                <div className="border-l border-[#E2E8F0] px-5 py-4 dark:border-white/10">Pro</div>
               </div>
               {COMPARE_ROWS.map(([label, free, pro]) => (
-                <div key={label} className="grid grid-cols-[1.2fr,1fr,1fr] border-t border-[#E2E8F0] text-[15px] leading-7 text-[#0F172A]">
+                <div key={label} className="grid grid-cols-[1.2fr,1fr,1fr] border-t border-[#E2E8F0] text-[15px] leading-7 text-[#0F172A] dark:border-white/10 dark:text-white">
                   <div className="px-5 py-4 font-semibold mallog-keep">{label}</div>
-                  <div className="border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] mallog-keep">{free}</div>
-                  <div className="border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] mallog-keep">{pro}</div>
+                  <div className="border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] dark:border-white/10 dark:text-white/72 mallog-keep">{free}</div>
+                  <div className="border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] dark:border-white/10 dark:text-white/72 mallog-keep">{pro}</div>
                 </div>
               ))}
             </div>
@@ -363,34 +363,34 @@ export default function PricingPage() {
         </section>
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">Billing notes</p>
-            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] mallog-keep">결제 전 확인 사항</h2>
-            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B]">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-[#0F172A] dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">Billing notes</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] dark:text-white mallog-keep">결제 전 확인 사항</h2>
+            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B] dark:text-white/72">
               {BILLING_NOTES.map((item) => (
                 <li key={item} className="flex gap-2 mallog-keep"><span className="text-[#3B82F6]">•</span><span>{item}</span></li>
               ))}
             </ul>
           </section>
 
-          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">FAQ</p>
-            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] mallog-keep">결제 관련 자주 묻는 질문</h2>
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-[#0F172A] dark:shadow-[0_18px_40px_rgba(2,6,23,0.45)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">FAQ</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] dark:text-white mallog-keep">결제 관련 자주 묻는 질문</h2>
             <div className="mt-5 space-y-3">
               {FAQS.map(([question, answer], index) => {
                 const isOpen = openFaqIndex === index
                 return (
-                  <div key={question} className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#F8F9FF]">
+                  <div key={question} className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#F8F9FF] dark:border-white/10 dark:bg-white/[0.04]">
                     <button
                       type="button"
                       onClick={() => setOpenFaqIndex(isOpen ? -1 : index)}
                       className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
                       aria-expanded={isOpen}
                     >
-                      <span className="text-sm font-semibold text-[#0F172A] mallog-keep">{question}</span>
-                      <span className={`text-[#64748B] transition-transform ${isOpen ? 'rotate-45' : ''}`}>+</span>
+                      <span className="text-sm font-semibold text-[#0F172A] dark:text-white mallog-keep">{question}</span>
+                      <span className={`text-[#64748B] dark:text-white/60 transition-transform ${isOpen ? 'rotate-45' : ''}`}>+</span>
                     </button>
-                    {isOpen ? <p className="px-4 pb-4 text-sm leading-7 text-[#64748B] mallog-keep">{answer}</p> : null}
+                    {isOpen ? <p className="px-4 pb-4 text-sm leading-7 text-[#64748B] dark:text-white/72 mallog-keep">{answer}</p> : null}
                   </div>
                 )
               })}
