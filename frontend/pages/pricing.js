@@ -43,6 +43,21 @@ const readResponseData = async (response, fallbackMessage) => {
   return data || {}
 }
 
+function ActionButton({ children, variant = 'secondary', className = '', ...props }) {
+  const baseClassName = 'inline-flex min-h-[48px] w-full items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold transition duration-200 whitespace-nowrap'
+  const variantClassName = variant === 'primary'
+    ? 'bg-[linear-gradient(135deg,#3B82F6,#7C3AED)] text-white shadow-[0_14px_30px_rgba(59,130,246,0.22)] hover:-translate-y-[1px] hover:opacity-90'
+    : variant === 'kakao'
+      ? 'bg-[#FEE500] text-[#1D1D1F] hover:-translate-y-[1px] hover:opacity-95'
+      : 'border border-[#E2E8F0] bg-white text-[#0F172A] hover:bg-[#F8F9FF]'
+
+  return (
+    <button {...props} className={`${baseClassName} ${variantClassName} ${className}`}>
+      {children}
+    </button>
+  )
+}
+
 export default function PricingPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [status, setStatus] = useState(null)
@@ -227,141 +242,155 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#071021] text-white">
+    <div className="min-h-screen bg-[#FFFFFF] text-[#0F172A]">
       <Head>
         <title>mallog24 요금제</title>
       </Head>
-      <main className="max-w-5xl mx-auto px-4 py-12">
-        <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
-          <div>
-            <p className="text-sm text-white/60">Pricing</p>
-            <h1 className="text-3xl font-bold">mallog24 Pro</h1>
-            <p className="text-white/70 mt-2">월 8,800원(VAT 포함) 무제한 음성 구조화 기록</p>
-            <p className="text-sm text-white/45 mt-2">무료 10시간 검증 후 필요한 경우에만 Pro로 전환하는 구조입니다.</p>
-          </div>
-          <Link href="/" className="px-4 py-2 rounded-full border border-white/15 text-sm text-white/80 hover:text-white">
-            mallog24로 돌아가기
-          </Link>
-        </div>
 
-        <div className="grid xl:grid-cols-[0.95fr,1.05fr] gap-6">
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-white/60">현재 플랜</p>
-            <h2 className="text-2xl font-semibold mt-2">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
-            <p className="text-white/60 mt-2">무료 플랜은 월 10시간까지 사용 가능합니다.</p>
-            <ul className="mt-4 space-y-2 text-sm text-white/75">
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <section className="overflow-hidden rounded-[28px] bg-[#0F172A] px-6 py-8 shadow-[0_32px_80px_rgba(15,23,42,0.24)] sm:px-8 lg:px-10 lg:py-10">
+          <div className="pointer-events-none absolute" />
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <span className="inline-flex rounded-full border border-[#3B82F6]/20 bg-[rgba(59,130,246,0.15)] px-4 py-1.5 text-xs font-semibold text-[#93C5FD] whitespace-nowrap">
+                ✦ Free / Pro 요금제를 한 번에 비교
+              </span>
+              <h1 className="mt-5 text-[34px] font-extrabold leading-[1.05] tracking-[-0.03em] text-white sm:text-[46px]">
+                <span className="block mallog-keep">필요한 만큼 무료로 검증하고,</span>
+                <span className="mt-2 block text-gradient-brand mallog-keep">확신이 생기면 Pro로 전환하세요.</span>
+              </h1>
+              <p className="mt-5 max-w-2xl text-base leading-8 text-white/60 sm:text-lg mallog-keep">
+                mallog24 Pro는 월 8,800원(VAT 포함)으로 무제한 사용 기준입니다. 설교, 통화, 회의 구조화 문서를 반복적으로 만들어야 하는 팀과 개인을 위한 플랜입니다.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+              <Link
+                href="/"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-sm font-semibold text-white transition duration-200 hover:bg-white/5 whitespace-nowrap"
+              >
+                mallog24로 돌아가기
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">Current plan</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A]">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
+            <p className="mt-3 text-base leading-7 text-[#64748B] mallog-keep">무료 플랜은 월 10시간까지 사용 가능합니다.</p>
+            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B]">
               {PLAN_SUMMARY.free.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item} className="flex gap-2 mallog-keep"><span className="text-[#3B82F6]">•</span><span>{item}</span></li>
               ))}
             </ul>
             {statusLoading ? (
-              <p className="mt-4 text-white/60">구독 상태를 확인하는 중입니다.</p>
+              <p className="mt-6 text-sm text-[#64748B]">구독 상태를 확인하는 중입니다.</p>
             ) : status ? (
-              <div className="mt-4 space-y-2 text-sm text-white/80">
-                <p>상태: {status.status || 'inactive'}</p>
-                <p>갱신 예정일: {status.current_period_end ? new Date(status.current_period_end).toLocaleString('ko-KR') : '없음'}</p>
-                <p>취소 예약: {status.cancel_at_period_end ? '예' : '아니오'}</p>
+              <div className="mt-6 rounded-2xl bg-[#F8F9FF] p-4 text-sm text-[#64748B]">
+                <p>상태: <span className="font-semibold text-[#0F172A]">{status.status || 'inactive'}</span></p>
+                <p className="mt-2">갱신 예정일: <span className="font-semibold text-[#0F172A]">{status.current_period_end ? new Date(status.current_period_end).toLocaleString('ko-KR') : '없음'}</span></p>
+                <p className="mt-2">취소 예약: <span className="font-semibold text-[#0F172A]">{status.cancel_at_period_end ? '예' : '아니오'}</span></p>
               </div>
             ) : (
-              <p className="mt-4 text-white/60">로그인 후 구독 상태를 확인할 수 있습니다.</p>
+              <p className="mt-6 text-sm text-[#64748B]">로그인 후 구독 상태를 확인할 수 있습니다.</p>
             )}
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-white/60">업그레이드</p>
-            <h2 className="text-2xl font-semibold mt-2">Pro 월간 구독</h2>
-            <p className="text-white/70 mt-2">무제한 사용, 우선 지원, 정기 구독 관리 제공</p>
-            <ul className="mt-4 space-y-2 text-sm text-white/75">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">Upgrade</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A]">Pro 월간 구독</h2>
+            <p className="mt-3 text-base leading-7 text-[#64748B] mallog-keep">무제한 사용, 우선 지원, 구독 관리와 환불 요청 흐름을 제공합니다.</p>
+            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B]">
               {PLAN_SUMMARY.pro.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item} className="flex gap-2 mallog-keep"><span className="text-[#3B82F6]">•</span><span>{item}</span></li>
               ))}
             </ul>
             <div className="mt-6 grid gap-3">
-              <button type="button" onClick={() => startCheckout('card')} className="rounded-2xl bg-white text-[#071021] px-4 py-3 font-semibold">
+              <ActionButton type="button" variant="primary" onClick={() => startCheckout('card')}>
                 {actionLoading === 'checkout_card' ? '결제창 여는 중...' : '카드로 Pro 구독하기'}
-              </button>
-              <button type="button" onClick={() => startCheckout('kakaopay')} className="rounded-2xl bg-[#FEE500] text-[#1D1D1F] px-4 py-3 font-semibold">
+              </ActionButton>
+              <ActionButton type="button" variant="kakao" onClick={() => startCheckout('kakaopay')}>
                 {actionLoading === 'checkout_kakaopay' ? '카카오페이 연결 중...' : '카카오페이로 Pro 구독하기'}
-              </button>
-              <button type="button" onClick={openBillingPortal} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85">
+              </ActionButton>
+              <ActionButton type="button" onClick={openBillingPortal}>
                 {actionLoading === 'portal' ? '이동 중...' : '구독 관리 열기'}
-              </button>
-              <button type="button" onClick={cancelSubscription} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85">
+              </ActionButton>
+              <ActionButton type="button" onClick={cancelSubscription}>
                 {actionLoading === 'cancel' ? '처리 중...' : '구독 취소하기'}
-              </button>
-              <button type="button" onClick={requestRefund} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85">
+              </ActionButton>
+              <ActionButton type="button" onClick={requestRefund}>
                 {actionLoading === 'refund' ? '처리 중...' : '환불 요청하기'}
-              </button>
-              <a href={CONTACT_URL} className="rounded-2xl border border-white/15 px-4 py-3 font-semibold text-white/85 text-center">
+              </ActionButton>
+              <a
+                href={CONTACT_URL}
+                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-5 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap"
+              >
                 구독 문의 메일 보내기
               </a>
             </div>
           </section>
         </div>
 
-        {(message || error) && (
-          <div className={`mt-6 rounded-2xl px-4 py-3 text-sm ${error ? 'bg-red-500/15 text-red-200 border border-red-400/20' : 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/20'}`}>
+        {(message || error) ? (
+          <div className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
             {error || message}
           </div>
-        )}
+        ) : null}
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm text-white/60">Plan comparison</p>
-              <h2 className="text-2xl font-semibold mt-1">가입 전에 핵심 차이만 확인하세요</h2>
-            </div>
-            <p className="text-sm text-white/45">복잡한 옵션 없이 Free와 Pro 두 단계만 운영합니다.</p>
+        <section className="mt-8 rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Pricing comparison</p>
+            <h2 className="mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] mallog-keep">가입 전에 핵심 차이만 확인하세요</h2>
+            <p className="mt-3 text-base leading-7 text-[#64748B] mallog-keep">복잡한 옵션 없이 Free와 Pro 두 단계만 운영합니다.</p>
           </div>
-          <div className="mt-5 overflow-x-auto rounded-3xl border border-white/10">
-            <div className="min-w-[640px]">
-              <div className="grid grid-cols-[1.2fr,1fr,1fr] bg-white/5 text-xs uppercase tracking-[0.14em] text-white/55">
-                <div className="px-4 py-3">항목</div>
-                <div className="px-4 py-3 border-l border-white/10">Free</div>
-                <div className="px-4 py-3 border-l border-white/10">Pro</div>
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+            <div className="min-w-[680px]">
+              <div className="grid grid-cols-[1.2fr,1fr,1fr] bg-[#F8F9FF] text-sm font-semibold text-[#64748B]">
+                <div className="px-5 py-4">항목</div>
+                <div className="border-l border-[#E2E8F0] px-5 py-4">Free</div>
+                <div className="border-l border-[#E2E8F0] px-5 py-4">Pro</div>
               </div>
               {COMPARE_ROWS.map(([label, free, pro]) => (
-                <div key={label} className="grid grid-cols-[1.2fr,1fr,1fr] border-t border-white/10 text-sm">
-                  <div className="px-4 py-3 font-semibold text-white">{label}</div>
-                  <div className="px-4 py-3 border-l border-white/10 text-white/70">{free}</div>
-                  <div className="px-4 py-3 border-l border-white/10 text-white/70">{pro}</div>
+                <div key={label} className="grid grid-cols-[1.2fr,1fr,1fr] border-t border-[#E2E8F0] text-[15px] leading-7 text-[#0F172A]">
+                  <div className="px-5 py-4 font-semibold mallog-keep">{label}</div>
+                  <div className="border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] mallog-keep">{free}</div>
+                  <div className="border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] mallog-keep">{pro}</div>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <div className="grid md:grid-cols-2 gap-6 mt-6">
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-white/60">Billing notes</p>
-            <h2 className="text-2xl font-semibold mt-1">결제 전 확인 사항</h2>
-            <ul className="mt-4 space-y-3 text-sm text-white/75 leading-relaxed">
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">Billing notes</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] mallog-keep">결제 전 확인 사항</h2>
+            <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B]">
               {BILLING_NOTES.map((item) => (
-                <li key={item}>- {item}</li>
+                <li key={item} className="flex gap-2 mallog-keep"><span className="text-[#3B82F6]">•</span><span>{item}</span></li>
               ))}
             </ul>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-white/60">FAQ</p>
-            <h2 className="text-2xl font-semibold mt-1">결제 관련 자주 묻는 질문</h2>
-            <div className="mt-4 space-y-3">
+          <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">FAQ</p>
+            <h2 className="mt-3 text-[28px] font-bold tracking-[-0.02em] text-[#0F172A] mallog-keep">결제 관련 자주 묻는 질문</h2>
+            <div className="mt-5 space-y-3">
               {FAQS.map(([question, answer], index) => {
                 const isOpen = openFaqIndex === index
                 return (
-                  <div key={question} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                  <div key={question} className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-[#F8F9FF]">
                     <button
                       type="button"
                       onClick={() => setOpenFaqIndex(isOpen ? -1 : index)}
-                      className="w-full px-4 py-4 flex items-center justify-between gap-4 text-left"
+                      className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
                       aria-expanded={isOpen}
                     >
-                      <span className="text-sm font-semibold text-white">{question}</span>
-                      <span className={`text-white/55 transition-transform ${isOpen ? 'rotate-45' : ''}`}>+</span>
+                      <span className="text-sm font-semibold text-[#0F172A] mallog-keep">{question}</span>
+                      <span className={`text-[#64748B] transition-transform ${isOpen ? 'rotate-45' : ''}`}>+</span>
                     </button>
-                    {isOpen ? (
-                      <p className="px-4 pb-4 text-sm text-white/70 leading-relaxed">{answer}</p>
-                    ) : null}
+                    {isOpen ? <p className="px-4 pb-4 text-sm leading-7 text-[#64748B] mallog-keep">{answer}</p> : null}
                   </div>
                 )
               })}

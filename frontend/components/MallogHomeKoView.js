@@ -1,5 +1,6 @@
 import Head from 'next/head'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import HeaderMenuControls from './HeaderMenuControls'
 import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
@@ -126,6 +127,28 @@ export default function MallogHomeKoView(props) {
     handleSubmit,
   } = props
 
+  const [isScrolled, setIsScrolled] = useState(false)
+
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 8)
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const navItems = authToken
+    ? [
+        { label: '요금제', href: UPGRADE_CONTACT_URL },
+        { label: '앱 다운로드', href: APP_DOWNLOAD_URL, external: true },
+        { label: '회사 소개', href: OURS_URL, external: true },
+      ]
+    : [
+        { label: '기능', href: '#features' },
+        { label: '결과 예시', href: '#preview' },
+        { label: '요금제', href: '#pricing' },
+        { label: '앱 다운로드', href: APP_DOWNLOAD_URL, external: true },
+      ]
+
   return (
     <div className="min-h-screen pb-12">
       <Head>
@@ -155,42 +178,40 @@ export default function MallogHomeKoView(props) {
         <meta name="twitter:image" content={OG_IMAGE_URL} />
       </Head>
 
-      {/* 헤더 */}
-      <header className="sticky top-0 z-50 bg-nm-bg shadow-nm-flat">
-        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <header
+        className={`sticky top-0 z-50 border-b transition-all duration-200 ${
+          isScrolled || authToken
+            ? darkMode
+              ? 'border-white/10 bg-[rgba(15,23,42,0.8)] backdrop-blur-xl'
+              : 'border-black/[0.06] bg-[rgba(255,255,255,0.8)] backdrop-blur-xl'
+            : 'border-transparent bg-transparent'
+        }`}
+      >
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <a
               href={OURS_URL}
-              className="text-xs font-semibold text-nm-text-secondary hover:text-nm-accent transition-colors"
+              className="text-sm font-semibold text-[#64748B] transition hover:text-[#0F172A] dark:text-white/60 dark:hover:text-white whitespace-nowrap"
             >
               OURS
             </a>
-            <span className="text-nm-text-secondary">/</span>
+            <span className="text-[#CBD5E1] dark:text-white/20">/</span>
             <Mallog24Logo className="h-[18px] w-auto shrink-0" />
           </div>
-          <div className="flex items-center gap-3">
-            <a
-              href={APP_DOWNLOAD_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="hidden sm:inline-flex text-xs font-semibold text-nm-text-secondary hover:text-nm-accent transition-colors"
-            >
-              앱 다운로드
-            </a>
-            <HeaderMenuControls
-              darkMode={darkMode}
-              setDarkMode={setDarkMode}
-              uiTheme={uiTheme}
-              setUiTheme={setUiTheme}
-              uiThemeMode={uiThemeMode}
-              setUiThemeMode={setUiThemeMode}
-              locale="kr"
-            />
-          </div>
+          <HeaderMenuControls
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            uiTheme={uiTheme}
+            setUiTheme={setUiTheme}
+            uiThemeMode={uiThemeMode}
+            setUiThemeMode={setUiThemeMode}
+            locale="kr"
+            navItems={navItems}
+          />
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 pt-6">
+      <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
         {!authToken && (
           <MallogLandingSections
             locale="kr"
