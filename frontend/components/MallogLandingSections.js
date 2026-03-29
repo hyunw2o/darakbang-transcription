@@ -55,40 +55,43 @@ function flattenPreviewItems(sections = []) {
   ))
 }
 
-function FeatureCard({ card, localeTextClass }) {
+function FeatureCard({ card, localeTextClass, darkMode }) {
   const isDark = card.variant === 'dark'
+  const cardClass = isDark
+    ? darkMode
+      ? 'border-white/10 bg-[#0F172A] shadow-[0_18px_40px_rgba(15,23,42,0.26)]'
+      : 'border-[#DBEAFE] bg-[linear-gradient(180deg,#EEF4FF_0%,#FFFFFF_100%)] shadow-[0_10px_30px_rgba(59,130,246,0.12)]'
+    : darkMode
+      ? 'border-white/10 bg-[#111827] shadow-[0_18px_40px_rgba(15,23,42,0.16)]'
+      : 'border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)]'
+  const iconClass = isDark
+    ? darkMode
+      ? 'border-transparent bg-[rgba(59,130,246,0.2)] text-[#93C5FD]'
+      : 'border-[#BFDBFE] bg-[#DBEAFE] text-[#2563EB]'
+    : darkMode
+      ? 'border-white/10 bg-[rgba(59,130,246,0.16)] text-[#93C5FD]'
+      : 'border-[#DBEAFE] bg-[#EFF6FF] text-[#3B82F6]'
+  const titleClass = darkMode ? 'text-white' : 'text-[#0F172A]'
+  const bodyClass = darkMode ? 'text-white/72' : isDark ? 'text-[#475569]' : 'text-[#64748B]'
+
   return (
     <article
-      className={`rounded-2xl border p-6 transition-transform duration-200 hover:-translate-y-1 ${
-        isDark
-          ? 'border-[#DBEAFE] bg-[linear-gradient(180deg,#EEF4FF_0%,#FFFFFF_100%)] shadow-[0_10px_30px_rgba(59,130,246,0.12)] dark:border-white/10 dark:bg-none dark:bg-[#0F172A] dark:shadow-[0_18px_40px_rgba(15,23,42,0.26)]'
-          : 'bg-white border-[#E2E8F0] shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:bg-[#0F172A] dark:border-white/10 dark:shadow-[0_18px_40px_rgba(15,23,42,0.16)]'
-      }`}
+      className={`rounded-2xl border p-6 transition-transform duration-200 hover:-translate-y-1 ${cardClass}`}
     >
-      <div
-        className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl border ${
-          isDark
-            ? 'border-[#BFDBFE] bg-[#DBEAFE] text-[#2563EB] dark:border-transparent dark:bg-[rgba(59,130,246,0.2)] dark:text-[#93C5FD]'
-            : 'border-[#DBEAFE] bg-[#EFF6FF] text-[#3B82F6] dark:border-white/10 dark:bg-[rgba(59,130,246,0.16)] dark:text-[#93C5FD]'
-        }`}
-      >
+      <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl border ${iconClass}`}>
         {FEATURE_ICONS[card.icon]}
       </div>
-      <h3 className={`text-xl font-semibold tracking-[-0.02em] ${isDark ? 'text-[#0F172A] dark:text-white' : 'text-[#0F172A] dark:text-white'} ${localeTextClass}`}>
+      <h3 className={`text-xl font-semibold tracking-[-0.02em] ${titleClass} ${localeTextClass}`}>
         {card.title}
       </h3>
-      <p className={`mt-3 text-base leading-7 ${
-        isDark
-          ? 'text-[#475569] dark:text-[rgba(255,255,255,0.72)]'
-          : 'text-[#64748B] dark:text-[rgba(255,255,255,0.72)]'
-      } ${localeTextClass}`}>
+      <p className={`mt-3 text-base leading-7 ${bodyClass} ${localeTextClass}`}>
         {card.body}
       </p>
     </article>
   )
 }
 
-export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats, appDownloadUrl = '' }) {
+export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats, appDownloadUrl = '', darkMode = false }) {
   const [activePreviewIndex, setActivePreviewIndex] = useState(0)
   const localeTextClass = locale === 'kr' ? 'mallog-keep' : ''
   const authUrl = locale === 'kr' ? '/#auth-card' : '/en#auth-card'
@@ -169,7 +172,7 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {content.features.cards.map((card) => (
-            <FeatureCard key={card.title} card={card} localeTextClass={localeTextClass} />
+            <FeatureCard key={card.title} card={card} localeTextClass={localeTextClass} darkMode={darkMode} />
           ))}
         </div>
       </section>
@@ -223,45 +226,68 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
           })}
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_18px_60px_rgba(15,23,42,0.14)] dark:border-white/8 dark:bg-[#0F172A] dark:shadow-[0_18px_60px_rgba(15,23,42,0.28)]">
-          <div className="flex items-center gap-2 border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-3 dark:border-white/8 dark:bg-[#0F172A]">
+        <div className={`overflow-hidden rounded-2xl border shadow-[0_18px_60px_rgba(15,23,42,0.14)] ${
+          darkMode
+            ? 'border-white/8 bg-[#0F172A] shadow-[0_18px_60px_rgba(15,23,42,0.28)]'
+            : 'border-[#E2E8F0] bg-white'
+        }`}>
+          <div className={`flex items-center gap-2 border-b px-5 py-3 ${
+            darkMode
+              ? 'border-white/8 bg-[#0F172A]'
+              : 'border-[#E2E8F0] bg-[#F8FAFC]'
+          }`}>
             <span className="h-3 w-3 rounded-full bg-[#FB7185]" />
             <span className="h-3 w-3 rounded-full bg-[#FBBF24]" />
             <span className="h-3 w-3 rounded-full bg-[#34D399]" />
-            <span className="ml-3 text-sm font-medium text-[#64748B] dark:text-white/40 whitespace-nowrap">mallog24.com</span>
+            <span className={`ml-3 text-sm font-medium whitespace-nowrap ${darkMode ? 'text-white/40' : 'text-[#64748B]'}`}>mallog24.com</span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[0.92fr,1.08fr]">
-            <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] p-5 lg:border-b-0 lg:border-r dark:border-white/8 dark:bg-[#1E293B]">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#64748B] dark:text-white/35">{content.preview.beforeLabel}</p>
+            <div className={`border-b p-5 lg:border-b-0 lg:border-r ${
+              darkMode
+                ? 'border-white/8 bg-[#1E293B]'
+                : 'border-[#E2E8F0] bg-[#F8FAFC]'
+            }`}>
+              <p className={`font-mono text-[11px] uppercase tracking-[0.18em] ${darkMode ? 'text-white/35' : 'text-[#64748B]'}`}>{content.preview.beforeLabel}</p>
               <div className="mt-4 space-y-3">
                 {activePreview?.sourceLines.map((line) => (
-                  <p key={line} className={`text-[15px] leading-7 text-[#475569] dark:text-[#94A3B8] ${localeTextClass}`}>
+                  <p key={line} className={`text-[15px] leading-7 ${darkMode ? 'text-[#94A3B8]' : 'text-[#475569]'} ${localeTextClass}`}>
                     {line}
                   </p>
                 ))}
               </div>
             </div>
-            <div className="bg-white p-5 dark:bg-[#0F172A]">
+            <div className={`p-5 ${darkMode ? 'bg-[#0F172A]' : 'bg-white'}`}>
               <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#3B82F6]">{content.preview.afterLabel}</p>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
                 {activePreview?.outputSections.map((section) => (
-                  <div key={section.title} className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 dark:border-white/8 dark:bg-white/[0.02]">
-                    <p className={`text-sm font-semibold text-[#0F172A] dark:text-white ${localeTextClass}`}>{section.title}</p>
-                    <ul className="mt-3 space-y-2">
+                  <div
+                    key={section.title}
+                    className={`rounded-2xl border p-4 ${
+                      darkMode
+                        ? 'border-white/8 bg-white/[0.02]'
+                        : 'border-[#E2E8F0] bg-[#F8FAFC]'
+                    }`}
+                  >
+                    <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-[#0F172A]'} ${localeTextClass}`}>{section.title}</p>
+                    <ul className="mt-3 space-y-3">
                       {section.items.map((item, itemIndex) => (
                         <li
                           key={item}
-                          className={`mallog-output-item flex items-start gap-2 text-[15px] leading-7 text-[#475569] dark:text-[rgba(255,255,255,0.74)] ${localeTextClass}`}
+                          className={`mallog-output-item flex items-start gap-3 text-[15px] leading-7 ${darkMode ? 'text-[rgba(255,255,255,0.74)]' : 'text-[#475569]'} ${localeTextClass}`}
                           style={{ animationDelay: `${(itemIndex + 1 + activePreview.outputSections.indexOf(section) * 2) * 90}ms` }}
                         >
-                          <span className="mt-[11px] text-[#3B82F6]">•</span>
-                          <span>{item}</span>
+                          <span className="mt-[11px] shrink-0 text-[#3B82F6]">•</span>
+                          <span className="flex-1">{item}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                 ))}
-                <div className="rounded-2xl border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm text-[#2563EB] dark:border-[#3B82F6]/20 dark:bg-[#111C34] dark:text-[#93C5FD]">
+                <div className={`rounded-2xl border px-4 py-3 text-sm ${
+                  darkMode
+                    ? 'border-[#3B82F6]/20 bg-[#111C34] text-[#93C5FD] xl:col-span-2'
+                    : 'border-[#BFDBFE] bg-[#EFF6FF] text-[#2563EB] xl:col-span-2'
+                }`}>
                   {locale === 'kr'
                     ? `${previewItems.length}개의 구조화 항목이 전사 결과에서 바로 생성됩니다.`
                     : `${previewItems.length} structured items are generated directly from the transcript.`}

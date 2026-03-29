@@ -220,6 +220,7 @@ export default function MallogHomeEnView(props) {
             oursUrl={OURS_URL}
             stats={landingStats}
             appDownloadUrl={APP_DOWNLOAD_URL}
+            darkMode={darkMode}
           />
         )}
 
