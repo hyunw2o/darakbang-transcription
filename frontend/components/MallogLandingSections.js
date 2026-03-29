@@ -276,7 +276,7 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
                           className={`mallog-output-item flex items-start gap-3 text-[15px] leading-7 ${darkMode ? 'text-[rgba(255,255,255,0.74)]' : 'text-[#475569]'} ${localeTextClass}`}
                           style={{ animationDelay: `${(itemIndex + 1 + activePreview.outputSections.indexOf(section) * 2) * 90}ms` }}
                         >
-                          <span className="mt-[11px] shrink-0 text-[#3B82F6]">•</span>
+                          <span className="mt-[11px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#3B82F6]" />
                           <span className="flex-1">{item}</span>
                         </li>
                       ))}
