@@ -162,10 +162,10 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <section id="features" className="landing-anchor-offset space-y-6">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">{content.features.eyebrow}</p>
-          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
             {content.features.title}
           </h2>
-          <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{content.features.description}</p>
+          <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.features.description}</p>
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {content.features.cards.map((card) => (
@@ -174,20 +174,20 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
         </div>
       </section>
 
-      <section id="workflow" className="landing-anchor-offset rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 lg:px-10">
+      <section id="workflow" className="landing-anchor-offset rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 lg:px-10 dark:bg-[#0B1224] dark:ring-1 dark:ring-white/8">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">{content.workflow.eyebrow}</p>
-          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
             {content.workflow.title}
           </h2>
-          <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{content.workflow.description}</p>
+          <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.workflow.description}</p>
         </div>
         <div className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
           {content.workflow.steps.map((step) => (
-            <article key={step.step} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+            <article key={step.step} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.04)] dark:border-white/10 dark:bg-[#111827] dark:shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
               <span className="inline-flex rounded-full bg-[#DBEAFE] px-3 py-1 text-xs font-semibold text-[#2563EB]">{step.step}</span>
-              <h3 className={`mt-4 text-xl font-semibold tracking-[-0.02em] text-[#0F172A] ${localeTextClass}`}>{step.title}</h3>
-              <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{step.body}</p>
+              <h3 className={`mt-4 text-xl font-semibold tracking-[-0.02em] text-[#0F172A] dark:text-white ${localeTextClass}`}>{step.title}</h3>
+              <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{step.body}</p>
             </article>
           ))}
         </div>
@@ -196,10 +196,10 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <section id="preview" className="landing-anchor-offset space-y-6">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">{content.preview.eyebrow}</p>
-          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
             {content.preview.title}
           </h2>
-          <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{content.preview.description}</p>
+          <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.preview.description}</p>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -213,7 +213,7 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
                 className={`inline-flex min-h-[44px] items-center justify-center rounded-lg border px-4 py-2.5 text-sm font-semibold transition whitespace-nowrap ${
                   isActive
                     ? 'border-transparent bg-[linear-gradient(135deg,#3B82F6,#7C3AED)] text-white shadow-[0_12px_24px_rgba(59,130,246,0.2)]'
-                    : 'border-[#E2E8F0] bg-white text-[#0F172A] hover:bg-[#F8F9FF]'
+                    : 'border-[#E2E8F0] bg-white text-[#0F172A] hover:bg-[#F8F9FF] dark:border-white/10 dark:bg-[#111827] dark:text-white/80 dark:hover:bg-white/10 dark:hover:text-white'
                 }`}
                 aria-pressed={isActive}
               >
@@ -228,11 +228,11 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
             <span className="h-3 w-3 rounded-full bg-[#FB7185]" />
             <span className="h-3 w-3 rounded-full bg-[#FBBF24]" />
             <span className="h-3 w-3 rounded-full bg-[#34D399]" />
-            <span className="ml-3 text-sm font-medium text-[#64748B] whitespace-nowrap">mallog24.com</span>
+            <span className="ml-3 text-sm font-medium text-[#64748B] dark:text-white/40 whitespace-nowrap">mallog24.com</span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[0.92fr,1.08fr]">
             <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] p-5 lg:border-b-0 lg:border-r dark:border-white/8 dark:bg-[#1E293B]">
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#64748B]">{content.preview.beforeLabel}</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#64748B] dark:text-white/35">{content.preview.beforeLabel}</p>
               <div className="mt-4 space-y-3">
                 {activePreview?.sourceLines.map((line) => (
                   <p key={line} className={`text-[15px] leading-7 text-[#475569] dark:text-[#94A3B8] ${localeTextClass}`}>
@@ -275,63 +275,63 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <section id="use-cases" className="landing-anchor-offset space-y-6">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">{content.useCases.eyebrow}</p>
-          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
             {content.useCases.title}
           </h2>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {content.useCases.cards.map((card) => (
-            <article key={card.title} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-              <h3 className={`text-xl font-semibold tracking-[-0.02em] text-[#0F172A] ${localeTextClass}`}>{card.title}</h3>
-              <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{card.body}</p>
+            <article key={card.title} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-[#111827] dark:shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
+              <h3 className={`text-xl font-semibold tracking-[-0.02em] text-[#0F172A] dark:text-white ${localeTextClass}`}>{card.title}</h3>
+              <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{card.body}</p>
             </article>
           ))}
         </div>
       </section>
 
       {hasStats ? (
-        <section id="stats" className="landing-anchor-offset rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 lg:px-10">
+        <section id="stats" className="landing-anchor-offset rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 lg:px-10 dark:bg-[#0B1224] dark:ring-1 dark:ring-white/8">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Metrics</p>
-              <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+              <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
                 {content.stats.title}
               </h2>
-              <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{content.stats.description}</p>
+              <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.stats.description}</p>
             </div>
-            {stats?.updatedAt ? <p className="text-sm text-[#64748B]">{content.stats.updatedPrefix}: {stats.updatedAt}</p> : null}
+            {stats?.updatedAt ? <p className="text-sm text-[#64748B] dark:text-white/60">{content.stats.updatedPrefix}: {stats.updatedAt}</p> : null}
           </div>
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {statsCards.map((card) => (
-              <article key={card.key} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
-                <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B]">{card.label}</p>
-                <p className={`mt-3 text-xl font-semibold leading-tight text-[#0F172A] ${localeTextClass}`}>{card.value}</p>
+              <article key={card.key} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.04)] dark:border-white/10 dark:bg-[#111827] dark:shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
+                <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">{card.label}</p>
+                <p className={`mt-3 text-xl font-semibold leading-tight text-[#0F172A] dark:text-white ${localeTextClass}`}>{card.value}</p>
               </article>
             ))}
           </div>
         </section>
       ) : null}
 
-      <section id="pricing" className="landing-anchor-offset rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 lg:px-10">
+      <section id="pricing" className="landing-anchor-offset rounded-[24px] bg-[#F8F9FF] px-6 py-8 sm:px-8 lg:px-10 dark:bg-[#0B1224] dark:ring-1 dark:ring-white/8">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">Pricing</p>
-          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
             {content.comparison.title}
           </h2>
-          <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{content.comparison.description}</p>
+          <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.comparison.description}</p>
         </div>
-        <div className="mt-8 overflow-x-auto rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+        <div className="mt-8 overflow-x-auto rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] dark:border-white/10 dark:bg-[#111827] dark:shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
           <div className="min-w-[720px]">
-            <div className="grid grid-cols-[1.2fr,0.9fr,0.9fr] bg-[#F8F9FF] text-sm font-semibold text-[#64748B]">
+            <div className="grid grid-cols-[1.2fr,0.9fr,0.9fr] bg-[#F8F9FF] text-sm font-semibold text-[#64748B] dark:bg-white/[0.04] dark:text-white/60">
               <div className="px-5 py-4">{content.comparison.columns.feature}</div>
-              <div className="border-l border-[#E2E8F0] px-5 py-4">{content.comparison.columns.free}</div>
-              <div className="border-l border-[#E2E8F0] px-5 py-4">{content.comparison.columns.pro}</div>
+              <div className="border-l border-[#E2E8F0] px-5 py-4 dark:border-white/10">{content.comparison.columns.free}</div>
+              <div className="border-l border-[#E2E8F0] px-5 py-4 dark:border-white/10">{content.comparison.columns.pro}</div>
             </div>
             {content.comparison.rows.map((row) => (
-              <div key={row.feature} className="grid grid-cols-[1.2fr,0.9fr,0.9fr] border-t border-[#E2E8F0] text-[15px] leading-7 text-[#0F172A]">
+              <div key={row.feature} className="grid grid-cols-[1.2fr,0.9fr,0.9fr] border-t border-[#E2E8F0] text-[15px] leading-7 text-[#0F172A] dark:border-white/10 dark:text-white">
                 <div className={`px-5 py-4 font-semibold ${localeTextClass}`}>{row.feature}</div>
-                <div className={`border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] ${localeTextClass}`}>{row.free}</div>
-                <div className={`border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] ${localeTextClass}`}>{row.pro}</div>
+                <div className={`border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] dark:border-white/10 dark:text-white/70 ${localeTextClass}`}>{row.free}</div>
+                <div className={`border-l border-[#E2E8F0] px-5 py-4 text-[#64748B] dark:border-white/10 dark:text-white/70 ${localeTextClass}`}>{row.pro}</div>
               </div>
             ))}
           </div>
@@ -341,27 +341,27 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
       <section id="faq" className="landing-anchor-offset space-y-6">
         <div className="max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#3B82F6]">FAQ</p>
-          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+          <h2 className={`mt-3 text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
             {content.faq.title}
           </h2>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {content.faq.items.map((faq) => (
-            <article key={faq.question} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
-              <h3 className={`text-lg font-semibold tracking-[-0.02em] text-[#0F172A] ${localeTextClass}`}>{faq.question}</h3>
-              <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{faq.answer}</p>
+            <article key={faq.question} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/10 dark:bg-[#111827] dark:shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
+              <h3 className={`text-lg font-semibold tracking-[-0.02em] text-[#0F172A] dark:text-white ${localeTextClass}`}>{faq.question}</h3>
+              <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{faq.answer}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white px-6 py-8 shadow-[0_4px_24px_rgba(0,0,0,0.06)] sm:px-8 lg:px-10">
+      <section className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white px-6 py-8 shadow-[0_4px_24px_rgba(0,0,0,0.06)] sm:px-8 lg:px-10 dark:border-white/10 dark:bg-[#111827] dark:shadow-[0_18px_40px_rgba(2,6,23,0.34)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-3xl">
-            <h2 className={`text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] sm:text-[36px] ${localeTextClass}`}>
+            <h2 className={`text-[30px] font-bold leading-tight tracking-[-0.02em] text-[#0F172A] dark:text-white sm:text-[36px] ${localeTextClass}`}>
               {content.ctaBanner.title}
             </h2>
-            <p className={`mt-3 text-base leading-7 text-[#64748B] ${localeTextClass}`}>{content.ctaBanner.body}</p>
+            <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.ctaBanner.body}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
             <Link
@@ -372,7 +372,7 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
             </Link>
             <Link
               href={pricingUrl}
-              className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] px-6 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap"
+              className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] px-6 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap dark:border-white/10 dark:text-white dark:hover:bg-white/10"
             >
               {content.ctaBanner.secondaryLabel}
             </Link>
@@ -381,7 +381,7 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
                 href={appDownloadUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] px-6 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] px-6 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap dark:border-white/10 dark:text-white dark:hover:bg-white/10"
               >
                 {locale === 'kr' ? '앱 다운로드' : 'Download App'}
               </a>
