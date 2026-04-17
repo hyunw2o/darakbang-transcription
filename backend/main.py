@@ -281,9 +281,20 @@ WHISPER_CHUNK_MAX_RETRIES = max(1, int(os.getenv("WHISPER_CHUNK_MAX_RETRIES", "2
 WHISPER_FALLBACK_TO_GEMINI_ON_ERROR = (
     os.getenv("WHISPER_FALLBACK_TO_GEMINI_ON_ERROR", "true").strip().lower() == "true"
 )
+GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS = max(
+    0,
+    int(os.getenv("GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS", "600")),
+)
 WHISPER_MAX_PIPELINE_AUDIO_SECONDS = max(
     0,
-    int(os.getenv("WHISPER_MAX_PIPELINE_AUDIO_SECONDS", "2400")),
+    int(os.getenv("WHISPER_MAX_PIPELINE_AUDIO_SECONDS", "0")),
+)
+PREFER_WHISPER_FOR_LONG_AUDIO = (
+    os.getenv("PREFER_WHISPER_FOR_LONG_AUDIO", "true").strip().lower() == "true"
+)
+WHISPER_SEGMENT_SECONDS = max(
+    60,
+    int(os.getenv("WHISPER_SEGMENT_SECONDS", "360")),
 )
 
 # 외부 프로세스/LLM 타임아웃
@@ -2654,47 +2665,79 @@ def _build_record_draft_prompt(category: str, language: str = "ko") -> str:
     return prompt_map.get(category, prompt_map["meeting_keywords"])
 
 
+def _gemini_audio_continuity_guard(language: str) -> str:
+    if language == "en":
+        return (
+            "[Continuity Guard]\n"
+            "- Start at the first audible speech and keep the original chronological order.\n"
+            "- Never repeat one segment to fill uncertain or silent audio.\n"
+            "- If a portion is unclear, mark it once as [unclear] and continue.\n"
+            "- Do not invent missing content or loop earlier sentences."
+        )
+    if language == "ja":
+        return (
+            "[連続性ガード]\n"
+            "- 最初に聞こえる発話から開始し、元の時系列を保ってください。\n"
+            "- 不明瞭または無音の区間を埋めるために同じ箇所を繰り返さないでください。\n"
+            "- 不明瞭な部分は一度だけ[不明瞭]と記し、その後の音声へ進んでください。\n"
+            "- 欠落した内容を創作したり、前の文をループさせたりしないでください。"
+        )
+    return (
+        "[연속성/반복 방지]\n"
+        "- 첫 번째로 들리는 발화부터 시작하고 원본 시간 순서를 유지하라.\n"
+        "- 불명확하거나 무음인 구간을 채우기 위해 특정 구간을 반복 생성하지 마라.\n"
+        "- 알아듣기 어려운 부분은 [불명확]으로 한 번만 표시하고 다음 구간으로 진행하라.\n"
+        "- 누락된 내용을 창작하거나 앞 문장을 루프처럼 반복하지 마라."
+    )
+
+
 def _build_gemini_only_system_instruction(
     language: str,
     transcription_type: str,
     custom_terms: list[str] | None = None,
 ) -> str:
     if language == "ko":
-        return get_gemini_prompt(custom_terms)
+        return f"{get_gemini_prompt(custom_terms)}\n\n{_gemini_audio_continuity_guard(language)}"
     if language == "ja":
         if transcription_type == "phonecall":
             return (
                 "あなたは日本語通話録音の高精度文字起こしエンジンです。"
                 "音声に含まれる内容を省略せず、話者の切り替わりを維持しながら全文を書き起こしてください。"
                 "聞き取りにくい単語は文脈から補正し、不要な要約や説明は加えないでください。"
+                f"\n\n{_gemini_audio_continuity_guard(language)}"
             )
         if transcription_type == "conversation":
             return (
                 "あなたは日本語会議録音の高精度文字起こしエンジンです。"
                 "複数話者の発言順を保ち、内容を省略せず全文を書き起こしてください。"
                 "不明瞭な語は前後文脈から自然に復元し、要約や説明を加えないでください。"
+                f"\n\n{_gemini_audio_continuity_guard(language)}"
             )
         return (
             "あなたは日本語説教・講義録音の高精度文字起こしエンジンです。"
             "一人の話者の長い発話も途切れさせず、内容を省略せず全文を書き起こしてください。"
             "不明瞭な語は文脈から復元し、不要な説明や要約は加えないでください。"
+            f"\n\n{_gemini_audio_continuity_guard(language)}"
         )
     if transcription_type == "phonecall":
         return (
             "You are a high-accuracy English phone-call transcription engine. "
             "Transcribe the full conversation without summarizing, preserve speaker turns, "
             "and restore unclear words from context when confidence is reasonable."
+            f"\n\n{_gemini_audio_continuity_guard(language)}"
         )
     if transcription_type == "conversation":
         return (
             "You are a high-accuracy English meeting transcription engine. "
             "Transcribe all audible content without summarizing, preserve turn changes, "
             "and recover unclear specialized terms from context when possible."
+            f"\n\n{_gemini_audio_continuity_guard(language)}"
         )
     return (
         "You are a high-accuracy English sermon and lecture transcription engine. "
         "Transcribe all audible content without summarizing, preserving long monologues and "
         "restoring unclear words from context when possible."
+        f"\n\n{_gemini_audio_continuity_guard(language)}"
     )
 
 
@@ -2704,7 +2747,7 @@ def _build_gemini_only_content_prompt(
     custom_terms: list[str] | None = None,
 ) -> str:
     if language == "ko":
-        return get_gemini_content_prompt(custom_terms)
+        return f"{get_gemini_content_prompt(custom_terms)}\n\n{_gemini_audio_continuity_guard(language)}"
     custom_term_hint = ""
     if custom_terms:
         joined = ", ".join(term.strip() for term in custom_terms if term.strip())
@@ -2719,13 +2762,13 @@ def _build_gemini_only_content_prompt(
             "phonecall": "この音声を日本語の通話記録として全文文字起こししてください。話者交代を保ち、日程・数量・固有名詞を正確に書いてください。",
             "conversation": "この音声を日本語の会議記録として全文文字起こししてください。話者交代を保ち、決定・担当・期限に関わる情報を落とさないでください。",
         }.get(transcription_type, "この音声を日本語で全文文字起こししてください。内容を省略しないでください。")
-        return f"{base_prompt}{custom_term_hint}"
+        return f"{base_prompt}{custom_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
     base_prompt = {
         "sermon": "Transcribe this audio fully in English. Treat it as a sermon or lecture, keep natural paragraph breaks, and do not summarize.",
         "phonecall": "Transcribe this audio fully in English as a phone call. Preserve speaker turns and keep names, times, numbers, and commitments accurate.",
         "conversation": "Transcribe this audio fully in English as a meeting or discussion. Preserve speaker turns and keep decisions, owners, and deadlines intact.",
     }.get(transcription_type, "Transcribe this audio fully in English without summarizing.")
-    return f"{base_prompt}{custom_term_hint}"
+    return f"{base_prompt}{custom_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
 
 
 def _split_transcript_body_and_tail(text: str) -> tuple[list[str], list[str]]:
@@ -3033,6 +3076,52 @@ def _normalize_transcript_line_breaks(text: str) -> str:
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned
 
+
+def _repeat_detection_key(value: str) -> str:
+    compact = re.sub(r"\s+", " ", (value or "").strip())
+    compact = re.sub(r"[^\w가-힣ぁ-んァ-ヶ一-龥]+", " ", compact, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", compact).strip().lower()
+
+
+def _collapse_pathological_repeats(text: str) -> str:
+    """
+    STT/LLM이 같은 구간을 여러 번 반복 생성하는 경우만 보수적으로 접는다.
+    실제 반복 발화를 보존하기 위해 3회 이상 연속 반복되고 충분히 긴 블록/라인만 1회로 축약한다.
+    """
+    if not text:
+        return text
+
+    def collapse_units(units: list[str], joiner: str) -> str:
+        output: list[str] = []
+        index = 0
+        while index < len(units):
+            current = units[index]
+            key = _repeat_detection_key(current)
+            if len(key) < 12:
+                output.append(current)
+                index += 1
+                continue
+
+            end = index + 1
+            while end < len(units) and _repeat_detection_key(units[end]) == key:
+                end += 1
+
+            if end - index >= 3:
+                output.append(current)
+            else:
+                output.extend(units[index:end])
+            index = end
+        return joiner.join(output)
+
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    paragraphs = [block.strip() for block in re.split(r"\n{2,}", normalized) if block.strip()]
+    if paragraphs:
+        normalized = collapse_units(paragraphs, "\n\n")
+
+    lines = normalized.split("\n")
+    normalized = collapse_units(lines, "\n")
+    return normalized
+
 def get_optimal_model():
     """Gemini 모델 동적 선택"""
     if _model_cache["model"] and (time.time() - _model_cache["cached_at"]) < MODEL_CACHE_TTL:
@@ -3088,6 +3177,8 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
             [
                 ffmpeg_bin,
                 "-y",
+                "-fflags",
+                "+genpts",
                 "-i",
                 file_path,
                 "-vn",
@@ -3112,26 +3203,41 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
 
     prepared_size = os.path.getsize(prepared_path) if os.path.exists(prepared_path) else 0
     prepared_duration = _extract_duration_with_ffprobe(prepared_path)
-    if prepared_size <= WHISPER_MAX_SIZE:
+    if prepared_size <= WHISPER_MAX_SIZE and prepared_duration <= WHISPER_SEGMENT_SECONDS:
         return [(prepared_path, prepared_duration)]
 
-    # 2) 8분 단위로 분할 (복사 기반 분할로 메모리 절약)
+    # 2) 짧은 단위로 재인코딩 분할한다.
+    # MP3 copy 분할은 프레임/타임스탬프 경계가 흔들려 앞부분 누락이나 반복 전사를 유발할 수 있다.
     chunk_pattern = f"{prepared_path}_chunk_%03d.mp3"
     try:
         subprocess.run(
             [
                 ffmpeg_bin,
                 "-y",
+                "-fflags",
+                "+genpts",
                 "-i",
                 prepared_path,
                 "-f",
                 "segment",
                 "-segment_time",
-                "480",
+                str(WHISPER_SEGMENT_SECONDS),
                 "-reset_timestamps",
                 "1",
-                "-c",
-                "copy",
+                "-map",
+                "0:a:0",
+                "-c:a",
+                "libmp3lame",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                "-b:a",
+                "32k",
+                "-segment_format",
+                "mp3",
+                "-avoid_negative_ts",
+                "make_zero",
                 chunk_pattern,
             ],
             stdout=subprocess.DEVNULL,
@@ -3418,6 +3524,30 @@ async def gemini_correct_and_structure(
                 "- 문맥 확신이 낮은 단어는 임의로 다른 고유명사/전문용어로 치환하지 마라.\n"
                 "- 확신이 없으면 원문 표기를 유지하라."
             )
+    if language == "en":
+        correction_prompt += (
+            "\n\n[Repeat/Drop Guard]\n"
+            "- Preserve the transcript from the first line in chronological order.\n"
+            "- Do not generate repeated paragraphs or reuse one section to fill missing text.\n"
+            "- If the source contains unclear content, keep a single [unclear] marker instead of inventing or looping text.\n"
+            "- If the same paragraph appears 3 or more times by generation error, keep it once."
+        )
+    elif language == "ja":
+        correction_prompt += (
+            "\n\n[反復・欠落防止]\n"
+            "- 文字起こしの最初の行から時系列を保ってください。\n"
+            "- 同じ段落を生成で繰り返したり、一つの区間で不足分を埋めたりしないでください。\n"
+            "- 不明瞭な内容は一度だけ[不明瞭]とし、創作やループを避けてください。\n"
+            "- 生成エラーで同じ段落が3回以上続く場合は1回だけ残してください。"
+        )
+    else:
+        correction_prompt += (
+            "\n\n[반복/누락 방지]\n"
+            "- 원본 텍스트 첫 줄부터 시간 순서를 유지하라.\n"
+            "- 같은 문단을 반복 생성하거나 한 구간을 재사용해 빈 내용을 채우지 마라.\n"
+            "- 불명확한 내용은 [불명확]으로 한 번만 표시하고 창작/루프를 피하라.\n"
+            "- 생성 오류로 동일 문단이 3회 이상 이어지면 1회만 남겨라."
+        )
 
     model = genai.GenerativeModel(
         target_model,
@@ -3551,6 +3681,7 @@ def _postprocess_transcript(
     )
     if normalized_mode == "strict":
         corrected = _enforce_speaker_separation(corrected, transcription_type, language)
+    corrected = _collapse_pathological_repeats(corrected)
     return _normalize_transcript_line_breaks(corrected)
 
 
@@ -3586,13 +3717,15 @@ def _process_transcription_sync(
         use_whisper_pipeline = _should_use_whisper_pipeline()
         if (
             use_whisper_pipeline
+            and not PREFER_WHISPER_FOR_LONG_AUDIO
             and WHISPER_MAX_PIPELINE_AUDIO_SECONDS > 0
             and audio_seconds > WHISPER_MAX_PIPELINE_AUDIO_SECONDS
         ):
             use_whisper_pipeline = False
             print(
                 f"[{task_id}] Skip Whisper for long audio "
-                f"({audio_seconds}s > {WHISPER_MAX_PIPELINE_AUDIO_SECONDS}s); using Gemini-only."
+                f"({audio_seconds}s > {WHISPER_MAX_PIPELINE_AUDIO_SECONDS}s, "
+                "PREFER_WHISPER_FOR_LONG_AUDIO=false); using Gemini-only."
             )
 
         if use_whisper_pipeline:
@@ -3642,7 +3775,16 @@ def _process_transcription_sync(
                 )
                 _log_stage_memory(task_id, "after_postprocess")
             except Exception as whisper_error:
-                if not WHISPER_FALLBACK_TO_GEMINI_ON_ERROR:
+                allow_gemini_fallback = WHISPER_FALLBACK_TO_GEMINI_ON_ERROR and (
+                    GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS <= 0
+                    or audio_seconds <= 0
+                    or audio_seconds <= GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS
+                )
+                if not allow_gemini_fallback:
+                    print(
+                        f"[{task_id}] Whisper pipeline failed and Gemini-only fallback is blocked "
+                        f"for this audio length ({audio_seconds}s, max={GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS}s)."
+                    )
                     raise
                 print(
                     f"[{task_id}] Whisper pipeline failed, fallback to Gemini-only: {whisper_error}"
@@ -3664,7 +3806,11 @@ def _process_transcription_sync(
             mode = _resolved_engine_mode()
             if openai_client is None:
                 reason = "openai unavailable"
-            elif WHISPER_MAX_PIPELINE_AUDIO_SECONDS > 0 and audio_seconds > WHISPER_MAX_PIPELINE_AUDIO_SECONDS:
+            elif (
+                not PREFER_WHISPER_FOR_LONG_AUDIO
+                and WHISPER_MAX_PIPELINE_AUDIO_SECONDS > 0
+                and audio_seconds > WHISPER_MAX_PIPELINE_AUDIO_SECONDS
+            ):
                 reason = "long audio guard"
             else:
                 reason = "mode forced"
