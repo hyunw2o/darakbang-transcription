@@ -302,6 +302,7 @@ FFMPEG_PROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("FFMPEG_PROCESS_TIMEOUT_S
 FFPROBE_PROCESS_TIMEOUT_SECONDS = max(10, int(os.getenv("FFPROBE_PROCESS_TIMEOUT_SECONDS", "30")))
 GEMINI_REQUEST_TIMEOUT_SECONDS = max(60, int(os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "600")))
 GEMINI_MAX_OUTPUT_TOKENS = max(4096, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "32768")))
+GEMINI_CORRECTION_CHUNK_CHARS = max(4000, int(os.getenv("GEMINI_CORRECTION_CHUNK_CHARS", "12000")))
 
 # OpenAI (Whisper) 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -3122,6 +3123,78 @@ def _collapse_pathological_repeats(text: str) -> str:
     normalized = collapse_units(lines, "\n")
     return normalized
 
+
+def _split_large_text_block(block: str, max_chars: int) -> list[str]:
+    pieces: list[str] = []
+    cursor = 0
+    source = block.strip()
+    sentence_marks = ".!?。！？\n"
+
+    while cursor < len(source):
+        hard_end = min(len(source), cursor + max_chars)
+        if hard_end >= len(source):
+            piece = source[cursor:].strip()
+            if piece:
+                pieces.append(piece)
+            break
+
+        window = source[cursor:hard_end]
+        split_at = -1
+        for mark in sentence_marks:
+            split_at = max(split_at, window.rfind(mark))
+
+        if split_at < int(max_chars * 0.55):
+            split_at = max_chars
+        else:
+            split_at += 1
+
+        piece = source[cursor:cursor + split_at].strip()
+        if piece:
+            pieces.append(piece)
+        cursor += split_at
+
+    return pieces
+
+
+def _split_text_for_gemini_correction(text: str, max_chars: int) -> list[str]:
+    """
+    긴 Whisper 원문을 Gemini 교정 단계에서 잘리지 않도록 안전한 길이로 나눈다.
+    문단 경계를 우선 유지하고, 너무 긴 문단만 문장/문자 기준으로 분리한다.
+    """
+    normalized = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        return []
+    if len(normalized) <= max_chars:
+        return [normalized]
+
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", normalized) if part.strip()]
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    def flush_current() -> None:
+        nonlocal current, current_len
+        if current:
+            chunks.append("\n\n".join(current).strip())
+            current = []
+            current_len = 0
+
+    for paragraph in paragraphs:
+        if len(paragraph) > max_chars:
+            flush_current()
+            chunks.extend(_split_large_text_block(paragraph, max_chars))
+            continue
+
+        extra_len = len(paragraph) + (2 if current else 0)
+        if current and current_len + extra_len > max_chars:
+            flush_current()
+
+        current.append(paragraph)
+        current_len += extra_len
+
+    flush_current()
+    return chunks
+
 def get_optimal_model():
     """Gemini 모델 동적 선택"""
     if _model_cache["model"] and (time.time() - _model_cache["cached_at"]) < MODEL_CACHE_TTL:
@@ -3476,6 +3549,10 @@ def whisper_transcribe(
         if not best_text:
             raise RuntimeError(f"Whisper chunk {i+1}/{len(chunks)} returned no transcript.")
 
+        print(
+            f"  Chunk {i+1}/{len(chunks)} done: "
+            f"duration={chunk_duration_sec:.1f}s, chars={len(best_text)}"
+        )
         all_text.append(best_text)
 
         # 청크 파일 삭제 (원본 제외)
@@ -3557,27 +3634,82 @@ async def gemini_correct_and_structure(
     )
 
     label = "Original Text" if language == "en" else "元の文字起こし" if language == "ja" else "원본 텍스트"
-    prompt_parts = [correction_prompt, f"[{label}]", raw_text]
-
-    response = None
     max_retries = 5
 
-    for attempt in range(max_retries):
-        try:
-            response = model.generate_content(
-                prompt_parts,
-                request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS}
-            )
-            break
-        except Exception as e:
-            if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
-                wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
-                print(f"[{task_id}] Quota exceeded (429). Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
-                await asyncio.sleep(wait_time)
-            else:
-                raise e
+    async def run_correction_prompt(prompt_parts: list[str], run_label: str) -> str:
+        response = None
+        for attempt in range(max_retries):
+            try:
+                _touch_task_runtime_state(task_id)
+                response = model.generate_content(
+                    prompt_parts,
+                    request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS}
+                )
+                _touch_task_runtime_state(task_id)
+                break
+            except Exception as e:
+                if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                    print(
+                        f"[{task_id}] Gemini correction quota/retryable error in {run_label}. "
+                        f"Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})"
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise e
 
-    return (response.text or "").strip()
+        return (response.text or "").strip() if response else ""
+
+    chunks = _split_text_for_gemini_correction(raw_text, GEMINI_CORRECTION_CHUNK_CHARS)
+    if len(chunks) > 1:
+        print(
+            f"[{task_id}] Gemini correction chunking enabled: "
+            f"{len(chunks)} chunks, raw={len(raw_text)} chars, max={GEMINI_CORRECTION_CHUNK_CHARS}"
+        )
+        corrected_chunks: list[str] = []
+        for index, chunk in enumerate(chunks, start=1):
+            if language == "en":
+                chunk_instruction = (
+                    f"[Segment Correction {index}/{len(chunks)}]\n"
+                    "- This is one continuous segment from a longer transcript.\n"
+                    "- Correct this segment only; do not summarize the whole recording.\n"
+                    "- Preserve every audible sentence in this segment and keep chronological order.\n"
+                    "- Do not add final conclusions unless they are explicitly present in this segment.\n"
+                    "- Continue naturally; do not repeat previous or future segments."
+                )
+            elif language == "ja":
+                chunk_instruction = (
+                    f"[分割補正 {index}/{len(chunks)}]\n"
+                    "- これは長い文字起こしの一部です。\n"
+                    "- この区間だけを補正し、録音全体を要約しないでください。\n"
+                    "- この区間の発話を省略せず、時系列を保ってください。\n"
+                    "- この区間に明示されていない結論や締め文を追加しないでください。\n"
+                    "- 前後の区間を繰り返さないでください。"
+                )
+            else:
+                chunk_instruction = (
+                    f"[분할 교정 {index}/{len(chunks)}]\n"
+                    "- 이것은 긴 녹취 원문의 일부 구간이다.\n"
+                    "- 이 구간만 교정하고, 녹음 전체를 요약하지 마라.\n"
+                    "- 이 구간에 있는 모든 발화를 빠짐없이 보존하고 시간 순서를 유지하라.\n"
+                    "- 이 구간에 명시되지 않은 결론/마무리 문장을 추가하지 마라.\n"
+                    "- 앞/뒤 구간 내용을 반복하지 마라."
+                )
+
+            corrected_chunk = await run_correction_prompt(
+                [correction_prompt, chunk_instruction, f"[{label} {index}/{len(chunks)}]", chunk],
+                f"chunk {index}/{len(chunks)}",
+            )
+            if not corrected_chunk and chunk.strip():
+                corrected_chunk = chunk.strip()
+            corrected_chunks.append(corrected_chunk)
+
+        return "\n\n".join(part for part in corrected_chunks if part).strip()
+
+    if not chunks:
+        return ""
+
+    return await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
 
 
 def _is_retryable_gemini_error(error: Exception) -> bool:
