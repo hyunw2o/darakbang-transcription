@@ -10,6 +10,8 @@ const GUEST_MAX_AUDIO_SECONDS = 600
 const GUEST_SESSION_STORAGE_KEY = 'mallog24_guest_session_id'
 const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
 const STATUS_POLL_INTERVAL_MS = 3000
+const STATUS_POLL_REQUEST_TIMEOUT_MS = 12000
+const STATUS_POLL_MAX_FAILURES = 5
 const HISTORY_DELETE_CONFIRM_WINDOW_MS = 5000
 
 const TRANSCRIPTION_MESSAGES = {
@@ -19,7 +21,9 @@ const TRANSCRIPTION_MESSAGES = {
     browserDurationFallback: '브라우저에서 길이 확인에 실패해 업로드는 진행합니다. 서버에서 길이를 다시 검사합니다.',
     pollingSlow: '상태 확인 응답이 지연되고 있습니다. 잠시 후 다시 확인해 주세요.',
     pollingNetwork: '네트워크 오류로 상태 확인이 불안정합니다. 잠시 후 다시 확인해 주세요.',
+    pollingFailed: '상태 확인이 반복해서 실패했습니다. 잠시 후 새 변환으로 다시 시도해 주세요.',
     processingSlow: '처리 시간이 길어지고 있습니다. 잠시 후 히스토리에서 다시 확인해 주세요.',
+    taskNotFound: '작업 상태를 찾을 수 없습니다. 새로 변환을 다시 시도해 주세요.',
     taskIdLabel: '작업 ID',
     signinRequired: '파일 변환은 로그인 후 이용할 수 있습니다.',
     guestTranscribeHint: '비로그인 체험은 파일 1개당 최대 10분, 총 30분까지 가능합니다.',
@@ -59,7 +63,9 @@ const TRANSCRIPTION_MESSAGES = {
     browserDurationFallback: 'Could not read duration in browser. Upload continues and the server will validate duration.',
     pollingSlow: 'Status checks are delayed. Please try again shortly.',
     pollingNetwork: 'Network errors are interrupting status checks. Please try again shortly.',
+    pollingFailed: 'Status checks failed repeatedly. Please try a new transcription shortly.',
     processingSlow: 'This task is taking longer than expected. Please check it again from History shortly.',
+    taskNotFound: 'Task status was not found. Please try a new transcription.',
     taskIdLabel: 'Task ID',
     signinRequired: 'Sign in is required before transcription.',
     guestTranscribeHint: 'Guest trial supports up to 10 minutes per file and 30 minutes total.',
@@ -274,6 +280,15 @@ export default function useMallogTranscription({
     clearPollResultCommitTimer()
   }, [clearPollResultCommitTimer])
 
+  const failPolling = useCallback((taskId, message) => {
+    stopPolling()
+    activeTaskIdRef.current = ''
+    setLoading(false)
+    setCurrentStep(0)
+    setError(message)
+    setNotice(`${messages.taskIdLabel}: ${taskId}`)
+  }, [messages.taskIdLabel, setError, setNotice, stopPolling])
+
   const invalidatePollingSession = useCallback(() => {
     pollTokenRef.current += 1
     activeTaskIdRef.current = ''
@@ -482,7 +497,7 @@ export default function useMallogTranscription({
     activeTaskIdRef.current = taskId
     pollStartTime.current = Date.now()
     pollFailureCountRef.current = 0
-    setCurrentStep(1)
+    setCurrentStep(2)
 
     pollInterval.current = window.setInterval(async () => {
       try {
@@ -502,16 +517,37 @@ export default function useMallogTranscription({
           return
         }
 
-        const res = await apiFetch(`${apiUrl}/api/status/${taskId}`, {
-          headers: getTranscriptionHeaders(),
-          credentials: authToken ? 'include' : 'omit',
-        })
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+        const timeoutId = controller
+          ? window.setTimeout(() => controller.abort(), STATUS_POLL_REQUEST_TIMEOUT_MS)
+          : null
+        let res
+        try {
+          res = await apiFetch(`${apiUrl}/api/status/${taskId}`, {
+            headers: getTranscriptionHeaders(),
+            credentials: authToken ? 'include' : 'omit',
+            signal: controller?.signal,
+          })
+        } finally {
+          if (timeoutId) {
+            window.clearTimeout(timeoutId)
+          }
+        }
 
         if (!res.ok) {
+          const data = await safeReadJson(res)
+          const detail = data?.detail || data?.message || ''
+          if ([401, 403, 404].includes(res.status)) {
+            failPolling(taskId, detail || messages.taskNotFound)
+            return
+          }
           pollFailureCountRef.current += 1
+          if (pollFailureCountRef.current >= STATUS_POLL_MAX_FAILURES) {
+            failPolling(taskId, detail || messages.pollingFailed)
+            return
+          }
           if (pollFailureCountRef.current >= 3) {
             showToast(messages.pollingSlow)
-            pollFailureCountRef.current = 0
           }
           return
         }
@@ -523,7 +559,9 @@ export default function useMallogTranscription({
         pollFailureCountRef.current = 0
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
-        if (data.status === 'completed') {
+        if (data.status === 'queued') {
+          setCurrentStep(2)
+        } else if (data.status === 'completed') {
           stopPolling()
           setCurrentStep(3)
           pollResultCommitTimerRef.current = window.setTimeout(() => {
@@ -549,18 +587,23 @@ export default function useMallogTranscription({
           setCurrentStep(0)
         } else if (data.status === 'processing') {
           setCurrentStep(3)
+        } else if (data.status === 'not_found') {
+          failPolling(taskId, messages.taskNotFound)
         }
       } catch (error) {
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
         pollFailureCountRef.current += 1
+        if (pollFailureCountRef.current >= STATUS_POLL_MAX_FAILURES) {
+          failPolling(taskId, messages.pollingFailed)
+          return
+        }
         if (pollFailureCountRef.current >= 3) {
           showToast(messages.pollingNetwork)
-          pollFailureCountRef.current = 0
         }
         console.error('Polling error', error)
       }
     }, STATUS_POLL_INTERVAL_MS)
-  }, [apiUrl, authToken, fetchGuestUsage, fetchHistory, fetchUsage, getTranscriptionHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
+  }, [apiUrl, authToken, failPolling, fetchGuestUsage, fetchHistory, fetchUsage, getTranscriptionHeaders, locale, messages.pollingFailed, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
 
   const handleSubmit = useCallback(async (event, usage) => {
     event.preventDefault()
