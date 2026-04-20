@@ -176,6 +176,10 @@ FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 �
 GUEST_TRANSCRIPTION_ENABLED = os.getenv("GUEST_TRANSCRIPTION_ENABLED", "true").strip().lower() == "true"
 GUEST_MONTHLY_LIMIT_SECONDS = max(60, int(os.getenv("GUEST_MONTHLY_LIMIT_SECONDS", "1800")))
 GUEST_MAX_AUDIO_SECONDS = max(60, int(os.getenv("GUEST_MAX_AUDIO_SECONDS", "600")))
+GUEST_INLINE_MAX_AUDIO_SECONDS = max(
+    0,
+    int(os.getenv("GUEST_INLINE_MAX_AUDIO_SECONDS", str(GUEST_MAX_AUDIO_SECONDS))),
+)
 GUEST_IP_MONTHLY_LIMIT_SECONDS = max(
     GUEST_MONTHLY_LIMIT_SECONDS,
     int(os.getenv("GUEST_IP_MONTHLY_LIMIT_SECONDS", str(GUEST_MONTHLY_LIMIT_SECONDS * 3))),
@@ -4344,6 +4348,43 @@ async def transcribe_audio(
                 "error": None,
             })
 
+        type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
+        engine_name = "whisper+gemini" if openai_client else "gemini-only"
+
+        if is_guest and GUEST_INLINE_MAX_AUDIO_SECONDS > 0 and audio_seconds <= GUEST_INLINE_MAX_AUDIO_SECONDS:
+            queued_for_processing = True
+            await process_transcription(
+                task_id,
+                user_id,
+                temp_file_path,
+                normalized_language,
+                correct,
+                normalized_transcription_type,
+                normalized_correction_mode,
+                source_mime_type,
+                audio_seconds,
+                None,
+                is_guest,
+            )
+            temp_file_path = ""
+            direct_result = _get_guest_task_result(task_id, user_id)
+            if not direct_result:
+                raise HTTPException(status_code=500, detail="변환 결과를 확인하지 못했습니다. 다시 시도해 주세요.")
+            if str(direct_result.get("status") or "") == "error":
+                raise HTTPException(
+                    status_code=500,
+                    detail=str(direct_result.get("error") or "변환에 실패했습니다."),
+                )
+            return {
+                **direct_result,
+                "success": True,
+                "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환이 완료되었습니다.",
+                "correction_mode": normalized_correction_mode,
+                "audio_seconds": audio_seconds,
+                "quota": _build_guest_usage_snapshot(user_id),
+                "guest": True,
+            }
+
         background_tasks.add_task(
             process_transcription,
             task_id,
@@ -4360,14 +4401,12 @@ async def transcribe_audio(
         )
         queued_for_processing = True
 
-        type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
-
         return {
             "success": True,
             "task_id": task_id,
             "status": "queued",
             "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환 작업이 시작되었습니다.",
-            "engine": "whisper+gemini" if openai_client else "gemini-only",
+            "engine": engine_name,
             "transcription_type": normalized_transcription_type,
             "correction_mode": normalized_correction_mode,
             "audio_seconds": audio_seconds,
