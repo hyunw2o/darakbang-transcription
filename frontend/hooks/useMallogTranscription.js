@@ -182,6 +182,9 @@ export default function useMallogTranscription({
 
   const getTranscriptionHeaders = useCallback((token = authToken) => {
     const headers = { ...getAuthHeaders(token) }
+    if (token) {
+      return headers
+    }
     const resolvedGuestId = guestSessionId || ensureGuestSessionId()
     if (resolvedGuestId) {
       headers['X-Guest-Session-Id'] = resolvedGuestId
