@@ -180,6 +180,10 @@ GUEST_INLINE_MAX_AUDIO_SECONDS = max(
     0,
     int(os.getenv("GUEST_INLINE_MAX_AUDIO_SECONDS", str(GUEST_MAX_AUDIO_SECONDS))),
 )
+INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS = max(
+    0,
+    int(os.getenv("INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS", "180")),
+)
 GUEST_IP_MONTHLY_LIMIT_SECONDS = max(
     GUEST_MONTHLY_LIMIT_SECONDS,
     int(os.getenv("GUEST_IP_MONTHLY_LIMIT_SECONDS", str(GUEST_MONTHLY_LIMIT_SECONDS * 3))),
@@ -4195,24 +4199,25 @@ def _process_transcription_sync(
 
         _clear_task_runtime_state(task_id)
         _log_stage_memory(task_id, "completed")
+        return completed_payload
 
     except Exception as e:
         print(f"Transcription error: {e}")
         import traceback
         traceback.print_exc()
+        error_payload = {
+            "task_id": task_id,
+            "status": "error",
+            "error": str(e),
+            "created_at": datetime.now().isoformat(),
+            "language": language,
+            "transcription_type": transcription_type,
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+        }
         _set_task_runtime_state(task_id, "error", owner_id=user_id)
         try:
-            error_payload = {
-                "task_id": task_id,
-                "status": "error",
-                "error": str(e),
-                "created_at": datetime.now().isoformat(),
-                "language": language,
-                "transcription_type": transcription_type,
-                "raw_text": "",
-                "corrected_text": "",
-                "characters": 0,
-            }
             if is_guest:
                 _set_guest_task_result(task_id, user_id, error_payload)
             else:
@@ -4220,6 +4225,7 @@ def _process_transcription_sync(
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
         _log_stage_memory(task_id, "error")
+        return error_payload
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
@@ -4246,7 +4252,7 @@ async def process_transcription(
 ):
     """이벤트 루프를 막지 않도록 변환 로직을 별도 스레드에서 실행한다."""
     async with transcription_semaphore:
-        await asyncio.to_thread(
+        return await asyncio.to_thread(
             _process_transcription_sync,
             task_id,
             user_id,
@@ -4350,10 +4356,21 @@ async def transcribe_audio(
 
         type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
         engine_name = "whisper+gemini" if openai_client else "gemini-only"
+        should_return_inline = (
+            audio_seconds > 0
+            and (
+                (is_guest and GUEST_INLINE_MAX_AUDIO_SECONDS > 0 and audio_seconds <= GUEST_INLINE_MAX_AUDIO_SECONDS)
+                or (
+                    (not is_guest)
+                    and INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS > 0
+                    and audio_seconds <= INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS
+                )
+            )
+        )
 
-        if is_guest and GUEST_INLINE_MAX_AUDIO_SECONDS > 0 and audio_seconds <= GUEST_INLINE_MAX_AUDIO_SECONDS:
+        if should_return_inline:
             queued_for_processing = True
-            await process_transcription(
+            direct_result = await process_transcription(
                 task_id,
                 user_id,
                 temp_file_path,
@@ -4367,7 +4384,6 @@ async def transcribe_audio(
                 is_guest,
             )
             temp_file_path = ""
-            direct_result = _get_guest_task_result(task_id, user_id)
             if not direct_result:
                 raise HTTPException(status_code=500, detail="변환 결과를 확인하지 못했습니다. 다시 시도해 주세요.")
             if str(direct_result.get("status") or "") == "error":
@@ -4381,8 +4397,15 @@ async def transcribe_audio(
                 "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환이 완료되었습니다.",
                 "correction_mode": normalized_correction_mode,
                 "audio_seconds": audio_seconds,
-                "quota": _build_guest_usage_snapshot(user_id),
-                "guest": True,
+                "quota": (
+                    _build_guest_usage_snapshot(user_id)
+                    if is_guest
+                    else _build_usage_snapshot(
+                        _get_or_create_usage_row(user["id"]),
+                        is_admin_bypass=_is_admin_bypass_user(user=user),
+                    )
+                ),
+                "guest": is_guest,
             }
 
         background_tasks.add_task(
