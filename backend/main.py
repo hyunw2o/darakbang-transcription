@@ -173,8 +173,18 @@ DEBATE_CONTEXT_HINTS = (
 )
 FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
 FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
+GUEST_TRANSCRIPTION_ENABLED = os.getenv("GUEST_TRANSCRIPTION_ENABLED", "true").strip().lower() == "true"
+GUEST_MONTHLY_LIMIT_SECONDS = max(60, int(os.getenv("GUEST_MONTHLY_LIMIT_SECONDS", "1800")))
+GUEST_MAX_AUDIO_SECONDS = max(60, int(os.getenv("GUEST_MAX_AUDIO_SECONDS", "600")))
+GUEST_IP_MONTHLY_LIMIT_SECONDS = max(
+    GUEST_MONTHLY_LIMIT_SECONDS,
+    int(os.getenv("GUEST_IP_MONTHLY_LIMIT_SECONDS", str(GUEST_MONTHLY_LIMIT_SECONDS * 3))),
+)
+GUEST_RESULT_TTL_SECONDS = max(600, int(os.getenv("GUEST_RESULT_TTL_SECONDS", "7200")))
+GUEST_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
 USAGE_TABLE_NAME = "user_usage_quotas"
 USAGE_FREE_PLAN = "free"
+USAGE_GUEST_PLAN = "guest"
 USAGE_ADMIN_PLAN = "admin"
 USAGE_TIMEZONE = (os.getenv("USAGE_TIMEZONE") or "Asia/Seoul").strip() or "Asia/Seoul"
 ADMIN_BYPASS_USER_IDS = {
@@ -254,7 +264,7 @@ app.add_middleware(
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Guest-Session-Id"],
 )
 
 
@@ -527,6 +537,10 @@ _auth_user_cache: dict[str, dict] = {}
 _auth_http_client: httpx.AsyncClient | None = None
 _auth_active_sessions: dict[str, list[dict]] = defaultdict(list)
 _auth_session_state_lock = threading.Lock()
+_guest_usage: dict[str, dict] = {}
+_guest_ip_usage: dict[str, dict] = {}
+_guest_task_results: dict[str, dict] = {}
+_guest_state_lock = threading.Lock()
 
 
 def _cleanup_stale_task_states() -> None:
@@ -561,6 +575,189 @@ def _clear_task_runtime_state(task_id: str) -> None:
     task_status.pop(task_id, None)
     task_owner.pop(task_id, None)
     task_updated_at.pop(task_id, None)
+
+
+def _cleanup_guest_state() -> None:
+    now_ts = time.time()
+    current_month = _current_usage_month_start()
+    with _guest_state_lock:
+        stale_usage_keys = [
+            key
+            for key, row in _guest_usage.items()
+            if str((row or {}).get("usage_month") or "") != current_month
+        ]
+        stale_ip_keys = [
+            key
+            for key, row in _guest_ip_usage.items()
+            if str((row or {}).get("usage_month") or "") != current_month
+        ]
+        stale_result_keys = [
+            key
+            for key, row in _guest_task_results.items()
+            if float((row or {}).get("expires_at") or 0) <= now_ts
+        ]
+        for key in stale_usage_keys:
+            _guest_usage.pop(key, None)
+        for key in stale_ip_keys:
+            _guest_ip_usage.pop(key, None)
+        for key in stale_result_keys:
+            _guest_task_results.pop(key, None)
+
+
+def _normalize_guest_session_id(raw_value: str | None) -> str:
+    guest_id = (raw_value or "").strip()
+    if not guest_id:
+        raise HTTPException(status_code=401, detail="게스트 세션이 필요합니다.")
+    if not GUEST_SESSION_ID_PATTERN.match(guest_id):
+        raise HTTPException(status_code=400, detail="게스트 세션 형식이 올바르지 않습니다.")
+    return guest_id
+
+
+def _guest_owner_id(guest_session_id: str) -> str:
+    digest = hashlib.sha256(guest_session_id.encode("utf-8")).hexdigest()[:32]
+    return f"guest:{digest}"
+
+
+def _client_ip_hash(request: Request | None) -> str:
+    if request is None:
+        return ""
+    forwarded_for = (request.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip()
+    ip_value = forwarded_for or (request.client.host if request.client else "")
+    if not ip_value:
+        return ""
+    return hashlib.sha256(ip_value.encode("utf-8")).hexdigest()[:32]
+
+
+def _build_guest_usage_snapshot(owner_id: str) -> dict:
+    _cleanup_guest_state()
+    current_month = _current_usage_month_start()
+    with _guest_state_lock:
+        row = _guest_usage.setdefault(
+            owner_id,
+            {
+                "plan_tier": USAGE_GUEST_PLAN,
+                "used_audio_seconds": 0,
+                "usage_month": current_month,
+            },
+        )
+        if str(row.get("usage_month") or "") != current_month:
+            row.update({"used_audio_seconds": 0, "usage_month": current_month})
+        used_seconds = max(0, int(row.get("used_audio_seconds") or 0))
+    remaining_seconds = max(0, GUEST_MONTHLY_LIMIT_SECONDS - used_seconds)
+    return {
+        "plan_tier": USAGE_GUEST_PLAN,
+        "used_audio_seconds": used_seconds,
+        "monthly_limit_seconds": GUEST_MONTHLY_LIMIT_SECONDS,
+        "remaining_seconds": remaining_seconds,
+        "usage_percent": min(100.0, round((used_seconds / GUEST_MONTHLY_LIMIT_SECONDS) * 100, 2)),
+        "usage_month": current_month,
+        "can_upload": remaining_seconds > 0,
+        "is_admin_bypass": False,
+        "max_audio_seconds": GUEST_MAX_AUDIO_SECONDS,
+    }
+
+
+def _enforce_guest_upload_quota_or_raise(owner_id: str, upload_audio_seconds: int, request: Request | None) -> dict:
+    if not GUEST_TRANSCRIPTION_ENABLED:
+        raise HTTPException(status_code=401, detail="로그인 후 파일 변환을 사용할 수 있습니다.")
+    if upload_audio_seconds <= 0:
+        raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없습니다.")
+    if upload_audio_seconds > GUEST_MAX_AUDIO_SECONDS:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"비로그인 체험은 파일 1개당 최대 {max(1, GUEST_MAX_AUDIO_SECONDS // 60)}분까지 가능합니다. "
+                "긴 파일은 로그인 후 이용해 주세요."
+            ),
+        )
+
+    _cleanup_guest_state()
+    current_month = _current_usage_month_start()
+    ip_key = _client_ip_hash(request)
+    with _guest_state_lock:
+        row = _guest_usage.setdefault(
+            owner_id,
+            {
+                "plan_tier": USAGE_GUEST_PLAN,
+                "used_audio_seconds": 0,
+                "usage_month": current_month,
+            },
+        )
+        if str(row.get("usage_month") or "") != current_month:
+            row.update({"used_audio_seconds": 0, "usage_month": current_month})
+
+        projected = int(row.get("used_audio_seconds") or 0) + upload_audio_seconds
+        if projected > GUEST_MONTHLY_LIMIT_SECONDS:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"비로그인 체험 제공량({max(1, GUEST_MONTHLY_LIMIT_SECONDS // 60)}분)을 모두 사용했습니다. "
+                    "로그인하면 무료 월 10시간을 사용할 수 있습니다."
+                ),
+            )
+
+        ip_row = None
+        if ip_key:
+            ip_row = _guest_ip_usage.setdefault(
+                ip_key,
+                {"used_audio_seconds": 0, "usage_month": current_month},
+            )
+            if str(ip_row.get("usage_month") or "") != current_month:
+                ip_row.update({"used_audio_seconds": 0, "usage_month": current_month})
+            ip_projected = int(ip_row.get("used_audio_seconds") or 0) + upload_audio_seconds
+            if ip_projected > GUEST_IP_MONTHLY_LIMIT_SECONDS:
+                raise HTTPException(
+                    status_code=429,
+                    detail="현재 네트워크에서 비로그인 체험 한도를 초과했습니다. 로그인 후 이용해 주세요.",
+                )
+            ip_row["used_audio_seconds"] = ip_projected
+
+        row["used_audio_seconds"] = projected
+
+    return _build_guest_usage_snapshot(owner_id)
+
+
+def _set_guest_task_result(task_id: str, owner_id: str, payload: dict) -> None:
+    _cleanup_guest_state()
+    with _guest_state_lock:
+        _guest_task_results[task_id] = {
+            "owner_id": owner_id,
+            "expires_at": time.time() + GUEST_RESULT_TTL_SECONDS,
+            "payload": dict(payload or {}),
+        }
+
+
+def _get_guest_task_result(task_id: str, owner_id: str) -> dict | None:
+    _cleanup_guest_state()
+    with _guest_state_lock:
+        row = _guest_task_results.get(task_id)
+        if not row or row.get("owner_id") != owner_id:
+            return None
+        return dict(row.get("payload") or {})
+
+
+async def _resolve_transcription_owner(
+    authorization: str | None,
+    guest_session_id: str | None,
+    request: Request | None,
+) -> dict:
+    if authorization:
+        user = await _get_current_user(authorization)
+        return {
+            "owner_id": user["id"],
+            "user": user,
+            "is_guest": False,
+            "usage_snapshot": None,
+        }
+
+    guest_id = _normalize_guest_session_id(guest_session_id)
+    owner_id = _guest_owner_id(guest_id)
+    return {
+        "owner_id": owner_id,
+        "user": None,
+        "is_guest": True,
+        "usage_snapshot": _build_guest_usage_snapshot(owner_id),
+    }
 
 
 def _cleanup_auth_user_cache() -> None:
@@ -3828,6 +4025,7 @@ def _process_transcription_sync(
     source_mime_type: str = "",
     audio_seconds: int = 0,
     custom_terms: list[str] = None,
+    is_guest: bool = False,
 ):
     """백그라운드 변환 로직: Whisper STT → Gemini 교정"""
     raw_text = ""
@@ -3835,15 +4033,16 @@ def _process_transcription_sync(
     engine = "gemini-only"
     try:
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
-        _upsert_transcription_state(task_id, user_id, {
-            "status": "processing",
-            "language": language,
-            "transcription_type": transcription_type,
-            "raw_text": "",
-            "corrected_text": "",
-            "characters": 0,
-            "error": None,
-        })
+        if not is_guest:
+            _upsert_transcription_state(task_id, user_id, {
+                "status": "processing",
+                "language": language,
+                "transcription_type": transcription_type,
+                "raw_text": "",
+                "corrected_text": "",
+                "characters": 0,
+                "error": None,
+            })
         _log_stage_memory(task_id, "start")
 
         use_whisper_pipeline = _should_use_whisper_pipeline()
@@ -3963,7 +4162,8 @@ def _process_transcription_sync(
         # 결과 저장
         created_at = datetime.now().isoformat()
 
-        _upsert_transcription_state(task_id, user_id, {
+        completed_payload = {
+            "task_id": task_id,
             "status": "completed",
             "created_at": created_at,
             "language": language,
@@ -3973,10 +4173,19 @@ def _process_transcription_sync(
             "darakbang_optimized": transcription_type == "sermon",
             "engine": engine,
             "transcription_type": transcription_type,
+            "content_style": _infer_content_style(
+                text=(corrected_text or raw_text),
+                transcription_type=transcription_type,
+                language=language,
+            ),
             "error": None,
-        })
+        }
 
-        _increment_user_usage_seconds(user_id, audio_seconds)
+        if is_guest:
+            _set_guest_task_result(task_id, user_id, completed_payload)
+        else:
+            _upsert_transcription_state(task_id, user_id, completed_payload)
+            _increment_user_usage_seconds(user_id, audio_seconds)
 
         _clear_task_runtime_state(task_id)
         _log_stage_memory(task_id, "completed")
@@ -3987,7 +4196,8 @@ def _process_transcription_sync(
         traceback.print_exc()
         _set_task_runtime_state(task_id, "error", owner_id=user_id)
         try:
-            _upsert_transcription_state(task_id, user_id, {
+            error_payload = {
+                "task_id": task_id,
                 "status": "error",
                 "error": str(e),
                 "created_at": datetime.now().isoformat(),
@@ -3996,7 +4206,11 @@ def _process_transcription_sync(
                 "raw_text": "",
                 "corrected_text": "",
                 "characters": 0,
-            })
+            }
+            if is_guest:
+                _set_guest_task_result(task_id, user_id, error_payload)
+            else:
+                _upsert_transcription_state(task_id, user_id, error_payload)
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
         _log_stage_memory(task_id, "error")
@@ -4022,6 +4236,7 @@ async def process_transcription(
     source_mime_type: str = "",
     audio_seconds: int = 0,
     custom_terms: list[str] = None,
+    is_guest: bool = False,
 ):
     """이벤트 루프를 막지 않도록 변환 로직을 별도 스레드에서 실행한다."""
     async with transcription_semaphore:
@@ -4037,11 +4252,13 @@ async def process_transcription(
             source_mime_type,
             audio_seconds,
             custom_terms,
+            is_guest,
         )
 
 
 @app.post("/api/transcribe")
 async def transcribe_audio(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     language: str = Form("ko"),
@@ -4049,16 +4266,20 @@ async def transcribe_audio(
     transcription_type: str = Form("conversation"),
     correction_mode: str = Form("normal"),
     authorization: str | None = Header(default=None),
+    x_guest_session_id: str | None = Header(default=None),
 ):
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
     temp_file_path = ""
     queued_for_processing = False
     try:
-        # 파일 변환은 로그인 사용자만 허용
-        _ensure_transcriptions_user_scope_ready()
-        _ensure_user_usage_scope_ready()
-        user = await _get_current_user(authorization)
-        user_id = user["id"]
+        owner = await _resolve_transcription_owner(authorization, x_guest_session_id, request)
+        user = owner["user"]
+        user_id = owner["owner_id"]
+        is_guest = bool(owner["is_guest"])
+
+        if not is_guest:
+            _ensure_transcriptions_user_scope_ready()
+            _ensure_user_usage_scope_ready()
 
         normalized_language = (language or "ko").strip().lower()
         if normalized_language not in ALLOWED_LANGUAGES:
@@ -4099,22 +4320,27 @@ async def transcribe_audio(
         temp_file_path = normalized_temp_path
 
         audio_seconds = _extract_audio_duration_seconds(temp_file_path)
-        usage_snapshot = _enforce_upload_quota_or_raise(user, audio_seconds)
+        usage_snapshot = (
+            _enforce_guest_upload_quota_or_raise(user_id, audio_seconds, request)
+            if is_guest
+            else _enforce_upload_quota_or_raise(user, audio_seconds)
+        )
 
         task_id = str(uuid.uuid4())
         _set_task_runtime_state(task_id, "queued", owner_id=user_id)
-        _upsert_transcription_state(task_id, user_id, {
-            "status": "queued",
-            "created_at": datetime.now().isoformat(),
-            "language": normalized_language,
-            "raw_text": "",
-            "corrected_text": "",
-            "characters": 0,
-            "darakbang_optimized": normalized_transcription_type == "sermon",
-            "engine": "whisper+gemini" if openai_client else "gemini-only",
-            "transcription_type": normalized_transcription_type,
-            "error": None,
-        })
+        if not is_guest:
+            _upsert_transcription_state(task_id, user_id, {
+                "status": "queued",
+                "created_at": datetime.now().isoformat(),
+                "language": normalized_language,
+                "raw_text": "",
+                "corrected_text": "",
+                "characters": 0,
+                "darakbang_optimized": normalized_transcription_type == "sermon",
+                "engine": "whisper+gemini" if openai_client else "gemini-only",
+                "transcription_type": normalized_transcription_type,
+                "error": None,
+            })
 
         background_tasks.add_task(
             process_transcription,
@@ -4127,6 +4353,8 @@ async def transcribe_audio(
             normalized_correction_mode,
             source_mime_type,
             audio_seconds,
+            None,
+            is_guest,
         )
         queued_for_processing = True
 
@@ -4142,6 +4370,7 @@ async def transcribe_audio(
             "correction_mode": normalized_correction_mode,
             "audio_seconds": audio_seconds,
             "quota": usage_snapshot,
+            "guest": is_guest,
         }
 
     except HTTPException:
@@ -4156,13 +4385,17 @@ async def transcribe_audio(
 
 @app.get("/api/status/{task_id}")
 async def get_task_status(
+    request: Request,
     task_id: str,
     authorization: str | None = Header(default=None),
+    x_guest_session_id: str | None = Header(default=None),
 ):
     """작업 상태 조회"""
-    _ensure_transcriptions_user_scope_ready()
-    user = await _get_current_user(authorization)
-    user_id = user["id"]
+    owner = await _resolve_transcription_owner(authorization, x_guest_session_id, request)
+    user_id = owner["owner_id"]
+    is_guest = bool(owner["is_guest"])
+    if not is_guest:
+        _ensure_transcriptions_user_scope_ready()
     _cleanup_stale_task_states()
     runtime_status: str | None = None
 
@@ -4183,6 +4416,16 @@ async def get_task_status(
                 }
             runtime_status = status
             return {"task_id": task_id, "status": runtime_status}
+
+    if is_guest:
+        guest_result = _get_guest_task_result(task_id, user_id)
+        if guest_result:
+            if str(guest_result.get("status") or "") in {"completed", "error"}:
+                _clear_task_runtime_state(task_id)
+            return guest_result
+        if runtime_status in {"queued", "processing"}:
+            return {"task_id": task_id, "status": runtime_status}
+        return {"task_id": task_id, "status": "not_found"}
 
     query = (
         _get_supabase_client().table("transcriptions")
@@ -4399,6 +4642,19 @@ async def get_usage(authorization: str | None = Header(default=None)):
     return {
         "success": True,
         **snapshot,
+    }
+
+
+@app.get("/api/guest/usage")
+async def get_guest_usage(x_guest_session_id: str | None = Header(default=None)):
+    """비로그인 체험 사용량 조회"""
+    if not GUEST_TRANSCRIPTION_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+    guest_id = _normalize_guest_session_id(x_guest_session_id)
+    owner_id = _guest_owner_id(guest_id)
+    return {
+        "success": True,
+        **_build_guest_usage_snapshot(owner_id),
     }
 
 

@@ -5,6 +5,9 @@ import { sanitizeFileName, triggerBlobDownload } from '../utils/format'
 import { apiFetch, safeReadJson } from '../utils/network'
 
 const FREE_MONTHLY_LIMIT_SECONDS = 36000
+const GUEST_MONTHLY_LIMIT_SECONDS = 1800
+const GUEST_MAX_AUDIO_SECONDS = 600
+const GUEST_SESSION_STORAGE_KEY = 'mallog24_guest_session_id'
 const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
 const STATUS_POLL_INTERVAL_MS = 3000
 const HISTORY_DELETE_CONFIRM_WINDOW_MS = 5000
@@ -19,6 +22,8 @@ const TRANSCRIPTION_MESSAGES = {
     processingSlow: '처리 시간이 길어지고 있습니다. 잠시 후 히스토리에서 다시 확인해 주세요.',
     taskIdLabel: '작업 ID',
     signinRequired: '파일 변환은 로그인 후 이용할 수 있습니다.',
+    guestTranscribeHint: '비로그인 체험은 파일 1개당 최대 10분, 총 30분까지 가능합니다.',
+    guestTranscribeStart: '비로그인 체험 변환하기',
     selectFile: '파일을 선택해주세요.',
     transcribeFailed: '변환 실패',
     loadHistoryFailed: '해당 기록을 불러올 수 없습니다.',
@@ -57,6 +62,8 @@ const TRANSCRIPTION_MESSAGES = {
     processingSlow: 'This task is taking longer than expected. Please check it again from History shortly.',
     taskIdLabel: 'Task ID',
     signinRequired: 'Sign in is required before transcription.',
+    guestTranscribeHint: 'Guest trial supports up to 10 minutes per file and 30 minutes total.',
+    guestTranscribeStart: 'Start Guest Trial',
     selectFile: 'Please select an audio file.',
     transcribeFailed: 'Transcription failed.',
     loadHistoryFailed: 'Unable to load this record.',
@@ -123,6 +130,15 @@ export default function useMallogTranscription({
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
   const [savingCategory, setSavingCategory] = useState('')
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
+  const [guestSessionId, setGuestSessionId] = useState('')
+  const [guestUsage, setGuestUsage] = useState({
+    plan_tier: 'guest',
+    used_audio_seconds: 0,
+    monthly_limit_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
+    remaining_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
+    usage_percent: 0,
+    max_audio_seconds: GUEST_MAX_AUDIO_SECONDS,
+  })
 
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
@@ -143,6 +159,56 @@ export default function useMallogTranscription({
     }
     return data || {}
   }, [])
+
+  const ensureGuestSessionId = useCallback(() => {
+    if (typeof window === 'undefined') return ''
+    const existing = window.localStorage.getItem(GUEST_SESSION_STORAGE_KEY)
+    if (existing) return existing
+
+    const generated = window.crypto?.randomUUID
+      ? window.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+    const guestId = `guest-${generated}`
+    window.localStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestId)
+    return guestId
+  }, [])
+
+  useEffect(() => {
+    const resolvedGuestId = ensureGuestSessionId()
+    if (resolvedGuestId) {
+      setGuestSessionId(resolvedGuestId)
+    }
+  }, [ensureGuestSessionId])
+
+  const getTranscriptionHeaders = useCallback((token = authToken) => {
+    const headers = { ...getAuthHeaders(token) }
+    const resolvedGuestId = guestSessionId || ensureGuestSessionId()
+    if (resolvedGuestId) {
+      headers['X-Guest-Session-Id'] = resolvedGuestId
+    }
+    return headers
+  }, [authToken, ensureGuestSessionId, getAuthHeaders, guestSessionId])
+
+  const fetchGuestUsage = useCallback(async () => {
+    const resolvedGuestId = guestSessionId || ensureGuestSessionId()
+    if (!resolvedGuestId) return null
+    try {
+      const res = await apiFetch(`${apiUrl}/api/guest/usage`, {
+        headers: { 'X-Guest-Session-Id': resolvedGuestId },
+      })
+      const data = await readResponseData(res, messages.quotaExceeded)
+      setGuestUsage(data)
+      return data
+    } catch (error) {
+      console.error('Failed to fetch guest usage', error)
+      return null
+    }
+  }, [apiUrl, ensureGuestSessionId, guestSessionId, messages.quotaExceeded, readResponseData])
+
+  useEffect(() => {
+    if (authToken) return
+    fetchGuestUsage()
+  }, [authToken, fetchGuestUsage])
 
   const resolveContentStyle = useCallback((data) => {
     const explicit = String(data?.content_style || '').trim().toLowerCase()
@@ -318,9 +384,11 @@ export default function useMallogTranscription({
     }
 
     const currentUsage = usage || null
-    const isFreeTier = (currentUsage?.plan_tier || 'free') === 'free'
-    const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds || FREE_MONTHLY_LIMIT_SECONDS
-    const remainingQuotaSeconds = isFreeTier
+    const planTier = currentUsage?.plan_tier || (authToken ? 'free' : 'guest')
+    const isLimitedTier = planTier === 'free' || planTier === 'guest'
+    const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds || (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+    const maxAudioSeconds = Number(currentUsage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
+    const remainingQuotaSeconds = isLimitedTier
       ? Math.max(0, currentUsage?.remaining_seconds ?? monthlyLimitSeconds)
       : Number.MAX_SAFE_INTEGER
 
@@ -331,7 +399,16 @@ export default function useMallogTranscription({
       const durationSeconds = await getAudioDurationSecondsInBrowser(selectedFile)
       if (fileDurationProbeRef.current !== probeId) return
 
-      if (isFreeTier && durationSeconds > remainingQuotaSeconds) {
+      if (planTier === 'guest' && maxAudioSeconds > 0 && durationSeconds > maxAudioSeconds) {
+        setFile(null)
+        setFileDurationSeconds(0)
+        setError(messages.guestTranscribeHint)
+        setNotice(null)
+        showToast(messages.guestTranscribeHint)
+        return
+      }
+
+      if (isLimitedTier && durationSeconds > remainingQuotaSeconds) {
         setFile(null)
         setFileDurationSeconds(0)
         setError(messages.quotaExceeded)
@@ -353,7 +430,7 @@ export default function useMallogTranscription({
       setNotice(messages.browserDurationFallback)
       resetResultWorkspace(true)
     }
-  }, [messages.browserDurationFallback, messages.fileSizeExceeded, messages.quotaExceeded, resetResultWorkspace, setError, setNotice, showToast])
+  }, [authToken, messages.browserDurationFallback, messages.fileSizeExceeded, messages.guestTranscribeHint, messages.quotaExceeded, resetResultWorkspace, setError, setNotice, showToast])
 
   const handleFileChange = useCallback((event, usage) => {
     const selectedFile = event.target.files?.[0]
@@ -422,7 +499,7 @@ export default function useMallogTranscription({
         }
 
         const res = await apiFetch(`${apiUrl}/api/status/${taskId}`, {
-          headers: getAuthHeaders(),
+          headers: getTranscriptionHeaders(),
         })
 
         if (!res.ok) {
@@ -450,8 +527,12 @@ export default function useMallogTranscription({
             setResult(data)
             setLoading(false)
             setCurrentStep(0)
-            fetchHistory()
-            fetchUsage()
+            if (authToken) {
+              fetchHistory()
+              fetchUsage()
+            } else {
+              fetchGuestUsage()
+            }
             activeTaskIdRef.current = ''
             pollResultCommitTimerRef.current = null
           }, 800)
@@ -474,26 +555,31 @@ export default function useMallogTranscription({
         console.error('Polling error', error)
       }
     }, STATUS_POLL_INTERVAL_MS)
-  }, [apiUrl, fetchHistory, fetchUsage, getAuthHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
+  }, [apiUrl, authToken, fetchGuestUsage, fetchHistory, fetchUsage, getTranscriptionHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
 
   const handleSubmit = useCallback(async (event, usage) => {
     event.preventDefault()
-    if (!authToken) {
-      setError(messages.signinRequired)
-      return
-    }
     if (!file) {
       setError(messages.selectFile)
       return
     }
 
-    const isFreeTier = ((usage?.plan_tier || 'free') === 'free')
-    const monthlyLimitSeconds = usage?.monthly_limit_seconds || FREE_MONTHLY_LIMIT_SECONDS
-    const remainingQuotaSeconds = isFreeTier
+    const planTier = usage?.plan_tier || (authToken ? 'free' : 'guest')
+    const isLimitedTier = planTier === 'free' || planTier === 'guest'
+    const monthlyLimitSeconds = usage?.monthly_limit_seconds || (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+    const maxAudioSeconds = Number(usage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
+    const remainingQuotaSeconds = isLimitedTier
       ? Math.max(0, usage?.remaining_seconds ?? monthlyLimitSeconds)
       : Number.MAX_SAFE_INTEGER
-    const fileExceedsRemainingQuota = isFreeTier && fileDurationSeconds > 0 && fileDurationSeconds > remainingQuotaSeconds
-    const uploadBlockedByQuota = isFreeTier && remainingQuotaSeconds <= 0
+    const fileExceedsRemainingQuota = isLimitedTier && fileDurationSeconds > 0 && fileDurationSeconds > remainingQuotaSeconds
+    const fileExceedsGuestMax = planTier === 'guest' && maxAudioSeconds > 0 && fileDurationSeconds > 0 && fileDurationSeconds > maxAudioSeconds
+    const uploadBlockedByQuota = isLimitedTier && remainingQuotaSeconds <= 0
+
+    if (fileExceedsGuestMax) {
+      setError(messages.guestTranscribeHint)
+      showToast(messages.guestTranscribeHint)
+      return
+    }
 
     if (uploadBlockedByQuota || fileExceedsRemainingQuota) {
       setError(messages.quotaExceeded)
@@ -518,10 +604,13 @@ export default function useMallogTranscription({
 
       const response = await apiFetch(`${apiUrl}/api/transcribe`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getTranscriptionHeaders(),
         body: formData,
       })
       const data = await readResponseData(response, messages.transcribeFailed)
+      if (!authToken && data?.quota) {
+        setGuestUsage(data.quota)
+      }
 
       if (data.status === 'queued') {
         setCurrentStep(2)
@@ -531,13 +620,18 @@ export default function useMallogTranscription({
         setResult(data)
         setLoading(false)
         setCurrentStep(0)
+        if (authToken) {
+          fetchUsage()
+        } else {
+          fetchGuestUsage()
+        }
       }
     } catch (error) {
       setError(error?.message || messages.transcribeFailed)
       setLoading(false)
       setCurrentStep(0)
     }
-  }, [apiUrl, authToken, file, fileDurationSeconds, getAuthHeaders, invalidatePollingSession, language, messages.quotaExceeded, messages.selectFile, messages.signinRequired, messages.transcribeFailed, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
+  }, [apiUrl, authToken, fetchGuestUsage, fetchUsage, file, fileDurationSeconds, getTranscriptionHeaders, invalidatePollingSession, language, messages.guestTranscribeHint, messages.quotaExceeded, messages.selectFile, messages.transcribeFailed, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
 
   const handleLoadHistory = useCallback(async (taskId) => {
     invalidatePollingSession()
@@ -826,23 +920,29 @@ export default function useMallogTranscription({
   const usageState = useMemo(() => {
     return (usage) => {
       const currentUsage = usage || null
-      const isFreeTier = (currentUsage?.plan_tier || 'free') === 'free'
-      const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds || FREE_MONTHLY_LIMIT_SECONDS
+      const planTier = currentUsage?.plan_tier || (authToken ? 'free' : 'guest')
+      const isFreeTier = planTier === 'free' || planTier === 'guest'
+      const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds || (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+      const maxAudioSeconds = Number(currentUsage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
       const remainingQuotaSeconds = isFreeTier
         ? Math.max(0, currentUsage?.remaining_seconds ?? monthlyLimitSeconds)
         : Number.MAX_SAFE_INTEGER
-      const fileExceedsRemainingQuota = isFreeTier && fileDurationSeconds > 0 && fileDurationSeconds > remainingQuotaSeconds
+      const fileExceedsRemainingQuota = isFreeTier && fileDurationSeconds > 0 && (
+        fileDurationSeconds > remainingQuotaSeconds ||
+        (planTier === 'guest' && maxAudioSeconds > 0 && fileDurationSeconds > maxAudioSeconds)
+      )
       const uploadBlockedByQuota = isFreeTier && remainingQuotaSeconds <= 0
 
       return {
         isFreeTier,
+        planTier,
         monthlyLimitSeconds,
         remainingQuotaSeconds,
         fileExceedsRemainingQuota,
         uploadBlockedByQuota,
       }
     }
-  }, [fileDurationSeconds])
+  }, [authToken, fileDurationSeconds])
 
   return {
     file,
@@ -874,6 +974,10 @@ export default function useMallogTranscription({
     draftLoadingCategory,
     savingCategory,
     fileDurationSeconds,
+    guestUsage,
+    guestTranscribeHint: messages.guestTranscribeHint,
+    guestTranscribeStart: messages.guestTranscribeStart,
+    isGuestMode: !authToken,
     fileInputRef,
     usageState,
     resolveContentStyle,

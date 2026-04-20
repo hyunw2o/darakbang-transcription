@@ -90,6 +90,9 @@ export default function MallogHomeKoView(props) {
     savingCategory,
     fileDurationSeconds,
     fileInputRef,
+    isGuestMode,
+    guestTranscribeHint,
+    guestTranscribeStart,
     isFreeTier,
     monthlyLimitSeconds,
     remainingQuotaSeconds,
@@ -335,13 +338,15 @@ export default function MallogHomeKoView(props) {
           )}
         </div>
 
-        {authToken && (
+        {(authToken || isGuestMode) && (
           <>
             {usage && (
               <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <p className="text-xs text-nm-text-secondary">이번 달 사용량</p>
+                    <p className="text-xs text-nm-text-secondary">
+                      {isGuestMode ? '비로그인 체험 사용량' : '이번 달 사용량'}
+                    </p>
                     <p className="text-sm font-semibold text-nm-text-primary">
                       {isFreeTier
                         ? `${formatSecondsToHourMinute(usage.used_audio_seconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
@@ -354,10 +359,10 @@ export default function MallogHomeKoView(props) {
                     )}
                   </div>
                   <a
-                    href={UPGRADE_CONTACT_URL}
+                    href={isGuestMode ? '#auth-card' : UPGRADE_CONTACT_URL}
                     className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
                   >
-                    구독 업그레이드하기
+                    {isGuestMode ? '로그인하고 월 10시간 사용하기' : '구독 업그레이드하기'}
                   </a>
                 </div>
                 {isFreeTier && (
@@ -478,16 +483,21 @@ export default function MallogHomeKoView(props) {
                 <p className="mt-3 text-[11px] text-nm-text-secondary">
                   {transcriptionTypeHints[transcriptionType]}
                 </p>
+                {isGuestMode && (
+                  <p className="mt-2 text-[11px] text-nm-accent font-medium">
+                    {guestTranscribeHint}
+                  </p>
+                )}
                 {fileExceedsRemainingQuota && (
                   <p className="mt-2 text-[12px] text-red-600 font-medium">
-                    남은 허용 시간을 초과하는 파일입니다.
+                    {isGuestMode ? guestTranscribeHint : '남은 허용 시간을 초과하는 파일입니다.'}
                   </p>
                 )}
 
                 {/* 변환 버튼 */}
                 <button
                   type="submit"
-                  disabled={loading || !file || !authToken || uploadBlockedByQuota || fileExceedsRemainingQuota}
+                  disabled={loading || !file || uploadBlockedByQuota || fileExceedsRemainingQuota}
                   className="w-full nm-btn-primary mt-5 py-3.5 font-semibold text-sm"
                 >
                   {loading
@@ -498,7 +508,7 @@ export default function MallogHomeKoView(props) {
                         ? '남은 허용 시간 초과'
                         : authToken
                           ? '변환하기'
-                          : '로그인 후 변환하기'}
+                          : guestTranscribeStart}
                 </button>
               </form>
 

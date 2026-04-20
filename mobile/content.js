@@ -24,6 +24,11 @@ const I18N = {
     loadingApp: "앱 초기화 중...",
     authIntro: "AI 음성 기록, 지금 시작하세요.",
     authSubcopy: "로그인 후 바로 파일 업로드와 변환을 시작할 수 있습니다.",
+    guestTrialCta: "로그인 없이 체험하기",
+    guestUserTitle: "비로그인 체험",
+    guestUserSubtitle: "파일 1개당 최대 10분, 총 30분까지 변환할 수 있습니다.",
+    guestLoginButton: "로그인하고 월 10시간 사용하기",
+    guestTrialHint: "비로그인 체험은 히스토리 저장 없이 현재 화면에서만 결과를 확인합니다.",
     authLanding: {
       badges: {
         free: "무료 월 10시간",
@@ -199,6 +204,7 @@ const I18N = {
     billingUnsupported: "현재 결제 설정에서는 앱 내 결제 호출이 비활성화되어 있습니다.",
     iosBillingReviewNotice: "iOS 심사 버전에서는 앱 내 웹결제 및 구독 관리 버튼을 숨깁니다. 구독 안내는 웹 또는 고객지원에서 확인할 수 있습니다.",
     planLabels: {
+      guest: "Guest",
       free: "Free",
       pro: "Pro",
       enterprise: "Enterprise",
@@ -258,6 +264,7 @@ const I18N = {
       draftDone: "{label} 초안을 생성했습니다.",
       recordSaved: "기록본을 저장했습니다.",
       privacyAccepted: "개인정보처리방침 동의가 완료되었습니다.",
+      guestUsageLoaded: "비로그인 체험 사용량을 업데이트했습니다.",
       copiedToClipboard: "{label} 내용을 클립보드에 복사했습니다.",
       openedShareTxt: "TXT 저장/공유 창을 열었습니다.",
       openedShareDocx: "DOCX 저장/공유 창을 열었습니다.",
@@ -269,6 +276,7 @@ const I18N = {
     },
     errors: {
       authRequired: "로그인 후 파일 변환을 사용할 수 있습니다.",
+      guestTrialLimit: "비로그인 체험은 파일 1개당 최대 10분, 총 30분까지 가능합니다.",
       authInputRequired: "이메일/비밀번호를 입력해주세요.",
       passwordMin: "비밀번호는 8자 이상이어야 합니다.",
       oauthUrlCreate: "OAuth URL 생성 실패",
@@ -347,6 +355,11 @@ const I18N = {
     loadingApp: "Initializing app...",
     authIntro: "Start AI speech records now.",
     authSubcopy: "Sign in to upload files and start transcription.",
+    guestTrialCta: "Try without signing in",
+    guestUserTitle: "Guest trial",
+    guestUserSubtitle: "Up to 10 minutes per file and 30 minutes total.",
+    guestLoginButton: "Sign in for 10 free hours/month",
+    guestTrialHint: "Guest trial results are shown only on this screen and are not saved to history.",
     authLanding: {
       badges: {
         free: "Free 10h/mo",
@@ -522,6 +535,7 @@ const I18N = {
     billingUnsupported: "In-app checkout is currently disabled for this billing setup.",
     iosBillingReviewNotice: "In iOS review builds, in-app web checkout and subscription management buttons are hidden. Subscription guidance is available on the web or through support.",
     planLabels: {
+      guest: "Guest",
       free: "Free",
       pro: "Pro",
       enterprise: "Enterprise",
@@ -581,6 +595,7 @@ const I18N = {
       draftDone: "{label} draft generated.",
       recordSaved: "Record saved.",
       privacyAccepted: "Privacy consent saved.",
+      guestUsageLoaded: "Guest trial usage updated.",
       copiedToClipboard: "{label} copied to clipboard.",
       openedShareTxt: "TXT save/share sheet opened.",
       openedShareDocx: "DOCX save/share sheet opened.",
@@ -592,6 +607,7 @@ const I18N = {
     },
     errors: {
       authRequired: "Please log in to use transcription.",
+      guestTrialLimit: "Guest trial supports up to 10 minutes per file and 30 minutes total.",
       authInputRequired: "Please enter email and password.",
       passwordMin: "Password must be at least 8 characters.",
       oauthUrlCreate: "Failed to create OAuth URL.",

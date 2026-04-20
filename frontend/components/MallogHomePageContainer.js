@@ -186,6 +186,10 @@ export default function MallogHomePageContainer({
     draftLoadingCategory,
     savingCategory,
     fileDurationSeconds,
+    guestUsage,
+    guestTranscribeHint,
+    guestTranscribeStart,
+    isGuestMode,
     fileInputRef,
     usageState,
     resolveContentStyle,
@@ -211,13 +215,15 @@ export default function MallogHomePageContainer({
     handleSubmit: handleSubmitInternal,
   } = transcription
 
+  const effectiveUsage = authToken ? usage : guestUsage
+
   const {
     isFreeTier,
     monthlyLimitSeconds,
     remainingQuotaSeconds,
     fileExceedsRemainingQuota,
     uploadBlockedByQuota,
-  } = usageState(usage)
+  } = usageState(effectiveUsage)
 
   const copyToClipboard = (text, label) => {
     const safeText = String(text || '').trim()
@@ -230,9 +236,9 @@ export default function MallogHomePageContainer({
       .catch(() => setError(copyFailedMessage))
   }
 
-  const handleFileChange = (event) => handleFileChangeInternal(event, usage)
-  const handleDrop = (event) => handleDropInternal(event, usage)
-  const handleSubmit = (event) => handleSubmitInternal(event, usage)
+  const handleFileChange = (event) => handleFileChangeInternal(event, effectiveUsage)
+  const handleDrop = (event) => handleDropInternal(event, effectiveUsage)
+  const handleSubmit = (event) => handleSubmitInternal(event, effectiveUsage)
   const triggerFilePicker = () => openFilePicker(uploadBlockedByQuota)
   const handleUploadZoneKeyDown = (event) => handleUploadKeyDownInternal(event, uploadBlockedByQuota)
 
@@ -359,7 +365,7 @@ export default function MallogHomePageContainer({
       socialLoading={socialLoading}
       authToken={authToken}
       authUser={authUser}
-      usage={usage}
+      usage={effectiveUsage}
       sessionRemainingLabel={sessionRemainingLabel}
       handleAuthSubmit={handleAuthSubmit}
       handleSocialLogin={handleSocialLogin}
@@ -395,6 +401,9 @@ export default function MallogHomePageContainer({
       savingCategory={savingCategory}
       fileDurationSeconds={fileDurationSeconds}
       fileInputRef={fileInputRef}
+      isGuestMode={isGuestMode}
+      guestTranscribeHint={guestTranscribeHint}
+      guestTranscribeStart={guestTranscribeStart}
       isFreeTier={isFreeTier}
       monthlyLimitSeconds={monthlyLimitSeconds}
       remainingQuotaSeconds={remainingQuotaSeconds}

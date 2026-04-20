@@ -40,8 +40,11 @@ function getFriendlyAuthError(message, copy) {
   return raw || authErrors.default || "Authentication failed";
 }
 
-async function requestApi(path, { method = "GET", token = "", body = undefined, timeoutMs = 20000 } = {}) {
-  const headers = {};
+async function requestApi(
+  path,
+  { method = "GET", token = "", body = undefined, timeoutMs = 20000, headers: customHeaders = {} } = {}
+) {
+  const headers = { ...customHeaders };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (typeof body === "string" && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";

@@ -23,6 +23,9 @@ import SocialAuthButton from "./components/SocialAuthButton";
 import {
   APP_TABS,
   FREE_MONTHLY_LIMIT_SECONDS,
+  GUEST_MAX_AUDIO_SECONDS,
+  GUEST_MONTHLY_LIMIT_SECONDS,
+  GUEST_SESSION_KEY,
   MAX_UPLOAD_BYTES,
   MOBILE_THEME_OPTIONS,
   MOBILE_THEMES,
@@ -66,6 +69,16 @@ function App() {
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("ko");
   const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
+  const [guestModeStarted, setGuestModeStarted] = useState(false);
+  const [guestSessionId, setGuestSessionId] = useState("");
+  const [guestUsage, setGuestUsage] = useState({
+    plan_tier: "guest",
+    used_audio_seconds: 0,
+    monthly_limit_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
+    remaining_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
+    usage_percent: 0,
+    max_audio_seconds: GUEST_MAX_AUDIO_SECONDS,
+  });
 
   const [submitting, setSubmitting] = useState(false);
   const [taskStateText, setTaskStateText] = useState("");
@@ -103,6 +116,37 @@ function App() {
     setNotice("");
     setError("");
   }, []);
+  const ensureGuestSessionId = useCallback(async () => {
+    if (guestSessionId) return guestSessionId;
+    const existing = await AsyncStorage.getItem(GUEST_SESSION_KEY);
+    if (existing) {
+      setGuestSessionId(existing);
+      return existing;
+    }
+    const generated = `guest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    await AsyncStorage.setItem(GUEST_SESSION_KEY, generated);
+    setGuestSessionId(generated);
+    return generated;
+  }, [guestSessionId]);
+  const getGuestHeaders = useCallback(async () => {
+    const resolvedGuestId = await ensureGuestSessionId();
+    return { "X-Guest-Session-Id": resolvedGuestId };
+  }, [ensureGuestSessionId]);
+  const fetchGuestUsage = useCallback(async ({ showNotice = false } = {}) => {
+    try {
+      const data = await requestApi("/api/guest/usage", {
+        headers: await getGuestHeaders(),
+      });
+      setGuestUsage(data);
+      if (showNotice) {
+        setNotice(copy.notices.guestUsageLoaded || copy.notices.usageLoaded);
+      }
+      return data;
+    } catch (e) {
+      setError(e.message || copy.errors.usageReadFailed);
+      return null;
+    }
+  }, [copy.errors.usageReadFailed, copy.notices.guestUsageLoaded, copy.notices.usageLoaded, getGuestHeaders]);
   const clearScrollUnlockTimer = useCallback(() => {
     if (scrollUnlockTimerRef.current) {
       clearTimeout(scrollUnlockTimerRef.current);
@@ -259,10 +303,6 @@ function App() {
     () => RECORD_CATEGORIES.map((key) => ({ key, label: copy.recordCategories[key] || key })),
     [copy]
   );
-  const tabOptions = useMemo(
-    () => APP_TABS.map((key) => ({ key, label: copy.tabs[key] || key })),
-    [copy]
-  );
   const fetchHistory = useCallback(async (token) => {
     if (!token) {
       setHistory([]);
@@ -310,6 +350,7 @@ function App() {
     resetResultWorkspace(true);
     setPickedFile(null);
     setTaskStateText("");
+    setGuestModeStarted(false);
   }, []);
 
   const {
@@ -352,6 +393,7 @@ function App() {
     setNotice,
     setError,
     onSessionReady: (token) => {
+      setGuestModeStarted(false);
       fetchHistory(token);
       fetchRecords(token);
     },
@@ -359,18 +401,27 @@ function App() {
   });
 
   const bootLoading = uiBootLoading || authBootLoading;
-  const usagePlan = String(usage?.plan_tier || "free");
-  const isFreeUsagePlan = usagePlan === "free";
-  const usedAudioSeconds = Math.max(0, Number(usage?.used_audio_seconds) || 0);
+  const isGuestMode = !isLoggedIn && guestModeStarted;
+  const tabOptions = useMemo(
+    () => {
+      const visibleTabs = isLoggedIn ? APP_TABS : ["transcribe", "settings"];
+      return visibleTabs.map((key) => ({ key, label: copy.tabs[key] || key }));
+    },
+    [copy, isLoggedIn]
+  );
+  const effectiveUsage = isGuestMode ? guestUsage : usage;
+  const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
+  const isFreeUsagePlan = usagePlan === "free" || usagePlan === "guest";
+  const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
     1,
-    Number(usage?.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS
+    Number(effectiveUsage?.monthly_limit_seconds) || (isGuestMode ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
   );
   const remainingAudioSeconds = isFreeUsagePlan
-    ? Math.max(0, Number(usage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
+    ? Math.max(0, Number(effectiveUsage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
     : null;
   const usagePercent = isFreeUsagePlan
-    ? Math.max(0, Math.min(100, Number(usage?.usage_percent) || 0))
+    ? Math.max(0, Math.min(100, Number(effectiveUsage?.usage_percent) || 0))
     : 0;
   const billingProvider = String(billingStatus?.provider || "portone");
   const billingState = String(billingStatus?.status || "inactive");
@@ -397,10 +448,25 @@ function App() {
     clearHistoryDeleteAllConfirmTimer();
   }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer, isLoggedIn]);
 
+  useEffect(() => {
+    ensureGuestSessionId().catch(() => {});
+  }, [ensureGuestSessionId]);
+
+  useEffect(() => {
+    if (isLoggedIn || !guestModeStarted) return;
+    fetchGuestUsage().catch(() => {});
+  }, [fetchGuestUsage, guestModeStarted, isLoggedIn]);
+
   useEffect(() => () => {
     clearHistoryDeleteConfirmTimer();
     clearHistoryDeleteAllConfirmTimer();
   }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer]);
+
+  useEffect(() => {
+    if (!isLoggedIn && (activeTab === "history" || activeTab === "records")) {
+      setActiveTab("transcribe");
+    }
+  }, [activeTab, isLoggedIn]);
 
   useEffect(() => {
     if (activeTab !== "transcribe") {
@@ -532,7 +598,10 @@ function App() {
           return;
         }
 
-        const data = await requestApi(`/api/status/${taskId}`, { token: authToken });
+        const data = await requestApi(
+          `/api/status/${taskId}`,
+          isLoggedIn ? { token: authToken } : { headers: await getGuestHeaders() }
+        );
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
 
         if (data.status === "queued") {
@@ -553,8 +622,12 @@ function App() {
           if (expectedResultEpoch !== resultEpochRef.current) return;
           setResult(data);
           setNotice(copy.notices.transcribeDone);
-          fetchHistory(authToken);
-          refreshUsageAndBilling(authToken).catch(() => {});
+          if (isLoggedIn) {
+            fetchHistory(authToken);
+            refreshUsageAndBilling(authToken).catch(() => {});
+          } else {
+            fetchGuestUsage().catch(() => {});
+          }
           return;
         }
 
@@ -588,11 +661,6 @@ function App() {
   const handleTranscribe = async () => {
     clearMessages();
 
-    if (!isLoggedIn) {
-      setError(copy.errors.authRequired);
-      return;
-    }
-
     if (!pickedFile) {
       setError(copy.errors.fileNotSelected);
       return;
@@ -615,11 +683,18 @@ function App() {
       body.append("transcription_type", transcriptionType);
       body.append("correction_mode", "normal");
 
+      const requestOptions = isLoggedIn
+        ? { token: authToken }
+        : { headers: await getGuestHeaders() };
+
       const data = await requestApi("/api/transcribe", {
         method: "POST",
-        token: authToken,
+        ...requestOptions,
         body,
       });
+      if (!isLoggedIn && data?.quota) {
+        setGuestUsage(data.quota);
+      }
 
       if (data.status === "queued" && data.task_id) {
         startPollingTask(data.task_id, submitEpoch);
@@ -631,8 +706,12 @@ function App() {
           setTranscriptionLanguage(String(data.language).toLowerCase());
         }
         setResult(data);
-        fetchHistory(authToken);
-        refreshUsageAndBilling(authToken).catch(() => {});
+        if (isLoggedIn) {
+          fetchHistory(authToken);
+          refreshUsageAndBilling(authToken).catch(() => {});
+        } else {
+          fetchGuestUsage().catch(() => {});
+        }
       } else {
         setSubmitting(false);
         setTaskStateText("");
@@ -1218,7 +1297,7 @@ function App() {
             </FadeInView>
           </ScrollView>
         </View>
-      ) : !isLoggedIn ? (
+      ) : !isLoggedIn && !guestModeStarted ? (
         <ScrollView
           contentContainerStyle={[styles.authScrollContent, compactLayout ? styles.authScrollContentCompact : null]}
           keyboardShouldPersistTaps="handled"
@@ -1395,11 +1474,28 @@ function App() {
                 <Text style={styles.primaryButtonText}>
                   {authLoading
                     ? copy.processing
-                    : authMode === "signup"
+                  : authMode === "signup"
                       ? copy.signup
                       : copy.login}
                 </Text>
               </NmPressable>
+
+              <NmPressable
+                style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                onPress={() => {
+                  clearMessages();
+                  setGuestModeStarted(true);
+                  setActiveTab("transcribe");
+                  fetchGuestUsage().catch(() => {});
+                }}
+              >
+                <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>
+                  {copy.guestTrialCta}
+                </Text>
+              </NmPressable>
+              <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
+                {copy.guestUserSubtitle}
+              </Text>
 
               <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>{copy.orSocial}</Text>
 
@@ -1430,14 +1526,29 @@ function App() {
           <FadeInView>
             <View style={[styles.userBar, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.userInfo}>
-                <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>{authUser?.email || copy.defaultUser}</Text>
-                <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>{authUser?.user_metadata?.full_name || authUser?.id || ""}</Text>
-                <Text style={[styles.userSession, { color: activeTheme.textSecondary }]}>
-                  {copy.sessionRemainingLabel}: {sessionRemainingLabel}
+                <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>
+                  {isGuestMode ? copy.guestUserTitle : (authUser?.email || copy.defaultUser)}
                 </Text>
+                <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>
+                  {isGuestMode ? copy.guestUserSubtitle : (authUser?.user_metadata?.full_name || authUser?.id || "")}
+                </Text>
+                {!isGuestMode ? (
+                  <Text style={[styles.userSession, { color: activeTheme.textSecondary }]}>
+                    {copy.sessionRemainingLabel}: {sessionRemainingLabel}
+                  </Text>
+                ) : null}
               </View>
-              <NmPressable style={[styles.logoutButton, { borderColor: activeTheme.inputBorder }]} onPress={handleLogout}>
-                <Text style={[styles.logoutButtonText, { color: activeTheme.errorText }]}>{copy.logout}</Text>
+              <NmPressable
+                style={[styles.logoutButton, { borderColor: activeTheme.inputBorder }]}
+                onPress={isGuestMode ? () => {
+                  clearMessages();
+                  setGuestModeStarted(false);
+                  setActiveTab("transcribe");
+                } : handleLogout}
+              >
+                <Text style={[styles.logoutButtonText, { color: isGuestMode ? activeTheme.accent : activeTheme.errorText }]}>
+                  {isGuestMode ? copy.login : copy.logout}
+                </Text>
               </NmPressable>
             </View>
           </FadeInView>
@@ -1546,6 +1657,9 @@ function App() {
                   </NmPressable>
 
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{selectedTypeHint}</Text>
+                  {isGuestMode ? (
+                    <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
+                  ) : null}
                   {taskStateText ? <Text style={[styles.taskStateText, { color: activeTheme.accent }]}>{taskStateText}</Text> : null}
                 </View>
               </FadeInView>
@@ -1874,27 +1988,31 @@ function App() {
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsUsageTitle}</Text>
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsUsageHint}</Text>
 
-                  {usageLoading && !usage ? (
+                  {usageLoading && !effectiveUsage ? (
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.usageLoading}</Text>
-                  ) : usage ? (
+                  ) : effectiveUsage ? (
                     <>
                       <View style={styles.usageMetaGrid}>
                         <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
                           <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usagePlanLabel}</Text>
                           <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{planLabel}</Text>
                         </View>
-                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageStatusLabel}</Text>
-                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingStateLabel}</Text>
-                        </View>
-                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageBillingProvider}</Text>
-                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingProvider}</Text>
-                        </View>
-                        <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                          <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageCheckoutMode}</Text>
-                          <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingCheckoutMode}</Text>
-                        </View>
+                        {isGuestMode ? null : (
+                          <>
+                            <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                              <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageStatusLabel}</Text>
+                              <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingStateLabel}</Text>
+                            </View>
+                            <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                              <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageBillingProvider}</Text>
+                              <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingProvider}</Text>
+                            </View>
+                            <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                              <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageCheckoutMode}</Text>
+                              <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingCheckoutMode}</Text>
+                            </View>
+                          </>
+                        )}
                       </View>
 
                       <Text style={[styles.metaText, { color: activeTheme.textPrimary }]}>
@@ -1918,10 +2036,13 @@ function App() {
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.usageUnavailable}</Text>
                   )}
 
-                  {!billingCheckoutSupported ? (
+                  {isGuestMode ? (
+                    <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
+                  ) : null}
+                  {!isGuestMode && !billingCheckoutSupported ? (
                     <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.billingUnsupported}</Text>
                   ) : null}
-                  {isIosAppStoreReviewMode ? (
+                  {!isGuestMode && isIosAppStoreReviewMode ? (
                     <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.iosBillingReviewNotice}</Text>
                   ) : null}
 
@@ -1930,7 +2051,11 @@ function App() {
                       style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                       onPress={() => {
                         clearMessages();
-                        refreshUsageAndBilling(authToken, { showNotice: true }).catch(() => {});
+                        if (isGuestMode) {
+                          fetchGuestUsage({ showNotice: true }).catch(() => {});
+                        } else {
+                          refreshUsageAndBilling(authToken, { showNotice: true }).catch(() => {});
+                        }
                       }}
                       disabled={usageLoading || billingLoading}
                     >
@@ -1938,7 +2063,20 @@ function App() {
                         {usageLoading || billingLoading ? copy.loading : copy.usageRefresh}
                       </Text>
                     </NmPressable>
-                    {!isIosAppStoreReviewMode ? (
+                    {isGuestMode ? (
+                      <NmPressable
+                        style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
+                        onPress={() => {
+                          clearMessages();
+                          setGuestModeStarted(false);
+                          setActiveTab("transcribe");
+                        }}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          {copy.guestLoginButton}
+                        </Text>
+                      </NmPressable>
+                    ) : !isIosAppStoreReviewMode ? (
                       <NmPressable
                         style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, billingActionLoading ? styles.buttonDisabled : null]}
                         onPress={handleBillingCheckout}
@@ -1951,7 +2089,7 @@ function App() {
                     ) : null}
                   </View>
 
-                  {!isIosAppStoreReviewMode ? (
+                  {!isGuestMode && !isIosAppStoreReviewMode ? (
                     <View style={styles.billingActionRow}>
                       <NmPressable
                         style={[

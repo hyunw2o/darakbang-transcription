@@ -90,6 +90,9 @@ export default function MallogHomeEnView(props) {
     savingCategory,
     fileDurationSeconds,
     fileInputRef,
+    isGuestMode,
+    guestTranscribeHint,
+    guestTranscribeStart,
     isFreeTier,
     monthlyLimitSeconds,
     remainingQuotaSeconds,
@@ -337,13 +340,15 @@ export default function MallogHomeEnView(props) {
           )}
         </div>
 
-        {authToken && (
+        {(authToken || isGuestMode) && (
           <>
             {usage && (
               <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <p className="text-xs text-nm-text-secondary">This month usage</p>
+                    <p className="text-xs text-nm-text-secondary">
+                      {isGuestMode ? 'Guest trial usage' : 'This month usage'}
+                    </p>
                     <p className="text-sm font-semibold text-nm-text-primary">
                       {isFreeTier
                         ? `${formatSecondsToHourMinute(usage.used_audio_seconds, 'en')} / ${formatSecondsToHourMinute(monthlyLimitSeconds, 'en')}`
@@ -356,10 +361,10 @@ export default function MallogHomeEnView(props) {
                     )}
                   </div>
                   <a
-                    href={UPGRADE_CONTACT_URL}
+                    href={isGuestMode ? '#auth-card' : UPGRADE_CONTACT_URL}
                     className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
                   >
-                    Upgrade Subscription
+                    {isGuestMode ? 'Sign in for 10 free hours/month' : 'Upgrade Subscription'}
                   </a>
                 </div>
                 {isFreeTier && (
@@ -479,16 +484,21 @@ export default function MallogHomeEnView(props) {
                 <p className="mt-3 text-[11px] text-nm-text-secondary">
                   {transcriptionTypeHints[transcriptionType]}
                 </p>
+                {isGuestMode && (
+                  <p className="mt-2 text-[11px] text-nm-accent font-medium">
+                    {guestTranscribeHint}
+                  </p>
+                )}
                 {fileExceedsRemainingQuota && (
                   <p className="mt-2 text-[12px] text-red-600 font-medium">
-                    This file exceeds your remaining free allowance.
+                    {isGuestMode ? guestTranscribeHint : 'This file exceeds your remaining free allowance.'}
                   </p>
                 )}
 
                 {/* 변환 버튼 */}
                 <button
                   type="submit"
-                  disabled={loading || !file || !authToken || uploadBlockedByQuota || fileExceedsRemainingQuota}
+                  disabled={loading || !file || uploadBlockedByQuota || fileExceedsRemainingQuota}
                   className="w-full mt-5 nm-btn-primary py-3.5 font-semibold text-sm
                 disabled:opacity-50 disabled:cursor-not-allowed
                 active:scale-[0.98]"
@@ -501,7 +511,7 @@ export default function MallogHomeEnView(props) {
                         ? 'Exceeds remaining allowance'
                         : authToken
                           ? 'Start Transcription'
-                          : 'Sign In to Transcribe'}
+                          : guestTranscribeStart}
                 </button>
               </form>
 
