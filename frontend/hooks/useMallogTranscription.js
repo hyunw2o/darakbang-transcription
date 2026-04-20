@@ -198,6 +198,7 @@ export default function useMallogTranscription({
     try {
       const res = await apiFetch(`${apiUrl}/api/guest/usage`, {
         headers: { 'X-Guest-Session-Id': resolvedGuestId },
+        credentials: 'omit',
       })
       const data = await readResponseData(res, messages.quotaExceeded)
       setGuestUsage(data)
@@ -503,6 +504,7 @@ export default function useMallogTranscription({
 
         const res = await apiFetch(`${apiUrl}/api/status/${taskId}`, {
           headers: getTranscriptionHeaders(),
+          credentials: authToken ? 'include' : 'omit',
         })
 
         if (!res.ok) {
@@ -608,6 +610,7 @@ export default function useMallogTranscription({
       const response = await apiFetch(`${apiUrl}/api/transcribe`, {
         method: 'POST',
         headers: getTranscriptionHeaders(),
+        credentials: authToken ? 'include' : 'omit',
         body: formData,
       })
       const data = await readResponseData(response, messages.transcribeFailed)

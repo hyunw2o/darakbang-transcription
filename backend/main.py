@@ -272,7 +272,9 @@ app.add_middleware(
 async def attach_auth_cookie_to_authorization(request: Request, call_next):
     cookie_token = (request.cookies.get(AUTH_COOKIE_NAME) or "").strip()
     has_authorization = bool(request.headers.get("authorization"))
-    if cookie_token and not has_authorization:
+    has_guest_session = bool((request.headers.get("x-guest-session-id") or "").strip())
+    guest_capable_path = request.url.path == "/api/transcribe" or request.url.path.startswith("/api/status/")
+    if cookie_token and not has_authorization and not (has_guest_session and guest_capable_path):
         headers = list(request.scope.get("headers") or [])
         headers.append((b"authorization", f"Bearer {cookie_token}".encode("utf-8")))
         request.scope["headers"] = headers
