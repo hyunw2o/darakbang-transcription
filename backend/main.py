@@ -2031,19 +2031,39 @@ def _ensure_transcription_jobs_scope_ready(required: bool = False) -> bool:
         return True
 
     try:
-        _get_supabase_client().table(TRANSCRIPTION_JOBS_TABLE_NAME).select("task_id").limit(1).execute()
+        (
+            _get_supabase_client()
+            .table(TRANSCRIPTION_JOBS_TABLE_NAME)
+            .select("task_id,owner_key,status,created_at,updated_at")
+            .limit(1)
+            .execute()
+        )
         TRANSCRIPTION_JOBS_SCOPE_VALIDATED = True
         return True
     except Exception as e:
         error_text = str(e).lower()
         if (
-            TRANSCRIPTION_JOBS_TABLE_NAME in error_text
-            and (
-                "does not exist" in error_text
-                or "relation" in error_text
-                or "schema cache" in error_text
-                or "could not find the table" in error_text
-                or "pgrst205" in error_text
+            (
+                TRANSCRIPTION_JOBS_TABLE_NAME in error_text
+                and (
+                    "does not exist" in error_text
+                    or "relation" in error_text
+                    or "schema cache" in error_text
+                    or "could not find the table" in error_text
+                    or "pgrst205" in error_text
+                )
+            )
+            or (
+                "column" in error_text
+                and any(
+                    column_name in error_text
+                    for column_name in (
+                        "owner_key",
+                        "status",
+                        "created_at",
+                        "updated_at",
+                    )
+                )
             )
         ):
             if required:
@@ -2070,6 +2090,7 @@ def _upsert_transcription_job(
     user_id: str | None,
     is_guest: bool,
 ) -> bool:
+    global TRANSCRIPTION_JOBS_SCOPE_VALIDATED
     if not task_id or not owner_key or not patch:
         return False
     if not _ensure_transcription_jobs_scope_ready():
@@ -2119,6 +2140,24 @@ def _upsert_transcription_job(
         client.table(TRANSCRIPTION_JOBS_TABLE_NAME).insert(insert_payload).execute()
         return True
     except Exception as e:
+        error_text = str(e).lower()
+        if "column" in error_text and any(
+            column_name in error_text
+            for column_name in (
+                "owner_key",
+                "status",
+                "created_at",
+                "updated_at",
+                "is_guest",
+                "user_id",
+            )
+        ):
+            TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
+            print(
+                "Failed to upsert transcription job because the transcription_jobs schema is outdated. "
+                "Re-run backend/sql/transcription_jobs.sql and reload PostgREST schema."
+            )
+            return False
         print(f"Failed to upsert transcription job ({task_id}): {e}")
         return False
 

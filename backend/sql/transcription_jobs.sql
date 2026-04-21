@@ -29,6 +29,12 @@ create table if not exists public.transcription_jobs (
 );
 
 alter table if exists public.transcription_jobs
+  add column if not exists owner_key text,
+  add column if not exists user_id uuid,
+  add column if not exists is_guest boolean default false,
+  add column if not exists status text default 'queued',
+  add column if not exists created_at timestamptz default now(),
+  add column if not exists updated_at timestamptz default now(),
   add column if not exists storage_bucket text,
   add column if not exists storage_object_path text,
   add column if not exists source_mime_type text,
@@ -45,6 +51,66 @@ alter table if exists public.transcription_jobs
   add column if not exists engine text,
   add column if not exists content_style text,
   add column if not exists error text;
+
+do $$
+begin
+  begin
+    alter table public.transcription_jobs
+      add constraint transcription_jobs_user_id_fkey
+      foreign key (user_id) references auth.users(id) on delete set null;
+  exception
+    when duplicate_object then null;
+  end;
+end $$;
+
+update public.transcription_jobs
+set owner_key = coalesce(nullif(owner_key, ''), nullif(user_id::text, ''), task_id)
+where owner_key is null or owner_key = '';
+
+update public.transcription_jobs
+set is_guest = coalesce(is_guest, false)
+where is_guest is null;
+
+update public.transcription_jobs
+set status = coalesce(nullif(status, ''), 'queued')
+where status is null or status = '';
+
+update public.transcription_jobs
+set created_at = coalesce(created_at, now())
+where created_at is null;
+
+update public.transcription_jobs
+set updated_at = coalesce(updated_at, created_at, now())
+where updated_at is null;
+
+update public.transcription_jobs
+set audio_seconds = coalesce(audio_seconds, 0)
+where audio_seconds is null;
+
+update public.transcription_jobs
+set characters = coalesce(characters, 0)
+where characters is null;
+
+update public.transcription_jobs
+set darakbang_optimized = coalesce(darakbang_optimized, false)
+where darakbang_optimized is null;
+
+alter table if exists public.transcription_jobs
+  alter column owner_key set not null,
+  alter column is_guest set default false,
+  alter column is_guest set not null,
+  alter column status set default 'queued',
+  alter column status set not null,
+  alter column created_at set default now(),
+  alter column created_at set not null,
+  alter column updated_at set default now(),
+  alter column updated_at set not null,
+  alter column audio_seconds set default 0,
+  alter column audio_seconds set not null,
+  alter column characters set default 0,
+  alter column characters set not null,
+  alter column darakbang_optimized set default false,
+  alter column darakbang_optimized set not null;
 
 create index if not exists idx_transcription_jobs_owner_created_at
   on public.transcription_jobs (owner_key, created_at desc);

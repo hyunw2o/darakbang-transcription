@@ -45,10 +45,10 @@ uvicorn main:app --reload
 
 ### Supabase
 1. https://supabase.com 에서 프로젝트 생성
-2. Project URL / API Key 확인
+2. Project URL / API Keys 확인
 3. `.env`에 아래 값 입력
    - `SUPABASE_URL`
-   - `SUPABASE_KEY`
+   - `SUPABASE_KEY` (`service_role` 또는 서버 전용 `secret key`, 프론트용 `anon/publishable` 키 사용 금지)
 4. Supabase SQL Editor에서 아래 SQL 실행
    - `backend/sql/transcription_jobs.sql` (작업 상태 영속 저장: guest + 로그인 공용)
    - `backend/sql/transcription_storage_bucket.sql` (대기열용 원본 파일 공유 버킷)
@@ -56,6 +56,8 @@ uvicorn main:app --reload
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
    - `backend/sql/billing_subscriptions.sql` (구독 결제 상태 저장 + RLS 정책)
+5. SQL 실행 후 스키마 반영
+   - `NOTIFY pgrst, 'reload schema';`
 
 ## 배포 (Render)
 
