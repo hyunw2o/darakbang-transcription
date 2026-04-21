@@ -51,6 +51,7 @@ uvicorn main:app --reload
    - `SUPABASE_KEY`
 4. Supabase SQL Editor에서 아래 SQL 실행
    - `backend/sql/transcription_jobs.sql` (작업 상태 영속 저장: guest + 로그인 공용)
+   - `backend/sql/transcription_storage_bucket.sql` (대기열용 원본 파일 공유 버킷)
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
@@ -71,6 +72,10 @@ uvicorn main:app --reload
    - `OAUTH_REDIRECT_ALLOW_HOSTS`
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
    - `FREE_MONTHLY_LIMIT_SECONDS` (기본 36000, 무료 10시간)
+   - `INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS` (기본 180, 로그인 짧은 파일 인라인 처리)
+   - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
+   - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)
+   - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
    - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회)
    - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준)
@@ -85,6 +90,20 @@ uvicorn main:app --reload
    - `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `BILLING_PORTAL_RETURN_URL` (선택)
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
+
+### Worker 분리 운영
+
+긴 파일을 웹 프로세스와 분리하려면:
+
+1. `TRANSCRIPTION_USE_WORKER_QUEUE=true` 설정
+2. `backend/sql/transcription_jobs.sql`, `backend/sql/transcription_storage_bucket.sql` 실행
+3. Render에서 별도 Worker 서비스를 만들고 시작 명령을 아래로 설정
+
+```bash
+python worker.py
+```
+
+4. Worker에도 동일한 환경변수(`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` 등)를 넣습니다.
 
 ## 다락방 용어 특화
 

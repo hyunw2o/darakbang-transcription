@@ -184,6 +184,12 @@ INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS = max(
     0,
     int(os.getenv("INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS", "180")),
 )
+TRANSCRIPTION_USE_WORKER_QUEUE = os.getenv("TRANSCRIPTION_USE_WORKER_QUEUE", "false").strip().lower() == "true"
+TRANSCRIPTION_STORAGE_BUCKET = (os.getenv("TRANSCRIPTION_STORAGE_BUCKET") or "transcription-inputs").strip()
+TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS = max(
+    1,
+    int(os.getenv("TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS", "5")),
+)
 GUEST_IP_MONTHLY_LIMIT_SECONDS = max(
     GUEST_MONTHLY_LIMIT_SECONDS,
     int(os.getenv("GUEST_IP_MONTHLY_LIMIT_SECONDS", str(GUEST_MONTHLY_LIMIT_SECONDS * 3))),
@@ -1213,6 +1219,99 @@ def _get_supabase_client() -> Client:
     return supabase
 
 
+def _can_use_worker_queue() -> bool:
+    return bool(TRANSCRIPTION_USE_WORKER_QUEUE and SUPABASE_URL and SUPABASE_KEY and TRANSCRIPTION_STORAGE_BUCKET)
+
+
+def _build_storage_object_path(task_id: str, suffix: str) -> str:
+    normalized_suffix = suffix if suffix.startswith(".") else f".{suffix}" if suffix else ""
+    return f"transcription-inputs/{task_id}{normalized_suffix}"
+
+
+def _supabase_storage_headers(content_type: str | None = None) -> dict:
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "apikey": SUPABASE_KEY,
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def _upload_transcription_input_to_storage(
+    task_id: str,
+    local_path: str,
+    *,
+    suffix: str,
+    source_mime_type: str,
+) -> dict:
+    if not _can_use_worker_queue():
+        raise RuntimeError("Transcription worker queue is not configured.")
+
+    object_path = _build_storage_object_path(task_id, suffix)
+    upload_url = (
+        f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/"
+        f"{urllib.parse.quote(TRANSCRIPTION_STORAGE_BUCKET, safe='')}/"
+        f"{urllib.parse.quote(object_path, safe='/')}"
+    )
+    with open(local_path, "rb") as file_handle:
+        file_bytes = file_handle.read()
+
+    with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+        response = client.post(
+            upload_url,
+            headers={
+                **_supabase_storage_headers(source_mime_type or "application/octet-stream"),
+                "x-upsert": "true",
+            },
+            content=file_bytes,
+        )
+    if response.status_code >= 400:
+        raise RuntimeError(f"Supabase Storage 업로드 실패: {response.text[:300]}")
+
+    return {
+        "storage_bucket": TRANSCRIPTION_STORAGE_BUCKET,
+        "storage_object_path": object_path,
+        "source_mime_type": source_mime_type or "application/octet-stream",
+    }
+
+
+def _download_transcription_input_from_storage(storage_bucket: str, object_path: str, suffix: str = "") -> str:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise RuntimeError("Supabase Storage 환경이 설정되지 않았습니다.")
+    if not storage_bucket or not object_path:
+        raise RuntimeError("스토리지 경로가 비어 있습니다.")
+
+    download_url = (
+        f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/"
+        f"{urllib.parse.quote(storage_bucket, safe='')}/"
+        f"{urllib.parse.quote(object_path, safe='/')}"
+    )
+    with httpx.Client(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+        response = client.get(download_url, headers=_supabase_storage_headers())
+    if response.status_code >= 400:
+        raise RuntimeError(f"Supabase Storage 다운로드 실패: {response.text[:300]}")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or pathlib.Path(object_path).suffix or ".upload") as temp_file:
+        temp_file.write(response.content)
+        return temp_file.name
+
+
+def _delete_transcription_input_from_storage(storage_bucket: str, object_path: str) -> None:
+    if not SUPABASE_URL or not SUPABASE_KEY or not storage_bucket or not object_path:
+        return
+    delete_url = (
+        f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/"
+        f"{urllib.parse.quote(storage_bucket, safe='')}/"
+        f"{urllib.parse.quote(object_path, safe='/')}"
+    )
+    try:
+        with httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+            client.delete(delete_url, headers=_supabase_storage_headers())
+    except Exception as e:
+        print(f"Failed to delete storage object ({object_path}): {e}")
+
+
 def _normalize_email_or_raise(email: str) -> str:
     normalized = (email or "").strip().lower()
     if not EMAIL_REGEX.match(normalized):
@@ -2041,6 +2140,51 @@ def _fetch_transcription_job(task_id: str, owner_key: str) -> dict | None:
             return response.data[0]
     except Exception as e:
         print(f"Failed to fetch transcription job ({task_id}): {e}")
+    return None
+
+
+def _fetch_queued_transcription_jobs(limit: int = 5) -> list[dict]:
+    if not _ensure_transcription_jobs_scope_ready():
+        return []
+    try:
+        client = _get_supabase_client()
+        response = (
+            client.table(TRANSCRIPTION_JOBS_TABLE_NAME)
+            .select("*")
+            .eq("status", "queued")
+            .order("created_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+        return list(response.data or [])
+    except Exception as e:
+        print(f"Failed to fetch queued transcription jobs: {e}")
+        return []
+
+
+def _claim_transcription_job(task_id: str, worker_id: str) -> dict | None:
+    if not task_id or not worker_id or not _ensure_transcription_jobs_scope_ready():
+        return None
+    try:
+        client = _get_supabase_client()
+        claimed_at = datetime.now().isoformat()
+        response = (
+            client.table(TRANSCRIPTION_JOBS_TABLE_NAME)
+            .update({
+                "status": "processing",
+                "worker_id": worker_id,
+                "claimed_at": claimed_at,
+                "updated_at": claimed_at,
+            })
+            .eq("task_id", task_id)
+            .eq("status", "queued")
+            .select("*")
+            .execute()
+        )
+        if response.data:
+            return response.data[0]
+    except Exception as e:
+        print(f"Failed to claim transcription job ({task_id}): {e}")
     return None
 
 
@@ -4602,6 +4746,47 @@ async def transcribe_audio(
                 ),
                 "guest": is_guest,
             }
+
+        if _can_use_worker_queue():
+            try:
+                storage_meta = _upload_transcription_input_to_storage(
+                    task_id,
+                    temp_file_path,
+                    suffix=original_ext,
+                    source_mime_type=source_mime_type,
+                )
+                _upsert_transcription_job(
+                    task_id,
+                    user_id,
+                    {
+                        "status": "queued",
+                        **storage_meta,
+                    },
+                    user_id=None if is_guest else user_id,
+                    is_guest=is_guest,
+                )
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                temp_file_path = ""
+                queued_for_processing = True
+                return {
+                    "success": True,
+                    "task_id": task_id,
+                    "status": "queued",
+                    "message": f"{type_labels.get(normalized_transcription_type, '녹취')} 변환 작업이 대기열에 등록되었습니다.",
+                    "engine": engine_name,
+                    "transcription_type": normalized_transcription_type,
+                    "correction_mode": normalized_correction_mode,
+                    "audio_seconds": audio_seconds,
+                    "quota": usage_snapshot,
+                    "guest": is_guest,
+                    "processing_mode": "worker_queue",
+                }
+            except Exception as worker_queue_error:
+                print(
+                    f"Worker queue enqueue failed for {task_id}: {worker_queue_error}. "
+                    "Falling back to in-process background task."
+                )
 
         background_tasks.add_task(
             process_transcription,
