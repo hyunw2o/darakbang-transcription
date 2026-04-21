@@ -75,6 +75,8 @@ uvicorn main:app --reload
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
    - `FREE_MONTHLY_LIMIT_SECONDS` (기본 36000, 무료 10시간)
    - `INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS` (기본 0, 로그인 파일은 즉시 queued 응답 후 폴링 처리. 아주 짧은 파일만 인라인 대기시키고 싶으면 소수 초로 조정)
+   - `WHISPER_CHUNK_CONCURRENCY` (기본 2, Whisper 청크 병렬 처리 수)
+   - `GEMINI_CORRECTION_CHUNK_CONCURRENCY` (기본 2, Gemini 교정 청크 병렬 처리 수)
    - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
    - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)
    - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)

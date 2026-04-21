@@ -13,6 +13,7 @@ import asyncio
 import random
 import gc
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
@@ -323,6 +324,7 @@ WHISPER_SEGMENT_SECONDS = max(
     60,
     int(os.getenv("WHISPER_SEGMENT_SECONDS", "360")),
 )
+WHISPER_CHUNK_CONCURRENCY = max(1, int(os.getenv("WHISPER_CHUNK_CONCURRENCY", "2")))
 
 # 외부 프로세스/LLM 타임아웃
 FFMPEG_PROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("FFMPEG_PROCESS_TIMEOUT_SECONDS", "300")))
@@ -330,6 +332,7 @@ FFPROBE_PROCESS_TIMEOUT_SECONDS = max(10, int(os.getenv("FFPROBE_PROCESS_TIMEOUT
 GEMINI_REQUEST_TIMEOUT_SECONDS = max(60, int(os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "600")))
 GEMINI_MAX_OUTPUT_TOKENS = max(4096, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "32768")))
 GEMINI_CORRECTION_CHUNK_CHARS = max(4000, int(os.getenv("GEMINI_CORRECTION_CHUNK_CHARS", "12000")))
+GEMINI_CORRECTION_CHUNK_CONCURRENCY = max(1, int(os.getenv("GEMINI_CORRECTION_CHUNK_CONCURRENCY", "2")))
 
 # OpenAI (Whisper) 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -4070,7 +4073,7 @@ def whisper_transcribe(
 
     whisper_prompt = custom_names_str + whisper_prompt
     chunks = split_audio_file(file_path, transcription_type)
-    all_text: list[str] = []
+    all_text: list[str] = [""] * len(chunks)
 
     rapid_retry_prompt = (
         "초고속 발화 또는 랩처럼 빠른 한국어 발화가 포함될 수 있습니다. "
@@ -4085,8 +4088,8 @@ def whisper_transcribe(
         "Recover word boundaries from merged syllables and transcribe every audible word."
     )
 
-    for i, (chunk_path, chunk_duration_sec) in enumerate(chunks):
-        print(f"  Whisper transcribing chunk {i+1}/{len(chunks)}...")
+    def transcribe_single_chunk(chunk_index: int, chunk_path: str, chunk_duration_sec: float) -> tuple[int, str]:
+        print(f"  Whisper transcribing chunk {chunk_index+1}/{len(chunks)}...")
         if task_id:
             _touch_task_runtime_state(task_id)
 
@@ -4115,7 +4118,7 @@ def whisper_transcribe(
                     raise RuntimeError("Whisper returned empty text.")
 
                 if chunk_duration_sec >= 45 and len(chunk_text) < 25 and attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
-                    print(f"  Chunk {i+1}: sparse transcript detected, retrying with rapid-speech hint...")
+                    print(f"  Chunk {chunk_index+1}: sparse transcript detected, retrying with rapid-speech hint...")
                     continue
 
                 last_error = None
@@ -4125,7 +4128,7 @@ def whisper_transcribe(
                 if attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
                     wait_time = (2 ** attempt) + random.uniform(0.2, 1.0)
                     print(
-                        f"  Chunk {i+1}: whisper attempt {attempt+1}/{WHISPER_CHUNK_MAX_RETRIES} failed "
+                        f"  Chunk {chunk_index+1}: whisper attempt {attempt+1}/{WHISPER_CHUNK_MAX_RETRIES} failed "
                         f"({exc}). Retrying in {wait_time:.1f}s..."
                     )
                     time.sleep(wait_time)
@@ -4137,22 +4140,44 @@ def whisper_transcribe(
 
         if not best_text and last_error:
             raise RuntimeError(
-                f"Whisper chunk {i+1}/{len(chunks)} failed after {WHISPER_CHUNK_MAX_RETRIES} attempts: {last_error}"
+                f"Whisper chunk {chunk_index+1}/{len(chunks)} failed after {WHISPER_CHUNK_MAX_RETRIES} attempts: {last_error}"
             ) from last_error
         if not best_text:
-            raise RuntimeError(f"Whisper chunk {i+1}/{len(chunks)} returned no transcript.")
+            raise RuntimeError(f"Whisper chunk {chunk_index+1}/{len(chunks)} returned no transcript.")
 
         print(
-            f"  Chunk {i+1}/{len(chunks)} done: "
+            f"  Chunk {chunk_index+1}/{len(chunks)} done: "
             f"duration={chunk_duration_sec:.1f}s, chars={len(best_text)}"
         )
-        all_text.append(best_text)
+        return chunk_index, best_text
 
-        # 청크 파일 삭제 (원본 제외)
-        if chunk_path != file_path:
-            os.unlink(chunk_path)
+    worker_count = min(WHISPER_CHUNK_CONCURRENCY, max(1, len(chunks)))
+    if worker_count <= 1 or len(chunks) <= 1:
+        for index, (chunk_path, chunk_duration_sec) in enumerate(chunks):
+            try:
+                _, chunk_text = transcribe_single_chunk(index, chunk_path, chunk_duration_sec)
+                all_text[index] = chunk_text
+            finally:
+                if chunk_path != file_path and os.path.exists(chunk_path):
+                    os.unlink(chunk_path)
+        return "\n\n".join(part for part in all_text if part)
 
-    return "\n\n".join(all_text)
+    print(f"  Whisper chunk concurrency enabled: {worker_count} workers")
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        future_map = {
+            executor.submit(transcribe_single_chunk, index, chunk_path, chunk_duration_sec): (index, chunk_path)
+            for index, (chunk_path, chunk_duration_sec) in enumerate(chunks)
+        }
+        for future in as_completed(future_map):
+            index, chunk_path = future_map[future]
+            try:
+                _, chunk_text = future.result()
+                all_text[index] = chunk_text
+            finally:
+                if chunk_path != file_path and os.path.exists(chunk_path):
+                    os.unlink(chunk_path)
+
+    return "\n\n".join(part for part in all_text if part)
 
 
 async def gemini_correct_and_structure(
@@ -4234,9 +4259,10 @@ async def gemini_correct_and_structure(
         for attempt in range(max_retries):
             try:
                 _touch_task_runtime_state(task_id)
-                response = model.generate_content(
+                response = await asyncio.to_thread(
+                    model.generate_content,
                     prompt_parts,
-                    request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS}
+                    request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
                 )
                 _touch_task_runtime_state(task_id)
                 break
@@ -4259,8 +4285,10 @@ async def gemini_correct_and_structure(
             f"[{task_id}] Gemini correction chunking enabled: "
             f"{len(chunks)} chunks, raw={len(raw_text)} chars, max={GEMINI_CORRECTION_CHUNK_CHARS}"
         )
-        corrected_chunks: list[str] = []
-        for index, chunk in enumerate(chunks, start=1):
+        worker_count = min(GEMINI_CORRECTION_CHUNK_CONCURRENCY, len(chunks))
+        print(f"[{task_id}] Gemini correction concurrency enabled: {worker_count} workers")
+
+        async def correct_single_chunk(index: int, chunk: str) -> tuple[int, str]:
             if language == "en":
                 chunk_instruction = (
                     f"[Segment Correction {index}/{len(chunks)}]\n"
@@ -4295,9 +4323,26 @@ async def gemini_correct_and_structure(
             )
             if not corrected_chunk and chunk.strip():
                 corrected_chunk = chunk.strip()
-            corrected_chunks.append(corrected_chunk)
+            return index, corrected_chunk
 
-        return "\n\n".join(part for part in corrected_chunks if part).strip()
+        if worker_count <= 1:
+            corrected_chunks: list[str] = []
+            for index, chunk in enumerate(chunks, start=1):
+                _, corrected_chunk = await correct_single_chunk(index, chunk)
+                corrected_chunks.append(corrected_chunk)
+            return "\n\n".join(part for part in corrected_chunks if part).strip()
+
+        semaphore = asyncio.Semaphore(worker_count)
+
+        async def run_with_limit(index: int, chunk: str) -> tuple[int, str]:
+            async with semaphore:
+                return await correct_single_chunk(index, chunk)
+
+        corrected_results = await asyncio.gather(
+            *(run_with_limit(index, chunk) for index, chunk in enumerate(chunks, start=1))
+        )
+        corrected_results.sort(key=lambda item: item[0])
+        return "\n\n".join(part for _, part in corrected_results if part).strip()
 
     if not chunks:
         return ""
