@@ -182,7 +182,7 @@ GUEST_INLINE_MAX_AUDIO_SECONDS = max(
 )
 INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS = max(
     0,
-    int(os.getenv("INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS", "180")),
+    int(os.getenv("INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS", "600")),
 )
 TRANSCRIPTION_USE_WORKER_QUEUE = os.getenv("TRANSCRIPTION_USE_WORKER_QUEUE", "false").strip().lower() == "true"
 TRANSCRIPTION_STORAGE_BUCKET = (os.getenv("TRANSCRIPTION_STORAGE_BUCKET") or "transcription-inputs").strip()
@@ -2069,11 +2069,11 @@ def _upsert_transcription_job(
     *,
     user_id: str | None,
     is_guest: bool,
-) -> None:
+) -> bool:
     if not task_id or not owner_key or not patch:
-        return
+        return False
     if not _ensure_transcription_jobs_scope_ready():
-        return
+        return False
 
     payload = dict(patch)
     payload.pop("task_id", None)
@@ -2099,7 +2099,7 @@ def _upsert_transcription_job(
                 .eq("owner_key", owner_key)
                 .execute()
             )
-            return
+            return True
 
         insert_payload = {
             "task_id": task_id,
@@ -2117,8 +2117,10 @@ def _upsert_transcription_job(
             **payload,
         }
         client.table(TRANSCRIPTION_JOBS_TABLE_NAME).insert(insert_payload).execute()
+        return True
     except Exception as e:
         print(f"Failed to upsert transcription job ({task_id}): {e}")
+        return False
 
 
 def _fetch_transcription_job(task_id: str, owner_key: str) -> dict | None:
@@ -2224,16 +2226,16 @@ def _build_transcription_status_response(row: dict, task_id: str, runtime_status
     }
 
 
-def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> None:
+def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool:
     """transcriptions 상태를 안전하게 갱신/생성한다."""
     if not patch:
-        return
+        return False
 
     payload = dict(patch)
     payload.pop("task_id", None)
     payload.pop("user_id", None)
     if not payload:
-        return
+        return False
 
     try:
         client = _get_supabase_client()
@@ -2254,7 +2256,7 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> None
                 .eq("user_id", user_id)
                 .execute()
             )
-            return
+            return True
 
         insert_payload = {
             "task_id": task_id,
@@ -2268,8 +2270,10 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> None
             **payload,
         }
         client.table("transcriptions").insert(insert_payload).execute()
+        return True
     except Exception as e:
         print(f"Failed to upsert transcription state ({task_id}): {e}")
+        return False
 
 
 def _usage_now() -> datetime:
@@ -4665,7 +4669,7 @@ async def transcribe_audio(
 
         task_id = str(uuid.uuid4())
         _set_task_runtime_state(task_id, "queued", owner_id=user_id)
-        _upsert_transcription_job(task_id, user_id, {
+        job_state_persisted = _upsert_transcription_job(task_id, user_id, {
             "status": "queued",
             "created_at": datetime.now().isoformat(),
             "language": normalized_language,
@@ -4679,8 +4683,9 @@ async def transcribe_audio(
             "audio_seconds": audio_seconds,
             "error": None,
         }, user_id=None if is_guest else user_id, is_guest=is_guest)
+        state_persisted = False
         if not is_guest:
-            _upsert_transcription_state(task_id, user_id, {
+            state_persisted = _upsert_transcription_state(task_id, user_id, {
                 "status": "queued",
                 "created_at": datetime.now().isoformat(),
                 "language": normalized_language,
@@ -4695,6 +4700,7 @@ async def transcribe_audio(
 
         type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
         engine_name = "whisper+gemini" if openai_client else "gemini-only"
+        queue_state_persisted = job_state_persisted or state_persisted
         should_return_inline = (
             audio_seconds > 0
             and (
@@ -4706,6 +4712,22 @@ async def transcribe_audio(
                 )
             )
         )
+
+        if not queue_state_persisted:
+            emergency_inline_limit_seconds = max(
+                GUEST_INLINE_MAX_AUDIO_SECONDS if is_guest else INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS,
+                600,
+            )
+            if audio_seconds <= emergency_inline_limit_seconds:
+                should_return_inline = True
+            else:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "작업 상태 저장소가 준비되지 않아 긴 파일 변환을 시작할 수 없습니다. "
+                        "Supabase transcription_jobs 설정 또는 transcriptions 저장 상태를 확인해 주세요."
+                    ),
+                )
 
         if should_return_inline:
             queued_for_processing = True

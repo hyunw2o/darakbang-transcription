@@ -72,7 +72,7 @@ uvicorn main:app --reload
    - `OAUTH_REDIRECT_ALLOW_HOSTS`
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
    - `FREE_MONTHLY_LIMIT_SECONDS` (기본 36000, 무료 10시간)
-   - `INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS` (기본 180, 로그인 짧은 파일 인라인 처리)
+   - `INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS` (기본 600, 로그인 짧은 파일 인라인 처리)
    - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
    - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)
    - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)
