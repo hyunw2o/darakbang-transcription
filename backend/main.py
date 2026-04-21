@@ -2013,11 +2013,34 @@ def _ensure_transcriptions_user_scope_ready() -> None:
         return
 
     try:
-        _get_supabase_client().table("transcriptions").select("user_id").limit(1).execute()
+        (
+            _get_supabase_client()
+            .table("transcriptions")
+            .select(
+                "task_id,user_id,status,created_at,raw_text,corrected_text,"
+                "characters,darakbang_optimized"
+            )
+            .limit(1)
+            .execute()
+        )
         TRANSCRIPTION_SCOPE_VALIDATED = True
     except Exception as e:
         error_text = str(e).lower()
-        if "user_id" in error_text and ("column" in error_text or "does not exist" in error_text):
+        if (
+            "column" in error_text
+            and any(
+                column_name in error_text
+                for column_name in (
+                    "user_id",
+                    "status",
+                    "created_at",
+                    "raw_text",
+                    "corrected_text",
+                    "characters",
+                    "darakbang_optimized",
+                )
+            )
+        ) or ("user_id" in error_text and ("column" in error_text or "does not exist" in error_text)):
             raise HTTPException(
                 status_code=500,
                 detail="Supabase 설정 필요: backend/sql/transcriptions_user_scope.sql 을 먼저 실행하세요.",
@@ -2267,6 +2290,7 @@ def _build_transcription_status_response(row: dict, task_id: str, runtime_status
 
 def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool:
     """transcriptions 상태를 안전하게 갱신/생성한다."""
+    global TRANSCRIPTION_SCOPE_VALIDATED
     if not patch:
         return False
 
@@ -2311,6 +2335,25 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool
         client.table("transcriptions").insert(insert_payload).execute()
         return True
     except Exception as e:
+        error_text = str(e).lower()
+        if "column" in error_text and any(
+            column_name in error_text
+            for column_name in (
+                "user_id",
+                "status",
+                "created_at",
+                "raw_text",
+                "corrected_text",
+                "characters",
+                "darakbang_optimized",
+            )
+        ):
+            TRANSCRIPTION_SCOPE_VALIDATED = False
+            print(
+                "Failed to upsert transcription state because the transcriptions schema is outdated. "
+                "Re-run backend/sql/transcriptions_user_scope.sql and reload PostgREST schema."
+            )
+            return False
         print(f"Failed to upsert transcription state ({task_id}): {e}")
         return False
 

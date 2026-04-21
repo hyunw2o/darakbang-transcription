@@ -6,7 +6,40 @@
 -- - RLS still protects user-scoped access from anon/authenticated contexts.
 
 alter table if exists public.transcriptions
-  add column if not exists user_id uuid;
+  add column if not exists user_id uuid,
+  add column if not exists status text default 'queued',
+  add column if not exists created_at timestamptz default now(),
+  add column if not exists raw_text text,
+  add column if not exists corrected_text text,
+  add column if not exists characters integer default 0,
+  add column if not exists darakbang_optimized boolean default false,
+  add column if not exists engine text,
+  add column if not exists transcription_type text,
+  add column if not exists language text,
+  add column if not exists error text,
+  add column if not exists content_style text;
+
+update public.transcriptions
+set status = coalesce(nullif(status, ''), 'queued')
+where status is null or status = '';
+
+update public.transcriptions
+set created_at = coalesce(created_at, now())
+where created_at is null;
+
+update public.transcriptions
+set characters = coalesce(characters, 0)
+where characters is null;
+
+update public.transcriptions
+set darakbang_optimized = coalesce(darakbang_optimized, false)
+where darakbang_optimized is null;
+
+alter table if exists public.transcriptions
+  alter column status set default 'queued',
+  alter column created_at set default now(),
+  alter column characters set default 0,
+  alter column darakbang_optimized set default false;
 
 create index if not exists idx_transcriptions_user_id_created_at
   on public.transcriptions (user_id, created_at desc);
