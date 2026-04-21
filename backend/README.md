@@ -50,6 +50,7 @@ uvicorn main:app --reload
    - `SUPABASE_URL`
    - `SUPABASE_KEY`
 4. Supabase SQL Editor에서 아래 SQL 실행
+   - `backend/sql/transcription_jobs.sql` (작업 상태 영속 저장: guest + 로그인 공용)
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)

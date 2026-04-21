@@ -190,6 +190,7 @@ GUEST_IP_MONTHLY_LIMIT_SECONDS = max(
 )
 GUEST_RESULT_TTL_SECONDS = max(600, int(os.getenv("GUEST_RESULT_TTL_SECONDS", "7200")))
 GUEST_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
+TRANSCRIPTION_JOBS_TABLE_NAME = "transcription_jobs"
 USAGE_TABLE_NAME = "user_usage_quotas"
 USAGE_FREE_PLAN = "free"
 USAGE_GUEST_PLAN = "guest"
@@ -428,6 +429,7 @@ ALLOWED_RECORD_CATEGORIES = {
 }
 ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
 TRANSCRIPTION_SCOPE_VALIDATED = False
+TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
 BILLING_SCOPE_VALIDATED = False
 BILLING_REFUND_SCOPE_VALIDATED = False
@@ -1922,6 +1924,160 @@ def _ensure_transcriptions_user_scope_ready() -> None:
                 detail="Supabase 설정 필요: backend/sql/transcriptions_user_scope.sql 을 먼저 실행하세요.",
             )
         raise
+
+
+def _ensure_transcription_jobs_scope_ready(required: bool = False) -> bool:
+    global TRANSCRIPTION_JOBS_SCOPE_VALIDATED
+    if TRANSCRIPTION_JOBS_SCOPE_VALIDATED:
+        return True
+
+    try:
+        _get_supabase_client().table(TRANSCRIPTION_JOBS_TABLE_NAME).select("task_id").limit(1).execute()
+        TRANSCRIPTION_JOBS_SCOPE_VALIDATED = True
+        return True
+    except Exception as e:
+        error_text = str(e).lower()
+        if (
+            TRANSCRIPTION_JOBS_TABLE_NAME in error_text
+            and (
+                "does not exist" in error_text
+                or "relation" in error_text
+                or "schema cache" in error_text
+                or "could not find the table" in error_text
+                or "pgrst205" in error_text
+            )
+        ):
+            if required:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "Supabase 설정 필요: backend/sql/transcription_jobs.sql 을 실행한 뒤 "
+                        "SQL Editor에서 `NOTIFY pgrst, 'reload schema';` 를 실행하세요."
+                    ),
+                )
+            print(
+                "Warning: transcription_jobs table is not ready. "
+                "Run backend/sql/transcription_jobs.sql and reload PostgREST schema."
+            )
+            return False
+        raise
+
+
+def _upsert_transcription_job(
+    task_id: str,
+    owner_key: str,
+    patch: dict,
+    *,
+    user_id: str | None,
+    is_guest: bool,
+) -> None:
+    if not task_id or not owner_key or not patch:
+        return
+    if not _ensure_transcription_jobs_scope_ready():
+        return
+
+    payload = dict(patch)
+    payload.pop("task_id", None)
+    payload.pop("owner_key", None)
+    payload.pop("user_id", None)
+    payload["updated_at"] = datetime.now().isoformat()
+
+    try:
+        client = _get_supabase_client()
+        existing = (
+            client.table(TRANSCRIPTION_JOBS_TABLE_NAME)
+            .select("task_id")
+            .eq("task_id", task_id)
+            .eq("owner_key", owner_key)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            (
+                client.table(TRANSCRIPTION_JOBS_TABLE_NAME)
+                .update(payload)
+                .eq("task_id", task_id)
+                .eq("owner_key", owner_key)
+                .execute()
+            )
+            return
+
+        insert_payload = {
+            "task_id": task_id,
+            "owner_key": owner_key,
+            "user_id": user_id,
+            "is_guest": is_guest,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": payload["updated_at"],
+            "status": "queued",
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+            "darakbang_optimized": False,
+            "error": None,
+            **payload,
+        }
+        client.table(TRANSCRIPTION_JOBS_TABLE_NAME).insert(insert_payload).execute()
+    except Exception as e:
+        print(f"Failed to upsert transcription job ({task_id}): {e}")
+
+
+def _fetch_transcription_job(task_id: str, owner_key: str) -> dict | None:
+    if not task_id or not owner_key:
+        return None
+    if not _ensure_transcription_jobs_scope_ready():
+        return None
+    try:
+        client = _get_supabase_client()
+        response = (
+            client.table(TRANSCRIPTION_JOBS_TABLE_NAME)
+            .select("*")
+            .eq("task_id", task_id)
+            .eq("owner_key", owner_key)
+            .limit(1)
+            .execute()
+        )
+        if response.data:
+            return response.data[0]
+    except Exception as e:
+        print(f"Failed to fetch transcription job ({task_id}): {e}")
+    return None
+
+
+def _build_transcription_status_response(row: dict, task_id: str, runtime_status: str | None = None) -> dict:
+    row_status = str(row.get("status") or runtime_status or "")
+    normalized_type = str(row.get("transcription_type") or "conversation")
+
+    if row_status == "completed":
+        corrected_text = str(row.get("corrected_text") or "")
+        raw_text = str(row.get("raw_text") or "")
+        content_style = str(row.get("content_style") or "").strip() or _infer_content_style(
+            text=(corrected_text or raw_text),
+            transcription_type=normalized_type,
+            language=str(row.get("language") or "ko"),
+        )
+        return {
+            "task_id": row.get("task_id", task_id),
+            "status": row_status,
+            "created_at": row.get("created_at"),
+            "language": row.get("language"),
+            "raw_text": raw_text,
+            "corrected_text": corrected_text,
+            "characters": row.get("characters") or 0,
+            "darakbang_optimized": bool(row.get("darakbang_optimized")),
+            "engine": row.get("engine") or "unknown",
+            "transcription_type": normalized_type,
+            "content_style": content_style,
+            "error": row.get("error"),
+        }
+
+    return {
+        "task_id": row.get("task_id", task_id),
+        "status": row_status,
+        "error": row.get("error"),
+        "created_at": row.get("created_at"),
+        "transcription_type": normalized_type,
+    }
 
 
 def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> None:
@@ -4041,8 +4197,18 @@ def _process_transcription_sync(
     raw_text = ""
     corrected_text = ""
     engine = "gemini-only"
+    persisted_user_id = None if is_guest else user_id
     try:
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
+        _upsert_transcription_job(task_id, user_id, {
+            "status": "processing",
+            "language": language,
+            "transcription_type": transcription_type,
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+            "error": None,
+        }, user_id=persisted_user_id, is_guest=is_guest)
         if not is_guest:
             _upsert_transcription_state(task_id, user_id, {
                 "status": "processing",
@@ -4196,6 +4362,13 @@ def _process_transcription_sync(
         else:
             _upsert_transcription_state(task_id, user_id, completed_payload)
             _increment_user_usage_seconds(user_id, audio_seconds)
+        _upsert_transcription_job(
+            task_id,
+            user_id,
+            completed_payload,
+            user_id=persisted_user_id,
+            is_guest=is_guest,
+        )
 
         _clear_task_runtime_state(task_id)
         _log_stage_memory(task_id, "completed")
@@ -4222,6 +4395,13 @@ def _process_transcription_sync(
                 _set_guest_task_result(task_id, user_id, error_payload)
             else:
                 _upsert_transcription_state(task_id, user_id, error_payload)
+            _upsert_transcription_job(
+                task_id,
+                user_id,
+                error_payload,
+                user_id=persisted_user_id,
+                is_guest=is_guest,
+            )
         except Exception as db_err:
             print(f"Failed to write error to Supabase: {db_err}")
         _log_stage_memory(task_id, "error")
@@ -4292,6 +4472,7 @@ async def transcribe_audio(
         if not is_guest:
             _ensure_transcriptions_user_scope_ready()
             _ensure_user_usage_scope_ready()
+        _ensure_transcription_jobs_scope_ready()
 
         normalized_language = (language or "ko").strip().lower()
         if normalized_language not in ALLOWED_LANGUAGES:
@@ -4340,6 +4521,20 @@ async def transcribe_audio(
 
         task_id = str(uuid.uuid4())
         _set_task_runtime_state(task_id, "queued", owner_id=user_id)
+        _upsert_transcription_job(task_id, user_id, {
+            "status": "queued",
+            "created_at": datetime.now().isoformat(),
+            "language": normalized_language,
+            "raw_text": "",
+            "corrected_text": "",
+            "characters": 0,
+            "darakbang_optimized": normalized_transcription_type == "sermon",
+            "engine": "whisper+gemini" if openai_client else "gemini-only",
+            "transcription_type": normalized_transcription_type,
+            "correction_mode": normalized_correction_mode,
+            "audio_seconds": audio_seconds,
+            "error": None,
+        }, user_id=None if is_guest else user_id, is_guest=is_guest)
         if not is_guest:
             _upsert_transcription_state(task_id, user_id, {
                 "status": "queued",
@@ -4458,6 +4653,7 @@ async def get_task_status(
     owner = await _resolve_transcription_owner(authorization, x_guest_session_id, request)
     user_id = owner["owner_id"]
     is_guest = bool(owner["is_guest"])
+    _ensure_transcription_jobs_scope_ready()
     if not is_guest:
         _ensure_transcriptions_user_scope_ready()
     _cleanup_stale_task_states()
@@ -4472,6 +4668,15 @@ async def get_task_status(
             updated_ts = float(task_updated_at.get(task_id) or 0)
             if updated_ts and (time.time() - updated_ts) > TASK_STUCK_TIMEOUT_SECONDS:
                 _clear_task_runtime_state(task_id)
+                _upsert_transcription_job(task_id, user_id, {
+                    "status": "error",
+                    "error": TASK_STUCK_ERROR_MESSAGE,
+                }, user_id=None if is_guest else user_id, is_guest=is_guest)
+                if not is_guest:
+                    _upsert_transcription_state(task_id, user_id, {
+                        "status": "error",
+                        "error": TASK_STUCK_ERROR_MESSAGE,
+                    })
                 return {
                     "task_id": task_id,
                     "status": "error",
@@ -4479,7 +4684,34 @@ async def get_task_status(
                     "transcription_type": "conversation",
                 }
             runtime_status = status
-            return {"task_id": task_id, "status": runtime_status}
+
+    job_row = _fetch_transcription_job(task_id, user_id)
+    if job_row:
+        job_status = str(job_row.get("status") or runtime_status or "")
+        if job_status in {"queued", "processing"} and _has_task_exceeded_timeout(
+            job_row.get("updated_at") or job_row.get("created_at")
+        ):
+            _clear_task_runtime_state(task_id)
+            _upsert_transcription_job(task_id, user_id, {
+                "status": "error",
+                "error": TASK_STUCK_ERROR_MESSAGE,
+            }, user_id=None if is_guest else user_id, is_guest=is_guest)
+            if not is_guest:
+                _upsert_transcription_state(task_id, user_id, {
+                    "status": "error",
+                    "error": TASK_STUCK_ERROR_MESSAGE,
+                })
+            return {
+                "task_id": job_row.get("task_id", task_id),
+                "status": "error",
+                "error": TASK_STUCK_ERROR_MESSAGE,
+                "created_at": job_row.get("created_at"),
+                "transcription_type": job_row.get("transcription_type", "conversation"),
+            }
+
+        if job_status == "completed":
+            _clear_task_runtime_state(task_id)
+        return _build_transcription_status_response(job_row, task_id, runtime_status=runtime_status)
 
     if is_guest:
         guest_result = _get_guest_task_result(task_id, user_id)
@@ -4503,6 +4735,10 @@ async def get_task_status(
         row_status = str(row.get("status") or runtime_status or "")
         if row_status in {"queued", "processing"} and _has_task_exceeded_timeout(row.get("created_at")):
             _clear_task_runtime_state(task_id)
+            _upsert_transcription_job(task_id, user_id, {
+                "status": "error",
+                "error": TASK_STUCK_ERROR_MESSAGE,
+            }, user_id=user_id, is_guest=False)
             _upsert_transcription_state(task_id, user_id, {
                 "status": "error",
                 "error": TASK_STUCK_ERROR_MESSAGE,
@@ -4517,35 +4753,7 @@ async def get_task_status(
 
         if row_status == "completed":
             _clear_task_runtime_state(task_id)
-            corrected_text = str(row.get("corrected_text") or "")
-            raw_text = str(row.get("raw_text") or "")
-            normalized_type = str(row.get("transcription_type") or "conversation")
-            content_style = _infer_content_style(
-                text=(corrected_text or raw_text),
-                transcription_type=normalized_type,
-                language=str(row.get("language") or "ko"),
-            )
-            return {
-                "task_id": row["task_id"],
-                "status": row_status,
-                "created_at": row["created_at"],
-                "language": row["language"],
-                "raw_text": raw_text,
-                "corrected_text": corrected_text,
-                "characters": row["characters"],
-                "darakbang_optimized": row["darakbang_optimized"],
-                "engine": row["engine"],
-                "transcription_type": normalized_type,
-                "content_style": content_style,
-            }
-        else:
-            return {
-                "task_id": row["task_id"],
-                "status": row_status,
-                "error": row["error"],
-                "created_at": row["created_at"],
-                "transcription_type": row.get("transcription_type", "conversation"),
-            }
+        return _build_transcription_status_response(row, task_id, runtime_status=runtime_status)
 
     if runtime_status in {"queued", "processing"}:
         return {"task_id": task_id, "status": runtime_status}
