@@ -49,62 +49,32 @@ create index if not exists idx_transcriptions_task_user
 
 alter table if exists public.transcriptions enable row level security;
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'public'
-      and tablename = 'transcriptions'
-      and policyname = 'transcriptions_select_own'
-  ) then
-    create policy transcriptions_select_own
-      on public.transcriptions
-      for select
-      to authenticated
-      using (auth.uid() = user_id);
-  end if;
+drop policy if exists transcriptions_select_own on public.transcriptions;
+drop policy if exists transcriptions_insert_own on public.transcriptions;
+drop policy if exists transcriptions_update_own on public.transcriptions;
+drop policy if exists transcriptions_delete_own on public.transcriptions;
 
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'public'
-      and tablename = 'transcriptions'
-      and policyname = 'transcriptions_insert_own'
-  ) then
-    create policy transcriptions_insert_own
-      on public.transcriptions
-      for insert
-      to authenticated
-      with check (auth.uid() = user_id);
-  end if;
+create policy transcriptions_select_own
+  on public.transcriptions
+  for select
+  to authenticated
+  using (auth.uid() = user_id);
 
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'public'
-      and tablename = 'transcriptions'
-      and policyname = 'transcriptions_update_own'
-  ) then
-    create policy transcriptions_update_own
-      on public.transcriptions
-      for update
-      to authenticated
-      using (auth.uid() = user_id)
-      with check (auth.uid() = user_id);
-  end if;
+create policy transcriptions_insert_own
+  on public.transcriptions
+  for insert
+  to authenticated
+  with check (auth.uid() = user_id);
 
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'public'
-      and tablename = 'transcriptions'
-      and policyname = 'transcriptions_delete_own'
-  ) then
-    create policy transcriptions_delete_own
-      on public.transcriptions
-      for delete
-      to authenticated
-      using (auth.uid() = user_id);
-  end if;
-end $$;
+create policy transcriptions_update_own
+  on public.transcriptions
+  for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy transcriptions_delete_own
+  on public.transcriptions
+  for delete
+  to authenticated
+  using (auth.uid() = user_id);
