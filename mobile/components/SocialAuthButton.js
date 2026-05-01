@@ -1,5 +1,6 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import * as AppleAuthentication from "expo-apple-authentication";
 import NmPressable from "./NmPressable";
 
 function ProviderMark({ provider }) {
@@ -29,6 +30,25 @@ function ProviderMark({ provider }) {
 export default function SocialAuthButton({ provider, label, loading, loadingLabel, onPress, disabled }) {
   const isGoogle = provider === "google";
   const isApple = provider === "apple";
+
+  if (isApple && Platform.OS === "ios" && AppleAuthentication.AppleAuthenticationButton) {
+    return (
+      <View
+        pointerEvents={disabled ? "none" : "auto"}
+        style={[styles.appleNativeWrap, disabled ? styles.disabled : null]}
+        accessibilityLabel={loading ? loadingLabel || label : label}
+      >
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+          cornerRadius={999}
+          style={styles.appleNativeButton}
+          onPress={onPress}
+        />
+      </View>
+    );
+  }
+
   return (
     <NmPressable
       style={[
@@ -71,6 +91,16 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  appleNativeWrap: {
+    minWidth: 170,
+    height: 46,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  appleNativeButton: {
+    width: "100%",
+    height: 46,
   },
   inner: {
     flexDirection: "row",
