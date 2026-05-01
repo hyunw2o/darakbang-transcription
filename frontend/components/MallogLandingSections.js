@@ -91,7 +91,16 @@ function FeatureCard({ card, localeTextClass, darkMode }) {
   )
 }
 
-export default function MallogLandingSections({ locale = 'kr', content, pricingUrl, oursUrl, stats, appDownloadUrl = '', darkMode = false }) {
+export default function MallogLandingSections({
+  locale = 'kr',
+  content,
+  pricingUrl,
+  oursUrl,
+  stats,
+  appDownloadUrl = '',
+  iosAppDownloadUrl = '',
+  darkMode = false,
+}) {
   const [activePreviewIndex, setActivePreviewIndex] = useState(0)
   const localeTextClass = locale === 'kr' ? 'mallog-keep' : ''
   const authUrl = locale === 'kr' ? '/#auth-card' : '/en#auth-card'
@@ -101,6 +110,17 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
     stats &&
     [stats.hoursProcessed, stats.betaUsers, stats.avgTurnaround, stats.timeSaving].some((value) => String(value || '').trim())
   )
+  const appDownloadLabels = locale === 'kr'
+    ? {
+        android: 'Android 다운로드',
+        ios: 'iOS 다운로드',
+        iosPending: 'iOS 심사 진행 중',
+      }
+    : {
+        android: 'Android Download',
+        ios: 'iOS Download',
+        iosPending: 'iOS in Review',
+      }
   const statsCards = [
     {
       key: 'hoursProcessed',
@@ -389,7 +409,7 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
             </h2>
             <p className={`mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 ${localeTextClass}`}>{content.ctaBanner.body}</p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+          <div id="app-download" className="flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:justify-end">
             <Link
               href={authUrl}
               className="inline-flex min-h-[48px] items-center justify-center rounded-lg bg-[linear-gradient(135deg,#3B82F6,#7C3AED)] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(59,130,246,0.28)] transition duration-200 hover:-translate-y-[1px] hover:opacity-90 whitespace-nowrap"
@@ -409,9 +429,26 @@ export default function MallogLandingSections({ locale = 'kr', content, pricingU
                 rel="noreferrer"
                 className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] px-6 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap dark:border-white/10 dark:text-white dark:hover:bg-white/10"
               >
-                {locale === 'kr' ? '앱 다운로드' : 'Download App'}
+                {appDownloadLabels.android}
               </a>
             ) : null}
+            {iosAppDownloadUrl ? (
+              <a
+                href={iosAppDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-[#E2E8F0] px-6 py-3 text-sm font-semibold text-[#0F172A] transition duration-200 hover:bg-[#F8F9FF] whitespace-nowrap dark:border-white/10 dark:text-white dark:hover:bg-white/10"
+              >
+                {appDownloadLabels.ios}
+              </a>
+            ) : (
+              <span
+                className="inline-flex min-h-[48px] items-center justify-center rounded-lg border border-dashed border-[#CBD5E1] px-6 py-3 text-sm font-semibold text-[#64748B] whitespace-nowrap dark:border-white/15 dark:text-white/55"
+                aria-disabled="true"
+              >
+                {appDownloadLabels.iosPending}
+              </span>
+            )}
           </div>
         </div>
       </section>

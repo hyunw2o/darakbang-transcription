@@ -40,6 +40,7 @@ export default function MallogHomeEnView(props) {
     ALTERNATE_URL,
     UPGRADE_CONTACT_URL,
     APP_DOWNLOAD_URL,
+    IOS_APP_STORE_URL,
     LANGUAGE_SELECT_ID,
     TYPE_SELECT_ID,
     authMode,
@@ -142,14 +143,16 @@ export default function MallogHomeEnView(props) {
   const navItems = authToken
     ? [
         { label: 'Pricing', href: UPGRADE_CONTACT_URL },
-        { label: 'Download App', href: APP_DOWNLOAD_URL, external: true },
+        { label: 'Android Download', href: APP_DOWNLOAD_URL, external: true },
+        { label: IOS_APP_STORE_URL ? 'iOS Download' : 'iOS Review', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
         { label: 'About OURS', href: OURS_URL, external: true },
       ]
     : [
         { label: 'Features', href: '#features' },
         { label: 'Preview', href: '#preview' },
         { label: 'Pricing', href: '#pricing' },
-        { label: 'Download App', href: APP_DOWNLOAD_URL, external: true },
+        { label: 'Android Download', href: APP_DOWNLOAD_URL, external: true },
+        { label: IOS_APP_STORE_URL ? 'iOS Download' : 'iOS Review', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
       ]
 
   return (
@@ -223,6 +226,7 @@ export default function MallogHomeEnView(props) {
             oursUrl={OURS_URL}
             stats={landingStats}
             appDownloadUrl={APP_DOWNLOAD_URL}
+            iosAppDownloadUrl={IOS_APP_STORE_URL}
             darkMode={darkMode}
           />
         )}
