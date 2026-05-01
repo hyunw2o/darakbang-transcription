@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking } from "react-native";
 import * as ExpoLinking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   AUTH_REQUEST_TIMEOUT_MS,
@@ -25,6 +26,8 @@ import {
   requestApiWithTimeoutRetry,
 } from "../utils/network";
 import { formatSecondsToHourMinuteSecond } from "../utils/format";
+
+WebBrowser.maybeCompleteAuthSession?.();
 
 function useLatestRef(value) {
   const ref = useRef(value);
@@ -390,10 +393,16 @@ export default function useMobileAuth({
       }
       if (!oauthUrl) throw new Error(copy.errors.oauthUrlCreate);
 
-      const supported = await Linking.canOpenURL(oauthUrl);
-      if (!supported) throw new Error(copy.errors.openLoginUrl);
-
-      await Linking.openURL(oauthUrl);
+      const authResult = await WebBrowser.openAuthSessionAsync(oauthUrl, redirectTo, {
+        preferEphemeralSession: false,
+      });
+      if (authResult?.type === "success" && authResult?.url) {
+        await handleDeepLink(authResult.url);
+      } else if (authResult?.type === "cancel" || authResult?.type === "dismiss") {
+        setSocialLoading("");
+      } else {
+        throw new Error(copy.errors.openLoginUrl);
+      }
       setSocialLoading("");
     } catch (error) {
       const rawMessage = error?.message || copy.errors.socialStartFailed;
@@ -403,7 +412,7 @@ export default function useMobileAuth({
       setError(withHint);
       setSocialLoading("");
     }
-  }, [clearMessages, copy.errors.oauthUrlCreate, copy.errors.openLoginUrl, copy.errors.socialStartFailed, setError, socialLoading]);
+  }, [clearMessages, copy.errors.oauthUrlCreate, copy.errors.openLoginUrl, copy.errors.socialStartFailed, handleDeepLink, setError, socialLoading]);
 
   const handleLogout = useCallback(async () => {
     clearMessages();
@@ -565,6 +574,37 @@ export default function useMobileAuth({
     }
   }, [authToken, clearMessages, copy, fetchBillingStatus, fetchUsage, isLoggedIn, setError, setNotice]);
 
+  const handleDeleteAccount = useCallback(async () => {
+    clearMessages();
+    if (!isLoggedIn) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const data = await requestApi("/api/auth/account", {
+        method: "DELETE",
+        token: authToken,
+        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+      });
+      await clearAuthState(data?.message || copy.notices.accountDeleted);
+    } catch (error) {
+      setError(error.message || copy.errors.accountDeleteFailed);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [
+    authToken,
+    clearAuthState,
+    clearMessages,
+    copy.errors.accountDeleteFailed,
+    copy.errors.authRequired,
+    copy.notices.accountDeleted,
+    isLoggedIn,
+    setError,
+  ]);
+
   return {
     bootLoading,
     authMode,
@@ -599,6 +639,7 @@ export default function useMobileAuth({
     handleBillingPortal,
     handleBillingCancel,
     handleBillingRefund,
+    handleDeleteAccount,
     clearAuthState,
   };
 }

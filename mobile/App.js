@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Clipboard,
   Platform,
   ScrollView,
@@ -295,6 +296,14 @@ function App() {
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
   const isIosAppStoreReviewMode = Platform.OS === "ios";
   const isPrivacyGateVisible = !privacyAccepted && !activeLegalDoc;
+  const authLandingBadges = useMemo(
+    () => [
+      copy.authLanding.badges.free,
+      ...(isIosAppStoreReviewMode ? [] : [copy.authLanding.badges.pro]),
+      copy.authLanding.badges.beta,
+    ],
+    [copy.authLanding.badges.beta, copy.authLanding.badges.free, copy.authLanding.badges.pro, isIosAppStoreReviewMode]
+  );
   const transcriptionTypeOptions = useMemo(
     () => TRANSCRIPTION_TYPES.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
     [copy]
@@ -386,6 +395,7 @@ function App() {
     handleBillingPortal,
     handleBillingCancel,
     handleBillingRefund,
+    handleDeleteAccount,
   } = useMobileAuth({
     copy,
     language: uiLanguage,
@@ -441,6 +451,32 @@ function App() {
   );
   const planLabel = copy.planLabels?.[usagePlan] || usagePlan;
   const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
+  const handleRequestDeleteAccount = useCallback(() => {
+    if (!isLoggedIn) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+    Alert.alert(
+      copy.accountDeleteTitle,
+      copy.accountDeleteMessage,
+      [
+        { text: copy.accountDeleteCancel, style: "cancel" },
+        {
+          text: copy.accountDeleteConfirm,
+          style: "destructive",
+          onPress: handleDeleteAccount,
+        },
+      ],
+    );
+  }, [
+    copy.accountDeleteCancel,
+    copy.accountDeleteConfirm,
+    copy.accountDeleteMessage,
+    copy.accountDeleteTitle,
+    copy.errors.authRequired,
+    handleDeleteAccount,
+    isLoggedIn,
+  ]);
 
   useEffect(() => {
     setOpenSettingsMenu("");
@@ -1313,15 +1349,11 @@ function App() {
               ]}
             >
               <View style={styles.authLandingBadgeRow}>
-                <View style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{copy.authLanding.badges.free}</Text>
-                </View>
-                <View style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{copy.authLanding.badges.pro}</Text>
-                </View>
-                <View style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{copy.authLanding.badges.beta}</Text>
-                </View>
+                {authLandingBadges.map((badge) => (
+                  <View key={`auth-badge-${badge}`} style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                    <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{badge}</Text>
+                  </View>
+                ))}
               </View>
 
               <Text style={[styles.authLandingHeroTitle, { color: activeTheme.textPrimary }]}>
@@ -1500,6 +1532,17 @@ function App() {
               <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>{copy.orSocial}</Text>
 
               <View style={styles.socialRow}>
+                {Platform.OS === "ios" ? (
+                  <SocialAuthButton
+                    provider="apple"
+                    label={copy.continueApple}
+                    loading={socialLoading === "apple"}
+                    loadingLabel={copy.connecting}
+                    onPress={() => handleSocialLogin("apple")}
+                    disabled={!!socialLoading}
+                  />
+                ) : null}
+
                 <SocialAuthButton
                   provider="google"
                   label={copy.continueGoogle}
@@ -2003,14 +2046,18 @@ function App() {
                               <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageStatusLabel}</Text>
                               <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingStateLabel}</Text>
                             </View>
-                            <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                              <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageBillingProvider}</Text>
-                              <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingProvider}</Text>
-                            </View>
-                            <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                              <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageCheckoutMode}</Text>
-                              <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingCheckoutMode}</Text>
-                            </View>
+                            {!isIosAppStoreReviewMode ? (
+                              <>
+                                <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                                  <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageBillingProvider}</Text>
+                                  <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingProvider}</Text>
+                                </View>
+                                <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                                  <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageCheckoutMode}</Text>
+                                  <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingCheckoutMode}</Text>
+                                </View>
+                              </>
+                            ) : null}
                           </>
                         )}
                       </View>
@@ -2157,6 +2204,24 @@ function App() {
                   ) : null}
                 </View>
               </FadeInView>
+
+              {isLoggedIn ? (
+                <FadeInView key="settings-account" delay={90}>
+                  <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsAccountTitle}</Text>
+                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsAccountHint}</Text>
+                    <NmPressable
+                      style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, authLoading ? styles.buttonDisabled : null]}
+                      onPress={handleRequestDeleteAccount}
+                      disabled={authLoading}
+                    >
+                      <Text style={[styles.secondaryButtonText, { color: activeTheme.errorText || "#b4233a" }]}>
+                        {authLoading ? copy.processing : copy.accountDelete}
+                      </Text>
+                    </NmPressable>
+                  </View>
+                </FadeInView>
+              ) : null}
 
               <FadeInView key="settings-legal" delay={90}>
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
@@ -2341,6 +2406,16 @@ function App() {
                   <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryText}
                   </Text>
+                  {copy.privacy.summaryAi ? (
+                    <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
+                      {copy.privacy.summaryAi}
+                    </Text>
+                  ) : null}
+                  {copy.privacy.summaryStorage ? (
+                    <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
+                      {copy.privacy.summaryStorage}
+                    </Text>
+                  ) : null}
                   <Text style={[styles.privacySummaryItem, compactLayout ? styles.privacySummaryItemCompact : null, tinyLayout ? styles.privacySummaryItemTiny : null, modalTextStyles.summaryItem, { color: activeTheme.textPrimary }]}>
                     {copy.privacy.summaryVendors}
                   </Text>

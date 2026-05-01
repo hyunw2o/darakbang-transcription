@@ -26,7 +26,7 @@ function parseAuthParamsFromUrl(url) {
 
 function buildDirectOauthUrl(provider, redirectTo) {
   const normalizedProvider = String(provider || "").trim().toLowerCase();
-  if (!SUPABASE_URL || !redirectTo || !["google", "kakao"].includes(normalizedProvider)) {
+  if (!SUPABASE_URL || !redirectTo || !["google", "kakao", "apple"].includes(normalizedProvider)) {
     return "";
   }
   const query = new URLSearchParams({

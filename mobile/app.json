@@ -46,6 +46,9 @@
         "projectId": "ededfb72-03c2-406b-82e4-c3681e781aa5"
       }
     },
-    "owner": "hyun_w_k"
+    "owner": "hyun_w_k",
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

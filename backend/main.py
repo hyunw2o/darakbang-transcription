@@ -436,7 +436,7 @@ ALLOWED_RECORD_CATEGORIES = {
     "clinical_notes",
     "sermon_core_summary",
 }
-ALLOWED_OAUTH_PROVIDERS = {"google", "kakao"}
+ALLOWED_OAUTH_PROVIDERS = {"google", "kakao", "apple"}
 TRANSCRIPTION_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
@@ -6895,6 +6895,67 @@ async def logout(
         _remove_active_auth_session(token, user_id=user_id)
 
     response = JSONResponse({"success": True, "message": "로그아웃되었습니다."})
+    _clear_auth_cookie(response, request)
+    return response
+
+
+def _delete_user_app_data(user_id: str) -> None:
+    if not user_id:
+        return
+    cleanup_targets = [
+        ("saved_records", "user_id"),
+        ("transcriptions", "user_id"),
+        (USAGE_TABLE_NAME, "user_id"),
+        (BILLING_REFUND_TABLE_NAME, "user_id"),
+        (BILLING_TABLE_NAME, "user_id"),
+    ]
+    client = _get_supabase_client()
+    for table_name, column_name in cleanup_targets:
+        try:
+            client.table(table_name).delete().eq(column_name, user_id).execute()
+        except Exception as exc:
+            print(f"Account deletion cleanup skipped for {table_name}: {exc}")
+
+
+async def _delete_supabase_auth_user(user_id: str) -> None:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise HTTPException(status_code=500, detail="Supabase 인증 환경이 설정되지 않았습니다.")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="삭제할 사용자 정보를 찾을 수 없습니다.")
+
+    response = await _get_auth_http_client().delete(
+        f"{SUPABASE_URL.rstrip('/')}/auth/v1/admin/users/{urllib.parse.quote(user_id, safe='')}",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+        },
+    )
+    if response.status_code not in {200, 204, 404}:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Supabase 계정 삭제 실패: {response.text[:300]}",
+        )
+
+
+@app.delete("/api/auth/account")
+async def delete_account(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """현재 로그인한 계정과 앱 데이터를 삭제"""
+    token = _extract_bearer_token(authorization)
+    user = await _get_current_user(authorization)
+    user_id = str(user.get("id") or "")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="삭제할 사용자 정보를 찾을 수 없습니다.")
+
+    _delete_user_app_data(user_id)
+    await _delete_supabase_auth_user(user_id)
+
+    _auth_user_cache.pop(token, None)
+    _remove_active_auth_session(token, user_id=user_id)
+
+    response = JSONResponse({"success": True, "message": "계정이 삭제되었습니다."})
     _clear_auth_cookie(response, request)
     return response
 
