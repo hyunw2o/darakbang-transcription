@@ -55,6 +55,16 @@ npm run release:android
 npm run release:ios
 ```
 
+로컬 Xcode Simulator 스크린샷용 Release 빌드:
+```bash
+npm run ios:simulator-release -- --device "iPhone 17 Pro Max"
+```
+
+EAS 클라우드 iOS Simulator 빌드:
+```bash
+npm run release:ios-simulator
+```
+
 4. 스토어 제출
 ```bash
 npm run submit:android

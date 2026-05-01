@@ -10,8 +10,10 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "ios:simulator-release": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer npx expo run:ios --configuration Release",
     "release:android": "npx eas build --platform android --profile production",
     "release:ios": "npx eas build --platform ios --profile production",
+    "release:ios-simulator": "npx eas build --platform ios --profile simulator",
     "submit:android": "npx eas submit --platform android --profile production",
     "submit:ios": "npx eas submit --platform ios --profile production"
   },
