@@ -210,7 +210,7 @@ const I18N = {
     usageRequestRefund: "환불 요청",
     usageOpenPricing: "요금제 안내 보기",
     billingUnsupported: "현재 결제 설정에서는 앱 내 결제 호출이 비활성화되어 있습니다.",
-    iosBillingReviewNotice: "iOS 버전은 현재 무료 플랜으로 제공됩니다. 앱 내 Pro 구독은 Apple 인앱결제 연동 후 제공될 예정입니다.",
+    iosBillingReviewNotice: "iOS 앱에서는 무료 사용량 확인과 변환 기능만 제공합니다.",
     planLabels: {
       guest: "Guest",
       free: "Free",
@@ -553,7 +553,7 @@ const I18N = {
     usageRequestRefund: "Request refund",
     usageOpenPricing: "Open pricing page",
     billingUnsupported: "In-app checkout is currently disabled for this billing setup.",
-    iosBillingReviewNotice: "The iOS version currently provides the free plan only. Pro subscriptions will be offered after Apple In-App Purchase is integrated.",
+    iosBillingReviewNotice: "The iOS app provides free usage and transcription only.",
     planLabels: {
       guest: "Guest",
       free: "Free",

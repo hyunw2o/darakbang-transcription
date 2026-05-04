@@ -19,6 +19,7 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "usesAppleSignIn": true,
       "bundleIdentifier": "com.mallog24.app",
       "buildNumber": "1.0.0",
       "infoPlist": {
@@ -48,6 +49,7 @@
     },
     "owner": "hyun_w_k",
     "plugins": [
+      "expo-apple-authentication",
       "expo-web-browser"
     ]
   }

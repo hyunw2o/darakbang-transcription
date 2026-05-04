@@ -451,6 +451,10 @@ function App() {
   );
   const planLabel = copy.planLabels?.[usagePlan] || usagePlan;
   const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
+  const usageSettingsTitle = isIosAppStoreReviewMode ? copy.usageThisMonth : copy.settingsUsageTitle;
+  const usageSettingsHint = isIosAppStoreReviewMode
+    ? copy.iosBillingReviewNotice
+    : copy.settingsUsageHint;
   const handleRequestDeleteAccount = useCallback(() => {
     if (!isLoggedIn) {
       setError(copy.errors.authRequired);
@@ -2028,8 +2032,8 @@ function App() {
 
               <FadeInView key="settings-usage" delay={50}>
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsUsageTitle}</Text>
-                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsUsageHint}</Text>
+                  <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{usageSettingsTitle}</Text>
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{usageSettingsHint}</Text>
 
                   {usageLoading && !effectiveUsage ? (
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.usageLoading}</Text>
@@ -2040,7 +2044,7 @@ function App() {
                           <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usagePlanLabel}</Text>
                           <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{planLabel}</Text>
                         </View>
-                        {isGuestMode ? null : (
+                        {isGuestMode || isIosAppStoreReviewMode ? null : (
                           <>
                             <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
                               <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageStatusLabel}</Text>
@@ -2086,7 +2090,7 @@ function App() {
                   {isGuestMode ? (
                     <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
                   ) : null}
-                  {!isGuestMode && !billingCheckoutSupported ? (
+                  {!isGuestMode && !isIosAppStoreReviewMode && !billingCheckoutSupported ? (
                     <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.billingUnsupported}</Text>
                   ) : null}
                   {!isGuestMode && isIosAppStoreReviewMode ? (
