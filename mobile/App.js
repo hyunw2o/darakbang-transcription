@@ -48,6 +48,165 @@ import useMobileAuth from "./hooks/useMobileAuth";
 
 import { I18N, LEGAL_DOCUMENTS } from "./content";
 
+function getIosReviewLegalDocuments(baseDocs, language) {
+  const businessSection = baseDocs?.terms?.sections?.find((section) =>
+    String(section?.title || "").includes(language === "en" ? "Business" : "사업자")
+  );
+  const businessBody = Array.isArray(businessSection?.body)
+    ? businessSection.body
+    : [language === "en" ? "See the service website for business disclosure and support contact." : "사업자 정보와 문의처는 서비스 웹사이트에서 확인할 수 있습니다."];
+  const privacy = baseDocs?.privacy;
+  const notice = baseDocs?.notice;
+  const faq = baseDocs?.faq;
+
+  if (language === "en") {
+    return {
+      privacy,
+      terms: {
+        ...baseDocs.terms,
+        sections: [
+          {
+            title: "1. Service Scope",
+            body: [
+              "The iOS app provides free speech transcription, text correction, summarization, and structured record features.",
+              "No paid subscription, external checkout, subscription management, or paid upgrade flow is offered in the iOS app.",
+            ],
+          },
+          {
+            title: "2. Free Usage",
+            body: [
+              "Free usage is subject to monthly usage quotas shown in the app.",
+              "If paid plans are offered on other platforms, they are not sold or managed inside this iOS app.",
+            ],
+          },
+          {
+            title: "3. Data and AI Processing",
+            body: [
+              "Uploaded audio and generated text may be processed by Supabase, OpenAI, and Google (Gemini) only to provide app functionality.",
+              "Users must review and agree to the privacy and AI processing notice before using login and transcription features.",
+            ],
+          },
+          {
+            title: "4. User Responsibility",
+            body: [
+              "Users must have lawful rights to uploaded content and must review generated outputs before relying on them.",
+            ],
+          },
+          {
+            title: "5. Business Information",
+            body: businessBody,
+          },
+        ],
+      },
+      companyPolicy: {
+        ...baseDocs.companyPolicy,
+        sections: [
+          {
+            title: "1. Operating Principles",
+            body: [
+              "We prioritize transcript quality, security, and reliability while keeping workflows simple and practical.",
+            ],
+          },
+          {
+            title: "2. Data and Security Standards",
+            body: [
+              "We apply data minimization, HTTPS, token validation, and request throttling as baseline controls.",
+            ],
+          },
+          {
+            title: "3. Responsible AI Use",
+            body: [
+              "Uploaded data is used only for service functionality.",
+              "Machine-generated outputs should be reviewed by users before final use.",
+            ],
+          },
+          {
+            title: "4. Notice and Support",
+            body: [
+              "Major policy, feature, and incident updates are announced via web or in-app notices.",
+            ],
+          },
+        ],
+      },
+      notice,
+      faq,
+    };
+  }
+
+  return {
+    privacy,
+    terms: {
+      ...baseDocs.terms,
+      sections: [
+        {
+          title: "1. 서비스 범위",
+          body: [
+            "iOS 앱은 무료 음성 전사, 텍스트 교정, 요약, 구조화 기록 기능을 제공합니다.",
+            "iOS 앱 안에서는 유료 구독, 외부 결제, 구독 관리, 유료 업그레이드 흐름을 제공하지 않습니다.",
+          ],
+        },
+        {
+          title: "2. 무료 사용",
+          body: [
+            "무료 사용량은 앱에 표시되는 월간 사용량 한도 내에서 제공됩니다.",
+            "다른 플랫폼에서 유료 플랜이 제공되더라도, 해당 상품은 이 iOS 앱 안에서 판매하거나 관리하지 않습니다.",
+          ],
+        },
+        {
+          title: "3. 데이터 및 AI 처리",
+          body: [
+            "업로드 음성과 생성 텍스트는 앱 기능 제공을 위해 Supabase, OpenAI, Google(Gemini)에서 처리될 수 있습니다.",
+            "로그인과 음성 변환 기능을 사용하기 전에 개인정보 및 AI 처리 안내에 동의해야 합니다.",
+          ],
+        },
+        {
+          title: "4. 이용자 책임",
+          body: [
+            "업로드 자료에 대한 적법한 권리를 보유해야 하며, 자동 생성 결과는 최종 사용 전 직접 검토해야 합니다.",
+          ],
+        },
+        {
+          title: "5. 사업자 정보",
+          body: businessBody,
+        },
+      ],
+    },
+    companyPolicy: {
+      ...baseDocs.companyPolicy,
+      sections: [
+        {
+          title: "1. 운영 원칙",
+          body: [
+            "정확도, 보안, 안정성을 우선으로 제품을 개선합니다.",
+            "사용자가 빠르게 기록을 재활용할 수 있는 단순한 흐름을 유지합니다.",
+          ],
+        },
+        {
+          title: "2. 데이터/보안 정책",
+          body: [
+            "최소 데이터 처리, HTTPS, 토큰 검증, 요청 제한을 기본 통제로 적용합니다.",
+          ],
+        },
+        {
+          title: "3. 책임 있는 AI",
+          body: [
+            "업로드 데이터는 서비스 기능 제공 목적 내에서만 처리합니다.",
+            "자동 생성 결과는 최종 사용 전 이용자의 검토가 필요합니다.",
+          ],
+        },
+        {
+          title: "4. 공지 및 지원",
+          body: [
+            "주요 정책, 기능, 장애 관련 변경은 웹 또는 앱 내 문서로 안내합니다.",
+          ],
+        },
+      ],
+    },
+    notice,
+    faq,
+  };
+}
+
 function App() {
   const pollRef = useRef(null);
   const pollStartedAtRef = useRef(0);
@@ -110,8 +269,17 @@ function App() {
   const [privacyConsentSaving, setPrivacyConsentSaving] = useState(false);
   const [legalModalDocType, setLegalModalDocType] = useState("");
 
+  const isIosAppStoreReviewMode = Platform.OS === "ios";
   const copy = I18N[uiLanguage] || I18N.ko;
-  const legalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
+  const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
+  const legalDocs = useMemo(
+    () => (
+      isIosAppStoreReviewMode
+        ? getIosReviewLegalDocuments(baseLegalDocs, uiLanguage)
+        : baseLegalDocs
+    ),
+    [baseLegalDocs, isIosAppStoreReviewMode, uiLanguage]
+  );
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
   const clearMessages = useCallback(() => {
     setNotice("");
@@ -294,7 +462,6 @@ function App() {
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
-  const isIosAppStoreReviewMode = Platform.OS === "ios";
   const isPrivacyGateVisible = !privacyAccepted && !activeLegalDoc;
   const authLandingBadges = useMemo(
     () => [
@@ -421,11 +588,14 @@ function App() {
   );
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
-  const isFreeUsagePlan = usagePlan === "free" || usagePlan === "guest";
+  const displayUsagePlan = isIosAppStoreReviewMode && !isGuestMode ? "free" : usagePlan;
+  const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
     1,
-    Number(effectiveUsage?.monthly_limit_seconds) || (isGuestMode ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+    isIosAppStoreReviewMode && !isGuestMode
+      ? FREE_MONTHLY_LIMIT_SECONDS
+      : Number(effectiveUsage?.monthly_limit_seconds) || (isGuestMode ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
   );
   const remainingAudioSeconds = isFreeUsagePlan
     ? Math.max(0, Number(effectiveUsage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
@@ -441,6 +611,7 @@ function App() {
   const billingManageSupported = Boolean(billingStatus?.can_manage_subscription);
   const canRunBillingAction = Boolean(
     isLoggedIn &&
+    !isIosAppStoreReviewMode &&
     (
       usagePlan !== "free"
       || billingState === "active"
@@ -449,7 +620,7 @@ function App() {
       || billingState === "refund_requested"
     )
   );
-  const planLabel = copy.planLabels?.[usagePlan] || usagePlan;
+  const planLabel = copy.planLabels?.[displayUsagePlan] || displayUsagePlan;
   const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
   const usageSettingsTitle = isIosAppStoreReviewMode ? copy.usageThisMonth : copy.settingsUsageTitle;
   const usageSettingsHint = isIosAppStoreReviewMode
@@ -544,10 +715,10 @@ function App() {
     if (!usage && !usageLoading) {
       fetchUsage(authToken).catch(() => {});
     }
-    if (!billingStatus && !billingLoading) {
+    if (!isIosAppStoreReviewMode && !billingStatus && !billingLoading) {
       fetchBillingStatus(authToken).catch(() => {});
     }
-  }, [isLoggedIn, authToken, usage, usageLoading, billingStatus, billingLoading]);
+  }, [isLoggedIn, authToken, usage, usageLoading, billingStatus, billingLoading, isIosAppStoreReviewMode, fetchUsage, fetchBillingStatus]);
 
   useEffect(() => {
     let active = true;
@@ -664,7 +835,11 @@ function App() {
           setNotice(copy.notices.transcribeDone);
           if (isLoggedIn) {
             fetchHistory(authToken);
-            refreshUsageAndBilling(authToken).catch(() => {});
+            if (isIosAppStoreReviewMode) {
+              fetchUsage(authToken, { quiet: true }).catch(() => {});
+            } else {
+              refreshUsageAndBilling(authToken).catch(() => {});
+            }
           } else {
             fetchGuestUsage().catch(() => {});
           }
@@ -748,7 +923,11 @@ function App() {
         setResult(data);
         if (isLoggedIn) {
           fetchHistory(authToken);
-          refreshUsageAndBilling(authToken).catch(() => {});
+          if (isIosAppStoreReviewMode) {
+            fetchUsage(authToken, { quiet: true }).catch(() => {});
+          } else {
+            refreshUsageAndBilling(authToken).catch(() => {});
+          }
         } else {
           fetchGuestUsage().catch(() => {});
         }
@@ -1547,23 +1726,27 @@ function App() {
                   />
                 ) : null}
 
-                <SocialAuthButton
-                  provider="google"
-                  label={copy.continueGoogle}
-                  loading={socialLoading === "google"}
-                  loadingLabel={copy.connecting}
-                  onPress={() => handleSocialLogin("google")}
-                  disabled={!!socialLoading}
-                />
+                {!isIosAppStoreReviewMode ? (
+                  <>
+                    <SocialAuthButton
+                      provider="google"
+                      label={copy.continueGoogle}
+                      loading={socialLoading === "google"}
+                      loadingLabel={copy.connecting}
+                      onPress={() => handleSocialLogin("google")}
+                      disabled={!!socialLoading}
+                    />
 
-                <SocialAuthButton
-                  provider="kakao"
-                  label={copy.continueKakao}
-                  loading={socialLoading === "kakao"}
-                  loadingLabel={copy.connecting}
-                  onPress={() => handleSocialLogin("kakao")}
-                  disabled={!!socialLoading}
-                />
+                    <SocialAuthButton
+                      provider="kakao"
+                      label={copy.continueKakao}
+                      loading={socialLoading === "kakao"}
+                      loadingLabel={copy.connecting}
+                      onPress={() => handleSocialLogin("kakao")}
+                      disabled={!!socialLoading}
+                    />
+                  </>
+                ) : null}
               </View>
             </View>
           </FadeInView>
@@ -2104,14 +2287,18 @@ function App() {
                         clearMessages();
                         if (isGuestMode) {
                           fetchGuestUsage({ showNotice: true }).catch(() => {});
+                        } else if (isIosAppStoreReviewMode) {
+                          fetchUsage(authToken, { quiet: true }).then(() => {
+                            setNotice(copy.notices.usageLoaded);
+                          }).catch(() => {});
                         } else {
                           refreshUsageAndBilling(authToken, { showNotice: true }).catch(() => {});
                         }
                       }}
-                      disabled={usageLoading || billingLoading}
+                      disabled={usageLoading || (!isIosAppStoreReviewMode && billingLoading)}
                     >
                       <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                        {usageLoading || billingLoading ? copy.loading : copy.usageRefresh}
+                        {usageLoading || (!isIosAppStoreReviewMode && billingLoading) ? copy.loading : copy.usageRefresh}
                       </Text>
                     </NmPressable>
                     {isGuestMode ? (
