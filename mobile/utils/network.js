@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { API_FALLBACK_URLS, API_URL } from "../config";
 
 function parseResponseText(raw) {
@@ -45,6 +46,7 @@ async function requestApi(
   { method = "GET", token = "", body = undefined, timeoutMs = 20000, headers: customHeaders = {} } = {}
 ) {
   const headers = { ...customHeaders };
+  headers["X-Mallog24-Client-Platform"] = Platform.OS;
   if (token) headers.Authorization = `Bearer ${token}`;
   if (typeof body === "string" && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";

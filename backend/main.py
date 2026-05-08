@@ -174,6 +174,7 @@ DEBATE_CONTEXT_HINTS = (
 )
 FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
 FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
+IOS_FREE_ONLY_LIMIT_EXCEEDED_MESSAGE = "iOS 앱에서는 무료 제공량 한도 내에서만 사용할 수 있습니다."
 GUEST_TRANSCRIPTION_ENABLED = os.getenv("GUEST_TRANSCRIPTION_ENABLED", "true").strip().lower() == "true"
 GUEST_MONTHLY_LIMIT_SECONDS = max(60, int(os.getenv("GUEST_MONTHLY_LIMIT_SECONDS", "1800")))
 GUEST_MAX_AUDIO_SECONDS = max(60, int(os.getenv("GUEST_MAX_AUDIO_SECONDS", "600")))
@@ -3030,11 +3031,18 @@ def _get_or_create_usage_row(user_id: str) -> dict:
     return normalized
 
 
-def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False) -> dict:
-    plan_tier = row["plan_tier"]
+def _is_ios_client_request(request: Request | None = None, platform_header: str | None = None) -> bool:
+    raw_platform = platform_header
+    if request is not None and not raw_platform:
+        raw_platform = request.headers.get("x-mallog24-client-platform")
+    return str(raw_platform or "").strip().lower() in {"ios", "iphone", "ipad", "appstore", "app-store"}
+
+
+def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_plan: bool = False) -> dict:
+    plan_tier = USAGE_FREE_PLAN if force_free_plan else row["plan_tier"]
     used_seconds = int(row["used_audio_seconds"])
 
-    if is_admin_bypass:
+    if is_admin_bypass and not force_free_plan:
         return {
             "plan_tier": USAGE_ADMIN_PLAN,
             "used_audio_seconds": used_seconds,
@@ -3073,7 +3081,7 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False) -> dict:
     }
 
 
-def _enforce_upload_quota_or_raise(user: dict, upload_audio_seconds: int) -> dict:
+def _enforce_upload_quota_or_raise(user: dict, upload_audio_seconds: int, force_free_plan: bool = False) -> dict:
     if upload_audio_seconds <= 0:
         raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없습니다.")
 
@@ -3082,12 +3090,14 @@ def _enforce_upload_quota_or_raise(user: dict, upload_audio_seconds: int) -> dic
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
+        force_free_plan=force_free_plan,
     )
 
     if snapshot["plan_tier"] == USAGE_FREE_PLAN:
         projected = int(snapshot["used_audio_seconds"]) + upload_audio_seconds
         if projected > FREE_MONTHLY_LIMIT_SECONDS:
-            raise HTTPException(status_code=403, detail=FREE_LIMIT_EXCEEDED_MESSAGE)
+            detail = IOS_FREE_ONLY_LIMIT_EXCEEDED_MESSAGE if force_free_plan else FREE_LIMIT_EXCEEDED_MESSAGE
+            raise HTTPException(status_code=403, detail=detail)
 
     return snapshot
 
@@ -4734,6 +4744,7 @@ async def transcribe_audio(
     correction_mode: str = Form("normal"),
     authorization: str | None = Header(default=None),
     x_guest_session_id: str | None = Header(default=None),
+    x_mallog24_client_platform: str | None = Header(default=None),
 ):
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
     temp_file_path = ""
@@ -4743,6 +4754,7 @@ async def transcribe_audio(
         user = owner["user"]
         user_id = owner["owner_id"]
         is_guest = bool(owner["is_guest"])
+        force_ios_free_plan = (not is_guest) and _is_ios_client_request(request, x_mallog24_client_platform)
 
         if not is_guest:
             _ensure_transcriptions_user_scope_ready()
@@ -4791,7 +4803,7 @@ async def transcribe_audio(
         usage_snapshot = (
             _enforce_guest_upload_quota_or_raise(user_id, audio_seconds, request)
             if is_guest
-            else _enforce_upload_quota_or_raise(user, audio_seconds)
+            else _enforce_upload_quota_or_raise(user, audio_seconds, force_free_plan=force_ios_free_plan)
         )
 
         task_id = str(uuid.uuid4())
@@ -4891,6 +4903,7 @@ async def transcribe_audio(
                     else _build_usage_snapshot(
                         _get_or_create_usage_row(user["id"]),
                         is_admin_bypass=_is_admin_bypass_user(user=user),
+                        force_free_plan=force_ios_free_plan,
                     )
                 ),
                 "guest": is_guest,
@@ -5237,13 +5250,18 @@ async def delete_all_history(authorization: str | None = Header(default=None)):
 
 
 @app.get("/api/usage")
-async def get_usage(authorization: str | None = Header(default=None)):
+async def get_usage(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_mallog24_client_platform: str | None = Header(default=None),
+):
     """로그인 사용자 월간 음성 사용량 조회"""
     user = await _get_current_user(authorization)
     row = _get_or_create_usage_row(user["id"])
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
+        force_free_plan=_is_ios_client_request(request, x_mallog24_client_platform),
     )
     return {
         "success": True,
@@ -5280,11 +5298,30 @@ async def _read_optional_json_payload(request: Request) -> dict:
 
 
 @app.get("/api/billing/status")
-async def get_billing_status(authorization: str | None = Header(default=None)):
+async def get_billing_status(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_mallog24_client_platform: str | None = Header(default=None),
+):
     """로그인 사용자 구독/결제 상태 조회"""
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
     user = await _get_current_user(authorization)
+    if _is_ios_client_request(request, x_mallog24_client_platform):
+        row = _get_or_create_usage_row(user["id"])
+        return {
+            "success": True,
+            "provider": "none",
+            "checkout_mode": "disabled",
+            "checkout_supported": False,
+            "portal_supported": False,
+            "can_manage_subscription": False,
+            "can_cancel": False,
+            "can_request_refund": False,
+            "status": "inactive",
+            "plan_tier": USAGE_FREE_PLAN,
+            "usage": _build_usage_snapshot(row, force_free_plan=True),
+        }
     status = _build_billing_status_payload(user)
     return {
         "success": True,
@@ -5298,6 +5335,8 @@ async def create_checkout_session(
     authorization: str | None = Header(default=None),
 ):
     """결제 체크아웃 세션 생성 (공급자별)"""
+    if _is_ios_client_request(request):
+        raise HTTPException(status_code=404, detail="Not Found")
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
     user = await _get_current_user(authorization)
@@ -6180,6 +6219,8 @@ async def create_portal_session(
     authorization: str | None = Header(default=None),
 ):
     """구독 관리 포털 세션 생성 (공급자별)"""
+    if _is_ios_client_request(request):
+        raise HTTPException(status_code=404, detail="Not Found")
     _ensure_billing_scope_ready()
     billing_provider = _get_billing_provider_or_raise()
     checkout_mode = _get_checkout_mode(billing_provider)
@@ -6223,6 +6264,8 @@ async def cancel_billing_subscription(
     authorization: str | None = Header(default=None),
 ):
     """구독 취소 요청 (자동/수동 처리)"""
+    if _is_ios_client_request(request):
+        raise HTTPException(status_code=404, detail="Not Found")
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
     user = await _get_current_user(authorization)
@@ -6384,6 +6427,8 @@ async def request_billing_refund(
     authorization: str | None = Header(default=None),
 ):
     """환불 요청 (무사용 + 기간 내 자동 처리, 그 외 수동 검토)"""
+    if _is_ios_client_request(request):
+        raise HTTPException(status_code=404, detail="Not Found")
     _ensure_user_usage_scope_ready()
     _ensure_billing_scope_ready()
     _ensure_billing_refund_scope_ready()
