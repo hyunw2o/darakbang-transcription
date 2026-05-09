@@ -48,7 +48,7 @@ import useMobileAuth from "./hooks/useMobileAuth";
 
 import { I18N, LEGAL_DOCUMENTS } from "./content";
 
-function getIosReviewLegalDocuments(baseDocs, language) {
+function getMobileLegalDocuments(baseDocs, language) {
   const businessSection = baseDocs?.terms?.sections?.find((section) =>
     String(section?.title || "").includes(language === "en" ? "Business" : "사업자")
   );
@@ -68,15 +68,15 @@ function getIosReviewLegalDocuments(baseDocs, language) {
           {
             title: "1. Service Scope",
             body: [
-              "The iOS app provides free speech transcription, text correction, summarization, and structured record features.",
-              "No paid subscription, external checkout, subscription management, or paid upgrade flow is offered in the iOS app.",
+              "The app provides speech transcription, text correction, summarization, and structured record features.",
+              "Usage is available within the monthly quota shown in the app.",
             ],
           },
           {
-            title: "2. Free Usage",
+            title: "2. Usage Quota",
             body: [
-              "Free usage is subject to monthly usage quotas shown in the app.",
-              "If paid plans are offered on other platforms, they are not sold or managed inside this iOS app.",
+              "Each account can check remaining monthly time in Settings.",
+              "Guest mode results are shown only on the current device session.",
             ],
           },
           {
@@ -141,15 +141,15 @@ function getIosReviewLegalDocuments(baseDocs, language) {
         {
           title: "1. 서비스 범위",
           body: [
-            "iOS 앱은 무료 음성 전사, 텍스트 교정, 요약, 구조화 기록 기능을 제공합니다.",
-            "iOS 앱 안에서는 유료 구독, 외부 결제, 구독 관리, 유료 업그레이드 흐름을 제공하지 않습니다.",
+            "앱은 음성 전사, 텍스트 교정, 요약, 구조화 기록 기능을 제공합니다.",
+            "사용량은 앱에 표시되는 월간 한도 내에서 제공됩니다.",
           ],
         },
         {
-          title: "2. 무료 사용",
+          title: "2. 사용량 안내",
           body: [
-            "무료 사용량은 앱에 표시되는 월간 사용량 한도 내에서 제공됩니다.",
-            "다른 플랫폼에서 유료 플랜이 제공되더라도, 해당 상품은 이 iOS 앱 안에서 판매하거나 관리하지 않습니다.",
+            "계정별 남은 월간 사용 시간은 설정 화면에서 확인할 수 있습니다.",
+            "비로그인 체험 결과는 현재 기기 화면에서만 확인할 수 있습니다.",
           ],
         },
         {
@@ -275,7 +275,7 @@ function App() {
   const legalDocs = useMemo(
     () => (
       isIosAppStoreReviewMode
-        ? getIosReviewLegalDocuments(baseLegalDocs, uiLanguage)
+        ? getMobileLegalDocuments(baseLegalDocs, uiLanguage)
         : baseLegalDocs
     ),
     [baseLegalDocs, isIosAppStoreReviewMode, uiLanguage]
@@ -547,21 +547,11 @@ function App() {
     sessionRemainingLabel,
     usage,
     usageLoading,
-    billingStatus,
-    billingLoading,
-    billingActionLoading,
     fetchUsage,
-    fetchBillingStatus,
-    refreshUsageAndBilling,
     handleAuthSubmit,
     handleSocialLogin,
     handleLogout,
-    handleOpenPricing,
     handleOpenOurs,
-    handleBillingCheckout,
-    handleBillingPortal,
-    handleBillingCancel,
-    handleBillingRefund,
     handleDeleteAccount,
   } = useMobileAuth({
     copy,
@@ -588,14 +578,12 @@ function App() {
   );
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
-  const displayUsagePlan = isIosAppStoreReviewMode && !isGuestMode ? "free" : usagePlan;
+  const displayUsagePlan = !isGuestMode ? "free" : usagePlan;
   const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
     1,
-    isIosAppStoreReviewMode && !isGuestMode
-      ? FREE_MONTHLY_LIMIT_SECONDS
-      : Number(effectiveUsage?.monthly_limit_seconds) || (isGuestMode ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+    Number(effectiveUsage?.monthly_limit_seconds) || (isGuestMode ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
   );
   const remainingAudioSeconds = isFreeUsagePlan
     ? Math.max(0, Number(effectiveUsage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
@@ -603,29 +591,9 @@ function App() {
   const usagePercent = isFreeUsagePlan
     ? Math.max(0, Math.min(100, Number(effectiveUsage?.usage_percent) || 0))
     : 0;
-  const billingProvider = String(billingStatus?.provider || "portone");
-  const billingState = String(billingStatus?.status || "inactive");
-  const billingCheckoutMode = String(billingStatus?.checkout_mode || "disabled");
-  const billingCheckoutSupported = Boolean(billingStatus?.checkout_supported);
-  const billingPortalSupported = Boolean(billingStatus?.portal_supported);
-  const billingManageSupported = Boolean(billingStatus?.can_manage_subscription);
-  const canRunBillingAction = Boolean(
-    isLoggedIn &&
-    !isIosAppStoreReviewMode &&
-    (
-      usagePlan !== "free"
-      || billingState === "active"
-      || billingState === "trialing"
-      || billingState === "canceled"
-      || billingState === "refund_requested"
-    )
-  );
   const planLabel = copy.planLabels?.[displayUsagePlan] || displayUsagePlan;
-  const billingStateLabel = copy.billingStatusLabels?.[billingState] || billingState;
-  const usageSettingsTitle = isIosAppStoreReviewMode ? copy.usageThisMonth : copy.settingsUsageTitle;
-  const usageSettingsHint = isIosAppStoreReviewMode
-    ? copy.iosBillingReviewNotice
-    : copy.settingsUsageHint;
+  const usageSettingsTitle = copy.settingsUsageTitle;
+  const usageSettingsHint = copy.settingsUsageHint;
   const handleRequestDeleteAccount = useCallback(() => {
     if (!isLoggedIn) {
       setError(copy.errors.authRequired);
@@ -715,10 +683,7 @@ function App() {
     if (!usage && !usageLoading) {
       fetchUsage(authToken).catch(() => {});
     }
-    if (!isIosAppStoreReviewMode && !billingStatus && !billingLoading) {
-      fetchBillingStatus(authToken).catch(() => {});
-    }
-  }, [isLoggedIn, authToken, usage, usageLoading, billingStatus, billingLoading, isIosAppStoreReviewMode, fetchUsage, fetchBillingStatus]);
+  }, [isLoggedIn, authToken, usage, usageLoading, fetchUsage]);
 
   useEffect(() => {
     let active = true;
@@ -835,11 +800,7 @@ function App() {
           setNotice(copy.notices.transcribeDone);
           if (isLoggedIn) {
             fetchHistory(authToken);
-            if (isIosAppStoreReviewMode) {
-              fetchUsage(authToken, { quiet: true }).catch(() => {});
-            } else {
-              refreshUsageAndBilling(authToken).catch(() => {});
-            }
+            fetchUsage(authToken, { quiet: true }).catch(() => {});
           } else {
             fetchGuestUsage().catch(() => {});
           }
@@ -923,11 +884,7 @@ function App() {
         setResult(data);
         if (isLoggedIn) {
           fetchHistory(authToken);
-          if (isIosAppStoreReviewMode) {
-            fetchUsage(authToken, { quiet: true }).catch(() => {});
-          } else {
-            refreshUsageAndBilling(authToken).catch(() => {});
-          }
+          fetchUsage(authToken, { quiet: true }).catch(() => {});
         } else {
           fetchGuestUsage().catch(() => {});
         }
@@ -1565,14 +1522,6 @@ function App() {
               </View>
 
               <View style={[styles.authLandingActionRow, compactLayout ? styles.authLandingActionRowCompact : null]}>
-                {!isIosAppStoreReviewMode ? (
-                  <NmPressable
-                    style={[styles.primaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
-                    onPress={handleOpenPricing}
-                  >
-                    <Text style={styles.primaryButtonText}>{copy.authLanding.pricingCta}</Text>
-                  </NmPressable>
-                ) : null}
                 <NmPressable
                   style={[styles.secondaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                   onPress={handleOpenOurs}
@@ -1580,11 +1529,6 @@ function App() {
                   <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.authLanding.oursCta}</Text>
                 </NmPressable>
               </View>
-              {isIosAppStoreReviewMode ? (
-                <Text style={[styles.helpText, { color: activeTheme.textSecondary, marginTop: 10 }]}>
-                  {copy.iosBillingReviewNotice}
-                </Text>
-              ) : null}
             </View>
           </FadeInView>
 
@@ -2111,7 +2055,7 @@ function App() {
                         </Text>
                         <View style={styles.historyActionRow}>
                           <NmPressable
-                            style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                            style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                             onPress={() => handleLoadHistoryItem(item.task_id)}
                           >
                             <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.load}</Text>
@@ -2119,7 +2063,7 @@ function App() {
                           <NmPressable
                             style={[
                               styles.tinyButton,
-                              styles.billingActionButton,
+                              styles.usageActionButton,
                               pendingHistoryDeleteTaskId === item.task_id ? styles.destructiveConfirmButton : null,
                               { backgroundColor: pendingHistoryDeleteTaskId === item.task_id ? "#dc2626" : activeTheme.surface, borderColor: pendingHistoryDeleteTaskId === item.task_id ? "#dc2626" : activeTheme.inputBorder },
                               historyDeletingTaskId === item.task_id || ["queued", "processing"].includes(String(item.status || "").toLowerCase()) ? styles.buttonDisabled : null,
@@ -2139,7 +2083,7 @@ function App() {
                           </NmPressable>
                           {pendingHistoryDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id ? (
                             <NmPressable
-                              style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                              style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                               onPress={clearHistoryDeleteConfirmTimer}
                             >
                               <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.cancelAction}</Text>
@@ -2227,26 +2171,6 @@ function App() {
                           <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usagePlanLabel}</Text>
                           <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{planLabel}</Text>
                         </View>
-                        {isGuestMode || isIosAppStoreReviewMode ? null : (
-                          <>
-                            <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                              <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageStatusLabel}</Text>
-                              <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingStateLabel}</Text>
-                            </View>
-                            {!isIosAppStoreReviewMode ? (
-                              <>
-                                <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                                  <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageBillingProvider}</Text>
-                                  <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingProvider}</Text>
-                                </View>
-                                <View style={[styles.usageMetaItem, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                                  <Text style={[styles.usageMetaLabel, { color: activeTheme.textSecondary }]}>{copy.usageCheckoutMode}</Text>
-                                  <Text style={[styles.usageMetaValue, { color: activeTheme.textPrimary }]}>{billingCheckoutMode}</Text>
-                                </View>
-                              </>
-                            ) : null}
-                          </>
-                        )}
                       </View>
 
                       <Text style={[styles.metaText, { color: activeTheme.textPrimary }]}>
@@ -2273,37 +2197,32 @@ function App() {
                   {isGuestMode ? (
                     <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
                   ) : null}
-                  {!isGuestMode && !isIosAppStoreReviewMode && !billingCheckoutSupported ? (
-                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.billingUnsupported}</Text>
-                  ) : null}
-                  {!isGuestMode && isIosAppStoreReviewMode ? (
-                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.iosBillingReviewNotice}</Text>
+                  {!isGuestMode ? (
+                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.iosUsageNotice}</Text>
                   ) : null}
 
-                  <View style={styles.billingActionRow}>
+                  <View style={styles.usageActionRow}>
                     <NmPressable
-                      style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                      style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                       onPress={() => {
                         clearMessages();
                         if (isGuestMode) {
                           fetchGuestUsage({ showNotice: true }).catch(() => {});
-                        } else if (isIosAppStoreReviewMode) {
+                        } else {
                           fetchUsage(authToken, { quiet: true }).then(() => {
                             setNotice(copy.notices.usageLoaded);
                           }).catch(() => {});
-                        } else {
-                          refreshUsageAndBilling(authToken, { showNotice: true }).catch(() => {});
                         }
                       }}
-                      disabled={usageLoading || (!isIosAppStoreReviewMode && billingLoading)}
+                      disabled={usageLoading}
                     >
                       <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                        {usageLoading || (!isIosAppStoreReviewMode && billingLoading) ? copy.loading : copy.usageRefresh}
+                        {usageLoading ? copy.loading : copy.usageRefresh}
                       </Text>
                     </NmPressable>
                     {isGuestMode ? (
                       <NmPressable
-                        style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
+                        style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
                         onPress={() => {
                           clearMessages();
                           setGuestModeStarted(false);
@@ -2314,85 +2233,8 @@ function App() {
                           {copy.guestLoginButton}
                         </Text>
                       </NmPressable>
-                    ) : !isIosAppStoreReviewMode ? (
-                      <NmPressable
-                        style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, billingActionLoading ? styles.buttonDisabled : null]}
-                        onPress={handleBillingCheckout}
-                        disabled={!!billingActionLoading}
-                      >
-                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                          {billingActionLoading === "checkout" ? copy.processing : copy.usageUpgrade}
-                        </Text>
-                      </NmPressable>
                     ) : null}
                   </View>
-
-                  {!isGuestMode && !isIosAppStoreReviewMode ? (
-                    <View style={styles.billingActionRow}>
-                      <NmPressable
-                        style={[
-                          styles.tinyButton,
-                          styles.billingActionButton,
-                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                          !billingPortalSupported || !billingManageSupported || !!billingActionLoading
-                            ? styles.buttonDisabled
-                            : null,
-                        ]}
-                        onPress={handleBillingPortal}
-                        disabled={!billingPortalSupported || !billingManageSupported || !!billingActionLoading}
-                      >
-                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                          {billingActionLoading === "portal" ? copy.processing : copy.usageManageSubscription}
-                        </Text>
-                      </NmPressable>
-                      <NmPressable
-                        style={[styles.tinyButton, styles.billingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                        onPress={() => {
-                          clearMessages();
-                          handleOpenPricing();
-                        }}
-                      >
-                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>{copy.usageOpenPricing}</Text>
-                      </NmPressable>
-                    </View>
-                  ) : null}
-
-                  {!isIosAppStoreReviewMode ? (
-                    <View style={styles.billingActionRow}>
-                      <NmPressable
-                        style={[
-                          styles.tinyButton,
-                          styles.billingActionButton,
-                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                          !canRunBillingAction || !!billingActionLoading
-                            ? styles.buttonDisabled
-                            : null,
-                        ]}
-                        onPress={handleBillingCancel}
-                        disabled={!canRunBillingAction || !!billingActionLoading}
-                      >
-                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                          {billingActionLoading === "cancel" ? copy.processing : copy.usageCancelSubscription}
-                        </Text>
-                      </NmPressable>
-                      <NmPressable
-                        style={[
-                          styles.tinyButton,
-                          styles.billingActionButton,
-                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                          !canRunBillingAction || !!billingActionLoading
-                            ? styles.buttonDisabled
-                            : null,
-                        ]}
-                        onPress={handleBillingRefund}
-                        disabled={!canRunBillingAction || !!billingActionLoading}
-                      >
-                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
-                          {billingActionLoading === "refund" ? copy.processing : copy.usageRequestRefund}
-                        </Text>
-                      </NmPressable>
-                    </View>
-                  ) : null}
                 </View>
               </FadeInView>
 
@@ -3113,7 +2955,7 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 999,
   },
-  billingActionRow: {
+  usageActionRow: {
     flexDirection: "row",
     gap: 6,
   },
@@ -3146,7 +2988,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "600",
   },
-  billingActionButton: {
+  usageActionButton: {
     flexGrow: 1,
     flexBasis: 88,
     alignItems: "center",

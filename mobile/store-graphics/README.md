@@ -7,7 +7,7 @@ Generated assets for store listing:
 - `screenshot-02-upload-transcribe-1080x1920.png`
 - `screenshot-03-summary-1080x1920.png`
 - `screenshot-04-record-export-1080x1920.png`
-- `screenshot-05-usage-subscription-1080x1920.png`
+- `screenshot-05-usage-1080x1920.png`
 
 Generation command:
 

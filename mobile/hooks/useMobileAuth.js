@@ -9,7 +9,6 @@ import {
   AUTH_TOKEN_KEY,
   FREE_MONTHLY_LIMIT_SECONDS,
   OURS_URL,
-  PRICING_URL,
 } from "../config";
 import {
   buildDirectOauthUrl,
@@ -59,9 +58,6 @@ export default function useMobileAuth({
   const [sessionNowMs, setSessionNowMs] = useState(Date.now());
   const [usage, setUsage] = useState(null);
   const [usageLoading, setUsageLoading] = useState(false);
-  const [billingStatus, setBillingStatus] = useState(null);
-  const [billingLoading, setBillingLoading] = useState(false);
-  const [billingActionLoading, setBillingActionLoading] = useState("");
 
   const copyRef = useLatestRef(copy);
   const setNoticeRef = useLatestRef(setNotice);
@@ -121,66 +117,12 @@ export default function useMobileAuth({
     }
   }, [authToken, copy.errors.usageReadFailed, setError]);
 
-  const fetchBillingStatus = useCallback(async (token = authToken, { quiet = false } = {}) => {
-    if (!token) {
-      setBillingStatus(null);
-      return null;
-    }
-    setBillingLoading(true);
-    try {
-      const data = await requestApi("/api/billing/status", { token });
-      if (data?.usage) {
-        setUsage({
-          plan_tier: String(data.usage.plan_tier || "free"),
-          used_audio_seconds: Math.max(0, Number(data.usage.used_audio_seconds) || 0),
-          monthly_limit_seconds: Number(data.usage.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
-          remaining_seconds:
-            data.usage.remaining_seconds === null || data.usage.remaining_seconds === undefined
-              ? null
-              : Math.max(0, Number(data.usage.remaining_seconds) || 0),
-          usage_percent: Math.max(0, Math.min(100, Number(data.usage.usage_percent) || 0)),
-        });
-      }
-      setBillingStatus(data || null);
-      return data || null;
-    } catch (error) {
-      if (!quiet) {
-        setError(error.message || copy.errors.billingStatusReadFailed);
-      }
-      return null;
-    } finally {
-      setBillingLoading(false);
-    }
-  }, [authToken, copy.errors.billingStatusReadFailed, setError]);
-
-  const refreshUsageAndBilling = useCallback(async (token = authToken, { showNotice = false } = {}) => {
-    if (!token) return;
-    const [usageData, billingData] = await Promise.all([
-      fetchUsage(token, { quiet: true }),
-      fetchBillingStatus(token, { quiet: true }),
-    ]);
-
-    if (!usageData) {
-      setError(copy.errors.usageReadFailed);
-      return;
-    }
-    if (!billingData) {
-      setError(copy.errors.billingStatusReadFailed);
-      return;
-    }
-    if (showNotice) {
-      setNotice(copy.notices.usageLoaded);
-    }
-  }, [authToken, copy.errors.billingStatusReadFailed, copy.errors.usageReadFailed, copy.notices.usageLoaded, fetchBillingStatus, fetchUsage, setError, setNotice]);
-
   const clearAuthState = useCallback(async (message = "") => {
     setAuthToken("");
     setAuthUser(null);
     setSessionExpiresAtMs(0);
     setSessionNowMs(Date.now());
     setUsage(null);
-    setBillingStatus(null);
-    setBillingActionLoading("");
     await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
     await onSessionClearedRef.current?.();
     if (message) {
@@ -268,7 +210,7 @@ export default function useMobileAuth({
     let active = true;
     warmUpBackend();
 
-    const subscription = Linking.addEventListener("url", ({ url }) => {
+    const urlListener = Linking.addEventListener("url", ({ url }) => {
       handleDeepLink(url);
     });
 
@@ -311,7 +253,7 @@ export default function useMobileAuth({
 
     return () => {
       active = false;
-      subscription?.remove?.();
+      urlListener?.remove?.();
     };
   }, [handleDeepLink, hydrateWithToken, warmUpBackend]);
 
@@ -407,7 +349,7 @@ export default function useMobileAuth({
     } catch (error) {
       const rawMessage = error?.message || copy.errors.socialStartFailed;
       const withHint = shouldShowOauthConfigHint(rawMessage)
-        ? `${rawMessage}\n(Config check required: backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL, not a paid-plan issue)`
+        ? `${rawMessage}\n(Config check required: backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL)`
         : rawMessage;
       setError(withHint);
       setSocialLoading("");
@@ -426,14 +368,6 @@ export default function useMobileAuth({
     await Linking.openURL(url);
   }, [copy.errors.openExternalFailed]);
 
-  const handleOpenPricing = useCallback(async () => {
-    try {
-      await openExternalUrl(PRICING_URL, copy.errors.openExternalFailed);
-    } catch (error) {
-      setError(error.message || copy.errors.openExternalFailed);
-    }
-  }, [copy.errors.openExternalFailed, openExternalUrl, setError]);
-
   const handleOpenOurs = useCallback(async () => {
     try {
       await openExternalUrl(OURS_URL, copy.errors.openExternalFailed);
@@ -441,138 +375,6 @@ export default function useMobileAuth({
       setError(error.message || copy.errors.openExternalFailed);
     }
   }, [copy.errors.openExternalFailed, openExternalUrl, setError]);
-
-  const handleBillingCheckout = useCallback(async () => {
-    clearMessages();
-    if (!isLoggedIn) {
-      setError(copy.errors.authRequired);
-      return;
-    }
-
-    const billingCheckoutSupported = Boolean(billingStatus?.checkout_supported);
-    if (!billingCheckoutSupported) {
-      setNotice(copy.billingUnsupported);
-      await handleOpenPricing();
-      return;
-    }
-
-    setBillingActionLoading("checkout");
-    try {
-      const normalizedPricingBase = String(PRICING_URL || "").trim().replace(/\/+$/, "");
-      const locale = language === "en" ? "en" : "ko";
-      const localePricingPath = locale === "en" ? "pricing-en" : "pricing";
-      const pricingPath = normalizedPricingBase.endsWith("/pricing") || normalizedPricingBase.endsWith("/pricing-en")
-        ? normalizedPricingBase
-        : `${normalizedPricingBase}/${localePricingPath}`;
-      const successUrl = `${pricingPath}${pricingPath.includes("?") ? "&" : "?"}checkout=success`;
-      const cancelUrl = `${pricingPath}${pricingPath.includes("?") ? "&" : "?"}checkout=cancel`;
-
-      const data = await requestApi("/api/billing/checkout", {
-        method: "POST",
-        token: authToken,
-        body: JSON.stringify({
-          locale,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-        }),
-      });
-      if (!data?.checkout_url) {
-        throw new Error(copy.errors.billingCheckoutFailed);
-      }
-      await openExternalUrl(data.checkout_url, copy.errors.billingCheckoutFailed);
-      setNotice(copy.notices.checkoutOpened);
-      fetchBillingStatus(authToken, { quiet: true }).catch(() => {});
-    } catch (error) {
-      setError(error.message || copy.errors.billingCheckoutFailed);
-    } finally {
-      setBillingActionLoading("");
-    }
-  }, [authToken, billingStatus, clearMessages, copy, fetchBillingStatus, handleOpenPricing, isLoggedIn, language, openExternalUrl, setError, setNotice]);
-
-  const handleBillingPortal = useCallback(async () => {
-    clearMessages();
-    if (!isLoggedIn) {
-      setError(copy.errors.authRequired);
-      return;
-    }
-
-    const billingPortalSupported = Boolean(billingStatus?.portal_supported);
-    const billingManageSupported = Boolean(billingStatus?.can_manage_subscription);
-    if (!billingPortalSupported || !billingManageSupported) {
-      setError(copy.errors.billingPortalFailed);
-      return;
-    }
-
-    setBillingActionLoading("portal");
-    try {
-      const data = await requestApi("/api/billing/portal", {
-        method: "POST",
-        token: authToken,
-      });
-      if (!data?.portal_url) {
-        throw new Error(copy.errors.billingPortalFailed);
-      }
-      await openExternalUrl(data.portal_url, copy.errors.billingPortalFailed);
-      setNotice(copy.notices.portalOpened);
-    } catch (error) {
-      setError(error.message || copy.errors.billingPortalFailed);
-    } finally {
-      setBillingActionLoading("");
-    }
-  }, [authToken, billingStatus, clearMessages, copy, isLoggedIn, openExternalUrl, setError, setNotice]);
-
-  const handleBillingCancel = useCallback(async () => {
-    clearMessages();
-    if (!isLoggedIn) {
-      setError(copy.errors.authRequired);
-      return;
-    }
-
-    setBillingActionLoading("cancel");
-    try {
-      const data = await requestApi("/api/billing/cancel", {
-        method: "POST",
-        token: authToken,
-        body: JSON.stringify({
-          immediate: false,
-          reason: "user_requested_from_mobile_app",
-        }),
-      });
-      setNotice(data?.message || copy.notices.subscriptionCancelDone);
-      await fetchBillingStatus(authToken, { quiet: true });
-      await fetchUsage(authToken, { quiet: true });
-    } catch (error) {
-      setError(error.message || copy.errors.billingCancelFailed);
-    } finally {
-      setBillingActionLoading("");
-    }
-  }, [authToken, clearMessages, copy, fetchBillingStatus, fetchUsage, isLoggedIn, setError, setNotice]);
-
-  const handleBillingRefund = useCallback(async () => {
-    clearMessages();
-    if (!isLoggedIn) {
-      setError(copy.errors.authRequired);
-      return;
-    }
-
-    setBillingActionLoading("refund");
-    try {
-      const data = await requestApi("/api/billing/refund", {
-        method: "POST",
-        token: authToken,
-        body: JSON.stringify({
-          reason: "user_requested_from_mobile_app",
-        }),
-      });
-      setNotice(data?.message || copy.notices.refundRequestDone);
-      await fetchBillingStatus(authToken, { quiet: true });
-      await fetchUsage(authToken, { quiet: true });
-    } catch (error) {
-      setError(error.message || copy.errors.billingRefundFailed);
-    } finally {
-      setBillingActionLoading("");
-    }
-  }, [authToken, clearMessages, copy, fetchBillingStatus, fetchUsage, isLoggedIn, setError, setNotice]);
 
   const handleDeleteAccount = useCallback(async () => {
     clearMessages();
@@ -624,21 +426,11 @@ export default function useMobileAuth({
     sessionRemainingLabel,
     usage,
     usageLoading,
-    billingStatus,
-    billingLoading,
-    billingActionLoading,
     fetchUsage,
-    fetchBillingStatus,
-    refreshUsageAndBilling,
     handleAuthSubmit,
     handleSocialLogin,
     handleLogout,
-    handleOpenPricing,
     handleOpenOurs,
-    handleBillingCheckout,
-    handleBillingPortal,
-    handleBillingCancel,
-    handleBillingRefund,
     handleDeleteAccount,
     clearAuthState,
   };
