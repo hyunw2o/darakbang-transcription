@@ -213,10 +213,21 @@ ADMIN_BYPASS_EMAILS = {
 BILLING_TABLE_NAME = "billing_subscriptions"
 BILLING_REFUND_TABLE_NAME = "billing_refund_requests"
 BILLING_PROVIDER = (os.getenv("BILLING_PROVIDER") or "portone").strip().lower()
-SUPPORTED_BILLING_PROVIDERS = {"portone", "tosspayments", "stripe"}
+SUPPORTED_BILLING_PROVIDERS = {"portone", "tosspayments", "stripe", "apple"}
 STRIPE_SECRET_KEY = (os.getenv("STRIPE_SECRET_KEY") or "").strip()
 STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
 STRIPE_PRICE_ID_PRO = (os.getenv("STRIPE_PRICE_ID_PRO") or "").strip()
+APPLE_IAP_PRODUCT_ID_PRO = (
+    os.getenv("APPLE_IAP_PRODUCT_ID_PRO")
+    or "com.mallog24.app.pro.monthly"
+).strip()
+APPLE_IAP_SHARED_SECRET = (os.getenv("APPLE_IAP_SHARED_SECRET") or "").strip()
+APPLE_IAP_BUNDLE_ID = (os.getenv("APPLE_IAP_BUNDLE_ID") or "com.mallog24.app").strip()
+APPLE_IAP_ALLOW_UNVERIFIED_JWS = (
+    os.getenv("APPLE_IAP_ALLOW_UNVERIFIED_JWS", "false").strip().lower() == "true"
+)
+APPLE_VERIFY_RECEIPT_PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt"
+APPLE_VERIFY_RECEIPT_SANDBOX_URL = "https://sandbox.itunes.apple.com/verifyReceipt"
 PORTONE_STORE_ID = (os.getenv("PORTONE_STORE_ID") or os.getenv("PORTONE_MID") or "").strip()
 PORTONE_MID = (os.getenv("PORTONE_MID") or PORTONE_STORE_ID).strip()
 PORTONE_CHANNEL_KEY = (os.getenv("PORTONE_CHANNEL_KEY") or "").strip()
@@ -3038,6 +3049,170 @@ def _is_ios_client_request(request: Request | None = None, platform_header: str 
     return str(raw_platform or "").strip().lower() in {"ios", "iphone", "ipad", "appstore", "app-store"}
 
 
+def _is_active_apple_billing_row(row: dict | None) -> bool:
+    if not row:
+        return False
+    normalized = _normalize_billing_row(row)
+    if str(normalized.get("provider") or "").strip().lower() != "apple":
+        return False
+    if str(normalized.get("plan_tier") or "").strip().lower() != PAID_PLAN_TIER:
+        return False
+    if str(normalized.get("status") or "").strip().lower() not in {"active", "trialing"}:
+        return False
+    period_end = _parse_iso_datetime(normalized.get("current_period_end"))
+    if period_end and period_end <= datetime.utcnow():
+        return False
+    return True
+
+
+def _has_active_apple_iap_subscription(user_id: str) -> bool:
+    try:
+        _ensure_billing_scope_ready()
+        return _is_active_apple_billing_row(_fetch_billing_row_by_user_id(user_id))
+    except Exception as exc:
+        print(f"Apple IAP billing lookup failed for {user_id}: {exc}")
+        return False
+
+
+def _should_force_ios_free_plan(
+    user_id: str,
+    request: Request | None = None,
+    platform_header: str | None = None,
+) -> bool:
+    if not _is_ios_client_request(request, platform_header):
+        return False
+    # App Store 심사 정책상 iOS에서는 Apple IAP로 확인된 구독만 Pro 권한으로 인정한다.
+    return not _has_active_apple_iap_subscription(user_id)
+
+
+def _decode_base64url_json(value: str) -> dict:
+    try:
+        padded = value + ("=" * (-len(value) % 4))
+        return json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def _decode_apple_jws_payload(jws: str) -> dict:
+    parts = str(jws or "").split(".")
+    if len(parts) != 3:
+        return {}
+    return _decode_base64url_json(parts[1])
+
+
+def _apple_ms_to_iso(value: int | str | None) -> str | None:
+    try:
+        ms = int(value or 0)
+    except Exception:
+        return None
+    if ms <= 0:
+        return None
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+
+
+def _extract_apple_latest_subscription(receipt_payload: dict) -> dict:
+    receipt = receipt_payload.get("receipt") if isinstance(receipt_payload.get("receipt"), dict) else {}
+    bundle_id = str(receipt.get("bundle_id") or receipt_payload.get("bundleId") or "").strip()
+    if APPLE_IAP_BUNDLE_ID and bundle_id and bundle_id != APPLE_IAP_BUNDLE_ID:
+        raise HTTPException(status_code=400, detail="Apple 영수증의 Bundle ID가 앱 설정과 일치하지 않습니다.")
+
+    raw_items = receipt_payload.get("latest_receipt_info")
+    if not isinstance(raw_items, list):
+        raw_items = receipt.get("in_app")
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    candidates = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        product_id = str(item.get("product_id") or item.get("productId") or "").strip()
+        if product_id != APPLE_IAP_PRODUCT_ID_PRO:
+            continue
+        expires_ms = int(str(item.get("expires_date_ms") or item.get("expiresDate") or "0") or 0)
+        candidates.append({
+            "product_id": product_id,
+            "transaction_id": str(item.get("transaction_id") or item.get("transactionId") or "").strip(),
+            "original_transaction_id": str(
+                item.get("original_transaction_id")
+                or item.get("originalTransactionId")
+                or item.get("transaction_id")
+                or item.get("transactionId")
+                or ""
+            ).strip(),
+            "expires_ms": expires_ms,
+            "cancellation_date_ms": int(str(item.get("cancellation_date_ms") or "0") or 0),
+            "environment": str(receipt_payload.get("environment") or item.get("environment") or "").strip(),
+        })
+
+    if not candidates:
+        raise HTTPException(status_code=400, detail="Apple Pro 구독 영수증을 찾지 못했습니다.")
+
+    latest = max(candidates, key=lambda item: item.get("expires_ms") or 0)
+    now_ms = int(time.time() * 1000)
+    latest["active"] = (
+        int(latest.get("expires_ms") or 0) > now_ms
+        and int(latest.get("cancellation_date_ms") or 0) <= 0
+    )
+    latest["expires_at"] = _apple_ms_to_iso(latest.get("expires_ms"))
+    return latest
+
+
+async def _verify_apple_receipt_with_store(receipt_data: str) -> dict:
+    if not APPLE_IAP_SHARED_SECRET:
+        raise HTTPException(status_code=503, detail="APPLE_IAP_SHARED_SECRET 설정이 필요합니다.")
+
+    payload = {
+        "receipt-data": receipt_data,
+        "password": APPLE_IAP_SHARED_SECRET,
+        "exclude-old-transactions": True,
+    }
+
+    async def call_apple(url: str) -> dict:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    result = await call_apple(APPLE_VERIFY_RECEIPT_PRODUCTION_URL)
+    status = int(result.get("status") or 0)
+    if status == 21007:
+        result = await call_apple(APPLE_VERIFY_RECEIPT_SANDBOX_URL)
+        status = int(result.get("status") or 0)
+    elif status == 21008:
+        result = await call_apple(APPLE_VERIFY_RECEIPT_PRODUCTION_URL)
+        status = int(result.get("status") or 0)
+
+    if status != 0:
+        raise HTTPException(status_code=400, detail=f"Apple 영수증 검증 실패(status={status})")
+    return result
+
+
+def _extract_apple_subscription_from_jws(purchase_token: str) -> dict:
+    if not APPLE_IAP_ALLOW_UNVERIFIED_JWS:
+        raise HTTPException(status_code=400, detail="Apple 영수증 데이터가 필요합니다.")
+
+    payload = _decode_apple_jws_payload(purchase_token)
+    product_id = str(payload.get("productId") or "").strip()
+    bundle_id = str(payload.get("bundleId") or "").strip()
+    if product_id != APPLE_IAP_PRODUCT_ID_PRO:
+        raise HTTPException(status_code=400, detail="Apple 구독 상품 ID가 일치하지 않습니다.")
+    if APPLE_IAP_BUNDLE_ID and bundle_id and bundle_id != APPLE_IAP_BUNDLE_ID:
+        raise HTTPException(status_code=400, detail="Apple 구독 Bundle ID가 앱 설정과 일치하지 않습니다.")
+
+    expires_ms = int(payload.get("expiresDate") or 0)
+    now_ms = int(time.time() * 1000)
+    return {
+        "product_id": product_id,
+        "transaction_id": str(payload.get("transactionId") or "").strip(),
+        "original_transaction_id": str(payload.get("originalTransactionId") or payload.get("transactionId") or "").strip(),
+        "expires_ms": expires_ms,
+        "expires_at": _apple_ms_to_iso(expires_ms),
+        "environment": str(payload.get("environment") or "").strip(),
+        "active": expires_ms > now_ms and not payload.get("revocationDate"),
+    }
+
+
 def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_plan: bool = False) -> dict:
     plan_tier = USAGE_FREE_PLAN if force_free_plan else row["plan_tier"]
     used_seconds = int(row["used_audio_seconds"])
@@ -4754,7 +4929,10 @@ async def transcribe_audio(
         user = owner["user"]
         user_id = owner["owner_id"]
         is_guest = bool(owner["is_guest"])
-        force_ios_free_plan = (not is_guest) and _is_ios_client_request(request, x_mallog24_client_platform)
+        force_ios_free_plan = (
+            (not is_guest)
+            and _should_force_ios_free_plan(user["id"], request, x_mallog24_client_platform)
+        )
 
         if not is_guest:
             _ensure_transcriptions_user_scope_ready()
@@ -5261,7 +5439,7 @@ async def get_usage(
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
-        force_free_plan=_is_ios_client_request(request, x_mallog24_client_platform),
+        force_free_plan=_should_force_ios_free_plan(user["id"], request, x_mallog24_client_platform),
     )
     return {
         "success": True,
@@ -5297,6 +5475,94 @@ async def _read_optional_json_payload(request: Request) -> dict:
     return payload
 
 
+@app.post("/api/billing/apple/verify")
+async def verify_apple_iap_subscription(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_mallog24_client_platform: str | None = Header(default=None),
+):
+    """Apple App Store 구독 영수증을 검증하고 iOS Pro 권한을 반영한다."""
+    if not _is_ios_client_request(request, x_mallog24_client_platform):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    _ensure_user_usage_scope_ready()
+    _ensure_billing_scope_ready()
+    user = await _get_current_user(authorization)
+    user_id = user["id"]
+    payload = await _read_optional_json_payload(request)
+
+    product_id = str(payload.get("product_id") or payload.get("productId") or "").strip()
+    if product_id != APPLE_IAP_PRODUCT_ID_PRO:
+        raise HTTPException(status_code=400, detail="Apple 구독 상품 ID가 일치하지 않습니다.")
+
+    receipt_data = str(payload.get("receipt_data") or payload.get("receiptData") or "").strip()
+    purchase_token = str(payload.get("purchase_token") or payload.get("purchaseToken") or "").strip()
+
+    if receipt_data:
+        apple_payload = await _verify_apple_receipt_with_store(receipt_data)
+        subscription = _extract_apple_latest_subscription(apple_payload)
+        verification_source = "receipt"
+    elif purchase_token:
+        subscription = _extract_apple_subscription_from_jws(purchase_token)
+        verification_source = "jws"
+    else:
+        raise HTTPException(status_code=400, detail="Apple 영수증 데이터가 필요합니다.")
+
+    is_active = bool(subscription.get("active"))
+    plan_tier = PAID_PLAN_TIER if is_active else USAGE_FREE_PLAN
+    status = "active" if is_active else "expired"
+    subscription_id = (
+        str(subscription.get("original_transaction_id") or "").strip()
+        or str(payload.get("original_transaction_id") or payload.get("originalTransactionId") or "").strip()
+        or str(subscription.get("transaction_id") or "").strip()
+        or str(payload.get("transaction_id") or payload.get("transactionId") or "").strip()
+    )
+
+    existing_billing_row = _fetch_billing_row_by_user_id(user_id)
+    existing_provider = str((existing_billing_row or {}).get("provider") or "").strip().lower()
+    should_write_apple_row = is_active or not existing_billing_row or existing_provider == "apple"
+
+    if should_write_apple_row:
+        _upsert_billing_row(
+            user_id,
+            {
+                "provider": "apple",
+                "customer_id": subscription_id or user_id,
+                "subscription_id": subscription_id or None,
+                "price_id": APPLE_IAP_PRODUCT_ID_PRO,
+                "status": status,
+                "plan_tier": plan_tier,
+                "current_period_end": subscription.get("expires_at"),
+                "cancel_at_period_end": False,
+                "checkout_completed_at": datetime.utcnow().isoformat(),
+            },
+        )
+
+    if is_active:
+        _set_user_plan_tier(user_id, PAID_PLAN_TIER)
+    elif not existing_billing_row or existing_provider == "apple":
+        _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
+
+    usage_row = _get_or_create_usage_row(user_id)
+    usage = _build_usage_snapshot(
+        usage_row,
+        is_admin_bypass=_is_admin_bypass_user(user=user),
+        force_free_plan=not is_active,
+    )
+    return {
+        "success": True,
+        "provider": "apple",
+        "status": status,
+        "plan_tier": plan_tier,
+        "product_id": APPLE_IAP_PRODUCT_ID_PRO,
+        "subscription_id": subscription_id,
+        "current_period_end": subscription.get("expires_at"),
+        "environment": subscription.get("environment") or "",
+        "verification_source": verification_source,
+        "usage": usage,
+    }
+
+
 @app.get("/api/billing/status")
 async def get_billing_status(
     request: Request,
@@ -5309,18 +5575,27 @@ async def get_billing_status(
     user = await _get_current_user(authorization)
     if _is_ios_client_request(request, x_mallog24_client_platform):
         row = _get_or_create_usage_row(user["id"])
+        billing_row = _fetch_billing_row_by_user_id(user["id"])
+        normalized_billing = _normalize_billing_row(billing_row or {}, user_id=user["id"])
+        apple_active = _is_active_apple_billing_row(billing_row)
         return {
             "success": True,
-            "provider": "none",
-            "checkout_mode": "disabled",
-            "checkout_supported": False,
-            "portal_supported": False,
-            "can_manage_subscription": False,
+            "provider": "apple",
+            "checkout_mode": "iap",
+            "checkout_supported": True,
+            "portal_supported": True,
+            "can_manage_subscription": True,
             "can_cancel": False,
             "can_request_refund": False,
-            "status": "inactive",
-            "plan_tier": USAGE_FREE_PLAN,
-            "usage": _build_usage_snapshot(row, force_free_plan=True),
+            "status": normalized_billing["status"] if normalized_billing["provider"] == "apple" else "inactive",
+            "plan_tier": PAID_PLAN_TIER if apple_active else USAGE_FREE_PLAN,
+            "current_period_end": normalized_billing.get("current_period_end"),
+            "price_id": APPLE_IAP_PRODUCT_ID_PRO,
+            "usage": _build_usage_snapshot(
+                row,
+                is_admin_bypass=_is_admin_bypass_user(user=user),
+                force_free_plan=not apple_active,
+            ),
         }
     status = _build_billing_status_payload(user)
     return {
@@ -7286,6 +7561,8 @@ async def health_check():
             "billing_checkout_mode": billing_checkout_mode,
             "portone_checkout_flow": portone_checkout_flow,
             "portone_webhook_configured": bool(PORTONE_WEBHOOK_SECRET),
+            "apple_iap_product_id": APPLE_IAP_PRODUCT_ID_PRO,
+            "apple_iap_receipt_secret_configured": bool(APPLE_IAP_SHARED_SECRET),
             "billing_test_mode": BILLING_TEST_MODE,
             "stripe_billing": stripe_billing,
         }

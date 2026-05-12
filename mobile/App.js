@@ -21,6 +21,7 @@ import FadeInView from "./components/FadeInView";
 import Banner from "./components/Banner";
 import SegmentButton from "./components/SegmentButton";
 import SocialAuthButton from "./components/SocialAuthButton";
+import AppleIapSubscriptionCard from "./components/AppleIapSubscriptionCard";
 import {
   APP_TABS,
   FREE_MONTHLY_LIMIT_SECONDS,
@@ -578,7 +579,7 @@ function App() {
   );
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
-  const displayUsagePlan = !isGuestMode ? "free" : usagePlan;
+  const displayUsagePlan = usagePlan;
   const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
@@ -2237,6 +2238,19 @@ function App() {
                   </View>
                 </View>
               </FadeInView>
+
+              {isLoggedIn && Platform.OS === "ios" ? (
+                <FadeInView key="settings-apple-iap" delay={70}>
+                  <AppleIapSubscriptionCard
+                    copy={copy}
+                    activeTheme={activeTheme}
+                    authToken={authToken}
+                    fetchUsage={fetchUsage}
+                    setNotice={setNotice}
+                    setError={setError}
+                  />
+                </FadeInView>
+              ) : null}
 
               {isLoggedIn ? (
                 <FadeInView key="settings-account" delay={90}>

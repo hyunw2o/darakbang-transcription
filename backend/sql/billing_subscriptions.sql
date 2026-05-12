@@ -33,7 +33,7 @@ begin
 
   alter table public.billing_subscriptions
     add constraint billing_subscriptions_provider_check
-    check (provider in ('portone', 'tosspayments', 'stripe'));
+    check (provider in ('portone', 'tosspayments', 'stripe', 'apple'));
 end $$;
 
 create index if not exists idx_billing_subscriptions_status

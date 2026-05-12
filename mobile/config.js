@@ -47,6 +47,8 @@ const STATUS_POLL_INTERVAL_MS = Math.max(
   2000,
   Number(process.env.EXPO_PUBLIC_STATUS_POLL_INTERVAL_MS) || 3000
 );
+const APPLE_IAP_PRODUCT_ID_PRO =
+  process.env.EXPO_PUBLIC_APPLE_IAP_PRODUCT_ID_PRO || "com.mallog24.app.pro.monthly";
 
 const MOBILE_THEME_OPTIONS = [
   { key: "auto", label: "System", targetTheme: "" },
@@ -171,6 +173,7 @@ export {
   AUTH_REQUEST_TIMEOUT_MS,
   TRANSCRIBE_POLL_TIMEOUT_MS,
   STATUS_POLL_INTERVAL_MS,
+  APPLE_IAP_PRODUCT_ID_PRO,
   MOBILE_THEME_OPTIONS,
   MOBILE_THEMES,
   NM,
