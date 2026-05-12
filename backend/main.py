@@ -219,7 +219,7 @@ STRIPE_WEBHOOK_SECRET = (os.getenv("STRIPE_WEBHOOK_SECRET") or "").strip()
 STRIPE_PRICE_ID_PRO = (os.getenv("STRIPE_PRICE_ID_PRO") or "").strip()
 APPLE_IAP_PRODUCT_ID_PRO = (
     os.getenv("APPLE_IAP_PRODUCT_ID_PRO")
-    or "com.mallog24.app.pro.monthly"
+    or "mallog24pro"
 ).strip()
 APPLE_IAP_SHARED_SECRET = (os.getenv("APPLE_IAP_SHARED_SECRET") or "").strip()
 APPLE_IAP_BUNDLE_ID = (os.getenv("APPLE_IAP_BUNDLE_ID") or "com.mallog24.app").strip()

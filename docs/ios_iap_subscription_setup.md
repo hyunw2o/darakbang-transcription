@@ -5,7 +5,7 @@ mallog24 iOS 앱은 App Store 심사 정책 3.1.1 대응을 위해 Pro 구독을
 ## 1. App Store Connect 상품
 
 - 유형: 자동 갱신 구독(Auto-Renewable Subscription)
-- 상품 ID: `com.mallog24.app.pro.monthly`
+- 상품 ID: `mallog24pro`
 - 구독 그룹: mallog24 Pro
 - 상품명 예시: mallog24 Pro Monthly Subscription
 - 가격: 정책에 맞는 Apple 가격 티어 선택
@@ -20,7 +20,7 @@ mallog24 iOS 앱은 App Store 심사 정책 3.1.1 대응을 위해 Pro 구독을
 ## 2. Render backend 환경변수
 
 ```env
-APPLE_IAP_PRODUCT_ID_PRO=com.mallog24.app.pro.monthly
+APPLE_IAP_PRODUCT_ID_PRO=mallog24pro
 APPLE_IAP_SHARED_SECRET=앱별 공유 암호 또는 구독 영수증 검증용 shared secret
 APPLE_IAP_BUNDLE_ID=com.mallog24.app
 APPLE_IAP_ALLOW_UNVERIFIED_JWS=false

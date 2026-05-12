@@ -48,7 +48,7 @@ const STATUS_POLL_INTERVAL_MS = Math.max(
   Number(process.env.EXPO_PUBLIC_STATUS_POLL_INTERVAL_MS) || 3000
 );
 const APPLE_IAP_PRODUCT_ID_PRO =
-  process.env.EXPO_PUBLIC_APPLE_IAP_PRODUCT_ID_PRO || "com.mallog24.app.pro.monthly";
+  process.env.EXPO_PUBLIC_APPLE_IAP_PRODUCT_ID_PRO || "mallog24pro";
 
 const MOBILE_THEME_OPTIONS = [
   { key: "auto", label: "System", targetTheme: "" },
