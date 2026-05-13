@@ -49,6 +49,9 @@ const STATUS_POLL_INTERVAL_MS = Math.max(
 );
 const APPLE_IAP_PRODUCT_ID_PRO =
   process.env.EXPO_PUBLIC_APPLE_IAP_PRODUCT_ID_PRO || "mallog24pro";
+const ENABLE_APPLE_IAP_IN_APP = ["1", "true", "yes", "on"].includes(
+  String(process.env.EXPO_PUBLIC_ENABLE_APPLE_IAP_IN_APP || "").trim().toLowerCase()
+);
 
 const MOBILE_THEME_OPTIONS = [
   { key: "auto", label: "System", targetTheme: "" },
@@ -173,6 +176,7 @@ export {
   AUTH_REQUEST_TIMEOUT_MS,
   TRANSCRIBE_POLL_TIMEOUT_MS,
   STATUS_POLL_INTERVAL_MS,
+  ENABLE_APPLE_IAP_IN_APP,
   APPLE_IAP_PRODUCT_ID_PRO,
   MOBILE_THEME_OPTIONS,
   MOBILE_THEMES,

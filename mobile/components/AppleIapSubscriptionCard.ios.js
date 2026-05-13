@@ -11,6 +11,8 @@ import { APPLE_IAP_PRODUCT_ID_PRO } from "../config";
 import { requestApi } from "../utils/network";
 import NmPressable from "./NmPressable";
 
+const PRODUCT_FETCH_TIMEOUT_MS = 12000;
+
 async function readAppleReceiptData() {
   try {
     const receipt = await getReceiptDataIOS();
@@ -26,10 +28,20 @@ async function readAppleReceiptData() {
   }
 }
 
+function getProductId(item) {
+  return item?.id || item?.productId || item?.productIdentifier || item?.productID || item?.sku || "";
+}
+
 function findProSubscription(subscriptions) {
-  return (subscriptions || []).find(
-    (item) => item?.id === APPLE_IAP_PRODUCT_ID_PRO || item?.productId === APPLE_IAP_PRODUCT_ID_PRO,
-  );
+  return (subscriptions || []).find((item) => getProductId(item) === APPLE_IAP_PRODUCT_ID_PRO);
+}
+
+function getProductTitle(product, fallback) {
+  return product?.title || product?.displayName || product?.displayNameIOS || fallback;
+}
+
+function getProductPrice(product) {
+  return product?.displayPrice || product?.localizedPrice || product?.priceString || "";
 }
 
 export default function AppleIapSubscriptionCard({
@@ -41,7 +53,10 @@ export default function AppleIapSubscriptionCard({
   setError,
 }) {
   const [busyAction, setBusyAction] = useState("");
+  const [productFetchStatus, setProductFetchStatus] = useState("idle");
+  const [productFetchError, setProductFetchError] = useState("");
   const verifyingRef = useRef(false);
+  const productFetchRequestRef = useRef(0);
 
   const {
     connected,
@@ -62,14 +77,54 @@ export default function AppleIapSubscriptionCard({
   });
 
   const product = useMemo(() => findProSubscription(subscriptions), [subscriptions]);
-  const productPrice = product?.displayPrice || copy.appleIapProductPending;
+  const productTitle = getProductTitle(product, copy.appleIapProductName);
+  const productPrice = product
+    ? getProductPrice(product) || copy.appleIapProductPending
+    : productFetchStatus === "loaded" || productFetchStatus === "failed" || productFetchStatus === "timeout"
+      ? copy.appleIapProductUnavailableTitle
+      : copy.appleIapProductPending;
+
+  const fetchAppleProducts = useCallback(async () => {
+    if (Platform.OS !== "ios" || !connected || !APPLE_IAP_PRODUCT_ID_PRO) return;
+
+    const requestId = productFetchRequestRef.current + 1;
+    productFetchRequestRef.current = requestId;
+    setProductFetchStatus("loading");
+    setProductFetchError("");
+
+    const timeoutId = setTimeout(() => {
+      if (productFetchRequestRef.current === requestId) {
+        setProductFetchStatus("timeout");
+      }
+    }, PRODUCT_FETCH_TIMEOUT_MS);
+
+    try {
+      await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: "subs" });
+      if (productFetchRequestRef.current === requestId) {
+        setProductFetchStatus("loaded");
+      }
+    } catch (error) {
+      if (productFetchRequestRef.current === requestId) {
+        const message = error?.message || copy.appleIapUnavailable;
+        setProductFetchStatus("failed");
+        setProductFetchError(message);
+        setError(message);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }, [connected, copy.appleIapUnavailable, fetchProducts, setError]);
 
   useEffect(() => {
-    if (Platform.OS !== "ios" || !connected || !APPLE_IAP_PRODUCT_ID_PRO) return;
-    fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: "subs" }).catch((error) => {
-      setError(error?.message || copy.appleIapUnavailable);
-    });
-  }, [connected, copy.appleIapUnavailable, fetchProducts, setError]);
+    fetchAppleProducts();
+  }, [fetchAppleProducts]);
+
+  useEffect(() => {
+    if (product) {
+      setProductFetchStatus("loaded");
+      setProductFetchError("");
+    }
+  }, [product]);
 
   const verifyPurchaseWithServer = useCallback(async (purchase, source = "purchase") => {
     if (!purchase || verifyingRef.current || !authToken) return;
@@ -156,6 +211,10 @@ export default function AppleIapSubscriptionCard({
     verifyPurchaseWithServer,
   ]);
 
+  const handleReloadProducts = useCallback(() => {
+    fetchAppleProducts();
+  }, [fetchAppleProducts]);
+
   const handleRestore = useCallback(async () => {
     setBusyAction("restore");
     try {
@@ -196,6 +255,11 @@ export default function AppleIapSubscriptionCard({
   }
 
   const isBusy = !!busyAction;
+  const isProductLoading = productFetchStatus === "loading" || productFetchStatus === "idle";
+  const showProductIssue = !product && !isProductLoading;
+  const productIssueMessage = productFetchStatus === "timeout"
+    ? copy.appleIapProductTimeout
+    : productFetchError || copy.appleIapUnavailable;
 
   return (
     <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
@@ -213,13 +277,21 @@ export default function AppleIapSubscriptionCard({
 
       <View style={[styles.productBox, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
         <Text style={[styles.productName, { color: activeTheme.textPrimary }]}>
-          {product?.title || copy.appleIapProductName}
+          {productTitle}
         </Text>
         <Text style={[styles.price, { color: activeTheme.accent }]}>{productPrice}</Text>
       </View>
 
-      {!product ? (
-        <Text style={[styles.hint, { color: activeTheme.textSecondary }]}>{copy.appleIapUnavailable}</Text>
+      {showProductIssue ? (
+        <View style={[styles.productNotice, { backgroundColor: activeTheme.noticeBg, borderColor: activeTheme.inputBorder }]}>
+          <Text style={[styles.hint, { color: activeTheme.noticeText }]}>{productIssueMessage}</Text>
+          <Text style={[styles.productMeta, { color: activeTheme.textSecondary }]}>
+            {copy.appleIapProductIdLabel}: {APPLE_IAP_PRODUCT_ID_PRO}
+          </Text>
+          <Text style={[styles.productMeta, { color: activeTheme.textSecondary }]}>
+            {copy.appleIapSimulatorHint}
+          </Text>
+        </View>
       ) : null}
 
       <View style={styles.actionRow}>
@@ -246,6 +318,22 @@ export default function AppleIapSubscriptionCard({
             {busyAction === "restore" ? copy.processing : copy.appleIapRestore}
           </Text>
         </NmPressable>
+
+        {!product ? (
+          <NmPressable
+            style={[
+              styles.secondaryButton,
+              { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+              isBusy || productFetchStatus === "loading" ? styles.disabled : null,
+            ]}
+            onPress={handleReloadProducts}
+            disabled={isBusy || productFetchStatus === "loading"}
+          >
+            <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>
+              {productFetchStatus === "loading" ? copy.processing : copy.appleIapReload}
+            </Text>
+          </NmPressable>
+        ) : null}
       </View>
 
       <NmPressable
@@ -306,6 +394,17 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 18,
     fontWeight: "900",
+  },
+  productNotice: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  productMeta: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
   },
   actionRow: {
     flexDirection: "row",

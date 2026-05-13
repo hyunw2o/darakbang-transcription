@@ -40,6 +40,7 @@ import {
   TRANSCRIPTION_TYPES,
   UI_THEME_KEY,
   UI_THEME_MODE_KEY,
+  ENABLE_APPLE_IAP_IN_APP,
 } from "./config";
 import { getExtension, inferMimeFromAsset } from "./utils/file";
 import { formatDate, formatSecondsToHourMinute, sanitizeFileName } from "./utils/format";
@@ -271,6 +272,7 @@ function App() {
   const [legalModalDocType, setLegalModalDocType] = useState("");
 
   const isIosAppStoreReviewMode = Platform.OS === "ios";
+  const isAppleIapVisible = isIosAppStoreReviewMode && ENABLE_APPLE_IAP_IN_APP;
   const copy = I18N[uiLanguage] || I18N.ko;
   const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
   const legalDocs = useMemo(
@@ -579,7 +581,7 @@ function App() {
   );
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
-  const displayUsagePlan = usagePlan;
+  const displayUsagePlan = isIosAppStoreReviewMode && !isAppleIapVisible && usagePlan === "pro" ? "free" : usagePlan;
   const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
@@ -2199,7 +2201,9 @@ function App() {
                     <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
                   ) : null}
                   {!isGuestMode ? (
-                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.iosUsageNotice}</Text>
+                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
+                      {isAppleIapVisible ? copy.iosUsageNotice : copy.iosFreeOnlyNotice}
+                    </Text>
                   ) : null}
 
                   <View style={styles.usageActionRow}>
@@ -2239,7 +2243,7 @@ function App() {
                 </View>
               </FadeInView>
 
-              {isLoggedIn && Platform.OS === "ios" ? (
+              {isLoggedIn && isAppleIapVisible ? (
                 <FadeInView key="settings-apple-iap" delay={70}>
                   <AppleIapSubscriptionCard
                     copy={copy}
