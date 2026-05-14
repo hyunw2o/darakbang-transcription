@@ -40,7 +40,6 @@ import {
   TRANSCRIPTION_TYPES,
   UI_THEME_KEY,
   UI_THEME_MODE_KEY,
-  ENABLE_APPLE_IAP_IN_APP,
 } from "./config";
 import { getExtension, inferMimeFromAsset } from "./utils/file";
 import { formatDate, formatSecondsToHourMinute, sanitizeFileName } from "./utils/format";
@@ -272,7 +271,9 @@ function App() {
   const [legalModalDocType, setLegalModalDocType] = useState("");
 
   const isIosAppStoreReviewMode = Platform.OS === "ios";
-  const isAppleIapVisible = isIosAppStoreReviewMode && ENABLE_APPLE_IAP_IN_APP;
+  // Apple Review requires paid digital subscriptions to be purchasable in-app on iOS.
+  // Do not allow an environment toggle to accidentally hide the IAP entry point.
+  const isAppleIapVisible = isIosAppStoreReviewMode;
   const copy = I18N[uiLanguage] || I18N.ko;
   const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
   const legalDocs = useMemo(
