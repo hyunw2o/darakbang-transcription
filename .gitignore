@@ -32,3 +32,6 @@ mobile/.env
 # Local generated artifacts
 mallog24-source-copyright.zip
 sessions/
+mobile/*.ipa
+mobile/*.xcarchive
+mobile/eas-ios-local-build.log
