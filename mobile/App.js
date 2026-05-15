@@ -272,8 +272,7 @@ function App() {
 
   const isIosAppStoreReviewMode = Platform.OS === "ios";
   // Apple Review requires paid digital subscriptions to be purchasable in-app on iOS.
-  // Do not allow an environment toggle to accidentally hide the IAP entry point.
-  const isAppleIapVisible = isIosAppStoreReviewMode;
+  // Do not allow an environment toggle or review-mode flag to hide the IAP entry point.
   const copy = I18N[uiLanguage] || I18N.ko;
   const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
   const legalDocs = useMemo(
@@ -582,7 +581,7 @@ function App() {
   );
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
-  const displayUsagePlan = isIosAppStoreReviewMode && !isAppleIapVisible && usagePlan === "pro" ? "free" : usagePlan;
+  const displayUsagePlan = usagePlan;
   const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
@@ -2203,7 +2202,7 @@ function App() {
                   ) : null}
                   {!isGuestMode ? (
                     <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
-                      {isAppleIapVisible ? copy.iosUsageNotice : copy.iosFreeOnlyNotice}
+                      {Platform.OS === "ios" ? copy.iosUsageNotice : copy.iosFreeOnlyNotice}
                     </Text>
                   ) : null}
 
@@ -2244,7 +2243,7 @@ function App() {
                 </View>
               </FadeInView>
 
-              {isLoggedIn && isAppleIapVisible ? (
+              {isLoggedIn && Platform.OS === "ios" ? (
                 <FadeInView key="settings-apple-iap" delay={70}>
                   <AppleIapSubscriptionCard
                     copy={copy}
