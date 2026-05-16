@@ -449,6 +449,11 @@ ALLOWED_RECORD_CATEGORIES = {
     "sermon_core_summary",
 }
 ALLOWED_OAUTH_PROVIDERS = {"google", "kakao", "apple"}
+APP_REVIEW_DEMO_EMAILS = {
+    email.strip().lower()
+    for email in (os.getenv("APP_REVIEW_DEMO_EMAILS") or "").split(",")
+    if email.strip()
+}
 TRANSCRIPTION_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
@@ -868,6 +873,11 @@ def _enforce_concurrent_login_limit(token: str, user: dict, is_fresh_login: bool
 
     user_id = str((user or {}).get("id") or "").strip()
     if not user_id:
+        return
+
+    metadata = (user or {}).get("user_metadata") or {}
+    email = str((user or {}).get("email") or metadata.get("email") or "").strip().lower()
+    if email and email in APP_REVIEW_DEMO_EMAILS:
         return
 
     now_ts = time.time()
@@ -7146,6 +7156,49 @@ async def login(
     if access_token and isinstance(user, dict) and user.get("id"):
         _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
         _cache_user_by_token(access_token, user)
+    payload = {
+        **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
+        "access_token": access_token,
+        "refresh_token": data.get("refresh_token"),
+        "expires_in": data.get("expires_in"),
+        "token_type": data.get("token_type", "bearer"),
+    }
+    response = JSONResponse(payload)
+    if access_token:
+        _set_auth_cookie(response, request, access_token)
+    return response
+
+
+@app.post("/api/auth/apple")
+async def login_with_apple(
+    request: Request,
+):
+    """iOS 네이티브 Sign in with Apple 토큰을 Supabase 세션으로 교환"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    identity_token = str((body or {}).get("identity_token") or "").strip()
+    if not identity_token:
+        raise HTTPException(status_code=400, detail="Apple identity token이 필요합니다.")
+
+    data = await _supabase_auth_request(
+        "token?grant_type=id_token",
+        payload={
+            "provider": "apple",
+            "id_token": identity_token,
+        },
+    )
+    access_token = data.get("access_token") or ""
+    user = data.get("user") or {}
+    if access_token and not (isinstance(user, dict) and user.get("id")):
+        user = await _supabase_auth_request("user", method="GET", token=access_token)
+
+    if access_token and isinstance(user, dict) and user.get("id"):
+        _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
+        _cache_user_by_token(access_token, user)
+
     payload = {
         **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
         "access_token": access_token,

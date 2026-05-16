@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking } from "react-native";
+import { Linking, Platform } from "react-native";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as ExpoLinking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -27,6 +28,15 @@ import {
 import { formatSecondsToHourMinuteSecond } from "../utils/format";
 
 WebBrowser.maybeCompleteAuthSession?.();
+
+function formatAppleFullName(fullName) {
+  if (!fullName) return "";
+  return [
+    fullName.givenName,
+    fullName.middleName,
+    fullName.familyName,
+  ].filter(Boolean).join(" ").trim();
+}
 
 function useLatestRef(value) {
   const ref = useRef(value);
@@ -316,6 +326,48 @@ export default function useMobileAuth({
     setSocialLoading(provider);
 
     try {
+      if (provider === "apple" && Platform.OS === "ios") {
+        const available = await AppleAuthentication.isAvailableAsync();
+        if (!available) throw new Error("Sign in with Apple is not available on this device.");
+
+        const credential = await AppleAuthentication.signInAsync({
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+        });
+
+        if (!credential?.identityToken) {
+          throw new Error("Apple identity token was not returned.");
+        }
+
+        const data = await requestApiWithTimeoutRetry("/api/auth/apple", {
+          method: "POST",
+          body: JSON.stringify({
+            identity_token: credential.identityToken,
+            authorization_code: credential.authorizationCode || "",
+            user_identifier: credential.user || "",
+            email: credential.email || "",
+            full_name: formatAppleFullName(credential.fullName),
+          }),
+          timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+        });
+
+        const token = data?.access_token || "";
+        if (!token) throw new Error(copy.errors.socialSessionFailed);
+
+        await onSessionClearedRef.current?.();
+        await hydrateWithToken(token, {
+          successMessage: copy.notices.socialLoginDone,
+          userHint: data?.user || null,
+          verifyUser: false,
+          loadWorkspace: true,
+          sessionHintSeconds: data?.expires_in || 0,
+        });
+        setSocialLoading("");
+        return;
+      }
+
       const redirectTo = ExpoLinking.createURL("auth-callback");
       const path = `/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
       const directOauthUrl = buildDirectOauthUrl(provider, redirectTo);
@@ -347,6 +399,10 @@ export default function useMobileAuth({
       }
       setSocialLoading("");
     } catch (error) {
+      if (provider === "apple" && error?.code === "ERR_REQUEST_CANCELED") {
+        setSocialLoading("");
+        return;
+      }
       const rawMessage = error?.message || copy.errors.socialStartFailed;
       const withHint = shouldShowOauthConfigHint(rawMessage)
         ? `${rawMessage}\n(Config check required: backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL)`
@@ -354,7 +410,19 @@ export default function useMobileAuth({
       setError(withHint);
       setSocialLoading("");
     }
-  }, [clearMessages, copy.errors.oauthUrlCreate, copy.errors.openLoginUrl, copy.errors.socialStartFailed, handleDeepLink, setError, socialLoading]);
+  }, [
+    clearMessages,
+    copy.errors.oauthUrlCreate,
+    copy.errors.openLoginUrl,
+    copy.errors.socialSessionFailed,
+    copy.errors.socialStartFailed,
+    copy.notices.socialLoginDone,
+    handleDeepLink,
+    hydrateWithToken,
+    onSessionClearedRef,
+    setError,
+    socialLoading,
+  ]);
 
   const handleLogout = useCallback(async () => {
     clearMessages();
