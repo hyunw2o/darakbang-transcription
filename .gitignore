@@ -35,4 +35,5 @@ sessions/
 mobile/*.ipa
 mobile/*.xcarchive
 mobile/ios-export/
+mobile/ios-export*/
 mobile/eas-ios-local-build.log
