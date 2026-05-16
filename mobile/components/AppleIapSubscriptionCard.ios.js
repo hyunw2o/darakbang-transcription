@@ -174,12 +174,21 @@ export default function AppleIapSubscriptionCard({
   ]);
 
   const handleSubscribe = useCallback(async () => {
-    if (!product) {
-      setError(copy.appleIapUnavailable);
+    if (!connected) {
+      setError(copy.appleIapDisconnected);
       return;
     }
     setBusyAction("subscribe");
     try {
+      if (!product) {
+        // StoreKit can still fail with a clear native error, but keeping this path
+        // tappable makes App Review and TestFlight diagnostics much less ambiguous.
+        try {
+          await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: "subs" });
+        } catch {
+          // Continue to requestPurchase so the user sees the native StoreKit result.
+        }
+      }
       const result = await requestPurchase({
         type: "subs",
         request: {
@@ -201,9 +210,11 @@ export default function AppleIapSubscriptionCard({
       setBusyAction("");
     }
   }, [
+    connected,
     copy.appleIapPurchaseFailed,
     copy.appleIapPurchaseStarted,
-    copy.appleIapUnavailable,
+    copy.appleIapDisconnected,
+    fetchProducts,
     product,
     requestPurchase,
     setError,
@@ -256,6 +267,7 @@ export default function AppleIapSubscriptionCard({
 
   const isBusy = !!busyAction;
   const isProductLoading = productFetchStatus === "loading" || productFetchStatus === "idle";
+  const canAttemptSubscribe = connected && !isBusy && (!isProductLoading || !!product);
   const showProductIssue = !product && !isProductLoading;
   const productIssueMessage = productFetchStatus === "timeout"
     ? copy.appleIapProductTimeout
@@ -299,10 +311,10 @@ export default function AppleIapSubscriptionCard({
           style={[
             styles.primaryButton,
             { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
-            isBusy || !product ? styles.disabled : null,
+            !canAttemptSubscribe ? styles.disabled : null,
           ]}
           onPress={handleSubscribe}
-          disabled={isBusy || !product}
+          disabled={!canAttemptSubscribe}
         >
           <Text style={styles.primaryButtonText}>
             {busyAction === "subscribe" || busyAction === "purchase" ? copy.processing : copy.appleIapSubscribe}
