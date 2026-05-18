@@ -178,13 +178,12 @@ export default function AppleIapSubscriptionCard({
   ]);
 
   const handleSubscribe = useCallback(async () => {
-    if (!connected) {
-      setError(copy.appleIapDisconnected);
-      return;
-    }
     setBusyAction("subscribe");
     try {
-      if (!product) {
+      if (!connected) {
+        setNotice(copy.appleIapDisconnected);
+      }
+      if (connected && !product) {
         // StoreKit can still fail with a clear native error, but keeping this path
         // tappable makes App Review and TestFlight diagnostics much less ambiguous.
         try {
@@ -271,7 +270,7 @@ export default function AppleIapSubscriptionCard({
 
   const isBusy = !!busyAction;
   const isProductLoading = productFetchStatus === "loading" || productFetchStatus === "idle";
-  const canAttemptSubscribe = connected && !isBusy;
+  const canAttemptSubscribe = !isBusy;
   const showProductIssue = !product && !isProductLoading;
   const productIssueMessage = productFetchStatus === "timeout"
     ? copy.appleIapProductTimeout
