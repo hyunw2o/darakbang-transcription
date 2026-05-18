@@ -11,7 +11,7 @@ import { APPLE_IAP_PRODUCT_ID_PRO } from "../config";
 import { requestApi } from "../utils/network";
 import NmPressable from "./NmPressable";
 
-const PRODUCT_FETCH_TIMEOUT_MS = 12000;
+const PRODUCT_FETCH_TIMEOUT_MS = 25000;
 
 async function readAppleReceiptData() {
   try {
@@ -44,6 +44,14 @@ function getProductPrice(product) {
   return product?.displayPrice || product?.localizedPrice || product?.priceString || "";
 }
 
+function getFriendlyIapError(message, copy) {
+  const normalized = String(message || "");
+  if (/not.?found|product.*not|item.*not|sku/i.test(normalized)) {
+    return copy.appleIapUnavailable;
+  }
+  return normalized || copy.appleIapPurchaseFailed;
+}
+
 export default function AppleIapSubscriptionCard({
   copy,
   activeTheme,
@@ -72,7 +80,7 @@ export default function AppleIapSubscriptionCard({
       setBusyAction("");
       const message = String(error?.message || "");
       if (/cancel|user/i.test(message)) return;
-      setError(message || copy.appleIapPurchaseFailed);
+      setError(getFriendlyIapError(message, copy));
     },
   });
 
@@ -80,9 +88,7 @@ export default function AppleIapSubscriptionCard({
   const productTitle = getProductTitle(product, copy.appleIapProductName);
   const productPrice = product
     ? getProductPrice(product) || copy.appleIapProductPending
-    : productFetchStatus === "loaded" || productFetchStatus === "failed" || productFetchStatus === "timeout"
-      ? copy.appleIapProductUnavailableTitle
-      : copy.appleIapProductPending;
+    : copy.appleIapProductPending;
 
   const fetchAppleProducts = useCallback(async () => {
     if (Platform.OS !== "ios" || !connected || !APPLE_IAP_PRODUCT_ID_PRO) return;
@@ -105,10 +111,8 @@ export default function AppleIapSubscriptionCard({
       }
     } catch (error) {
       if (productFetchRequestRef.current === requestId) {
-        const message = error?.message || copy.appleIapUnavailable;
         setProductFetchStatus("failed");
-        setProductFetchError(message);
-        setError(message);
+        setProductFetchError(getFriendlyIapError(error?.message, copy));
       }
     } finally {
       clearTimeout(timeoutId);
@@ -204,7 +208,7 @@ export default function AppleIapSubscriptionCard({
     } catch (error) {
       const message = String(error?.message || "");
       if (!/cancel|user/i.test(message)) {
-        setError(message || copy.appleIapPurchaseFailed);
+        setError(getFriendlyIapError(message, copy));
       }
     } finally {
       setBusyAction("");
@@ -267,7 +271,7 @@ export default function AppleIapSubscriptionCard({
 
   const isBusy = !!busyAction;
   const isProductLoading = productFetchStatus === "loading" || productFetchStatus === "idle";
-  const canAttemptSubscribe = connected && !isBusy && (!isProductLoading || !!product);
+  const canAttemptSubscribe = connected && !isBusy;
   const showProductIssue = !product && !isProductLoading;
   const productIssueMessage = productFetchStatus === "timeout"
     ? copy.appleIapProductTimeout
