@@ -21,7 +21,7 @@
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.mallog24.app",
-      "buildNumber": "1.0.50",
+      "buildNumber": "1.0.51",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },

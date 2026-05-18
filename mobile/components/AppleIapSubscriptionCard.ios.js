@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Platform, StyleSheet, Text, View } from "react-native";
 import {
   deepLinkToSubscriptions,
+  fetchProducts as fetchStoreProducts,
   getAvailablePurchases,
   getReceiptDataIOS,
+  getStorefront,
   requestReceiptRefreshIOS,
   useIAP,
 } from "expo-iap";
@@ -63,6 +65,8 @@ export default function AppleIapSubscriptionCard({
   const [busyAction, setBusyAction] = useState("");
   const [productFetchStatus, setProductFetchStatus] = useState("idle");
   const [productFetchError, setProductFetchError] = useState("");
+  const [productOverride, setProductOverride] = useState(null);
+  const [storefront, setStorefront] = useState("");
   const verifyingRef = useRef(false);
   const productFetchRequestRef = useRef(0);
 
@@ -84,40 +88,97 @@ export default function AppleIapSubscriptionCard({
     },
   });
 
-  const product = useMemo(() => findProSubscription(subscriptions), [subscriptions]);
+  const product = useMemo(() => findProSubscription(subscriptions) || productOverride, [productOverride, subscriptions]);
   const productTitle = getProductTitle(product, copy.appleIapProductName);
   const productPrice = product
     ? getProductPrice(product) || copy.appleIapProductPending
     : copy.appleIapProductPending;
 
-  const fetchAppleProducts = useCallback(async () => {
-    if (Platform.OS !== "ios" || !connected || !APPLE_IAP_PRODUCT_ID_PRO) return;
+  const fetchAppleProducts = useCallback(async ({ quiet = false } = {}) => {
+    if (Platform.OS !== "ios" || !connected || !APPLE_IAP_PRODUCT_ID_PRO) return null;
 
     const requestId = productFetchRequestRef.current + 1;
     productFetchRequestRef.current = requestId;
-    setProductFetchStatus("loading");
+    if (!quiet) {
+      setProductFetchStatus("loading");
+    }
     setProductFetchError("");
 
     const timeoutId = setTimeout(() => {
-      if (productFetchRequestRef.current === requestId) {
+      if (productFetchRequestRef.current === requestId && !quiet) {
         setProductFetchStatus("timeout");
       }
     }, PRODUCT_FETCH_TIMEOUT_MS);
 
     try {
-      await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: "subs" });
-      if (productFetchRequestRef.current === requestId) {
-        setProductFetchStatus("loaded");
+      const nextStorefront = await getStorefront().catch(() => "");
+      if (nextStorefront) {
+        setStorefront(nextStorefront);
       }
+
+      // StoreKit occasionally returns a valid auto-renewable subscription only
+      // through the broader query path while App Store Connect metadata is still
+      // propagating. Query both paths before deciding that the product is missing.
+      const queryTypes = ["subs", "all"];
+      let lastError = null;
+      for (const queryType of queryTypes) {
+        try {
+          const directResult = await fetchStoreProducts({
+            skus: [APPLE_IAP_PRODUCT_ID_PRO],
+            type: queryType,
+          });
+          const matchedProduct = findProSubscription(directResult);
+          if (matchedProduct) {
+            setProductOverride(matchedProduct);
+            await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: queryType }).catch(() => undefined);
+            if (productFetchRequestRef.current === requestId) {
+              setProductFetchStatus("loaded");
+            }
+            return matchedProduct;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+
+        try {
+          await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: queryType });
+          const matchedProduct = findProSubscription(subscriptions);
+          if (matchedProduct) {
+            setProductOverride(matchedProduct);
+            if (productFetchRequestRef.current === requestId) {
+              setProductFetchStatus("loaded");
+            }
+            return matchedProduct;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (productFetchRequestRef.current === requestId) {
+        setProductFetchStatus("failed");
+        setProductFetchError(
+          lastError
+            ? getFriendlyIapError(lastError?.message, copy)
+            : copy.appleIapProductNotReturned,
+        );
+      }
+      return null;
     } catch (error) {
       if (productFetchRequestRef.current === requestId) {
         setProductFetchStatus("failed");
         setProductFetchError(getFriendlyIapError(error?.message, copy));
       }
+      return null;
     } finally {
       clearTimeout(timeoutId);
     }
-  }, [connected, copy.appleIapUnavailable, fetchProducts, setError]);
+  }, [
+    connected,
+    copy,
+    fetchProducts,
+    subscriptions,
+  ]);
 
   useEffect(() => {
     fetchAppleProducts();
@@ -187,7 +248,7 @@ export default function AppleIapSubscriptionCard({
         // StoreKit can still fail with a clear native error, but keeping this path
         // tappable makes App Review and TestFlight diagnostics much less ambiguous.
         try {
-          await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: "subs" });
+          await fetchAppleProducts({ quiet: true });
         } catch {
           // Continue to requestPurchase so the user sees the native StoreKit result.
         }
@@ -217,7 +278,7 @@ export default function AppleIapSubscriptionCard({
     copy.appleIapPurchaseFailed,
     copy.appleIapPurchaseStarted,
     copy.appleIapDisconnected,
-    fetchProducts,
+    fetchAppleProducts,
     product,
     requestPurchase,
     setError,
@@ -303,6 +364,11 @@ export default function AppleIapSubscriptionCard({
           <Text style={[styles.productMeta, { color: activeTheme.textSecondary }]}>
             {copy.appleIapProductIdLabel}: {APPLE_IAP_PRODUCT_ID_PRO}
           </Text>
+          {storefront ? (
+            <Text style={[styles.productMeta, { color: activeTheme.textSecondary }]}>
+              {copy.appleIapStorefrontLabel}: {storefront}
+            </Text>
+          ) : null}
           <Text style={[styles.productMeta, { color: activeTheme.textSecondary }]}>
             {copy.appleIapSimulatorHint}
           </Text>
