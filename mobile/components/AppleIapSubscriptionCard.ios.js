@@ -61,6 +61,8 @@ export default function AppleIapSubscriptionCard({
   fetchUsage,
   setNotice,
   setError,
+  onOpenPrivacy,
+  onOpenTerms,
 }) {
   const [busyAction, setBusyAction] = useState("");
   const [productFetchStatus, setProductFetchStatus] = useState("idle");
@@ -90,9 +92,10 @@ export default function AppleIapSubscriptionCard({
 
   const product = useMemo(() => findProSubscription(subscriptions) || productOverride, [productOverride, subscriptions]);
   const productTitle = getProductTitle(product, copy.appleIapProductName);
+  const fallbackProductPrice = copy.appleIapSubscriptionPriceFallback || copy.appleIapProductPending;
   const productPrice = product
-    ? getProductPrice(product) || copy.appleIapProductPending
-    : copy.appleIapProductPending;
+    ? getProductPrice(product) || fallbackProductPrice
+    : fallbackProductPrice;
 
   const fetchAppleProducts = useCallback(async ({ quiet = false } = {}) => {
     if (Platform.OS !== "ios" || !connected || !APPLE_IAP_PRODUCT_ID_PRO) return null;
@@ -183,6 +186,22 @@ export default function AppleIapSubscriptionCard({
   useEffect(() => {
     fetchAppleProducts();
   }, [fetchAppleProducts]);
+
+  useEffect(() => {
+    if (connected || productFetchStatus !== "idle") return undefined;
+
+    const timeoutId = setTimeout(() => {
+      setProductFetchStatus("failed");
+      setProductFetchError(copy.appleIapStoreUnavailableReady || copy.appleIapUnavailable);
+    }, 8000);
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    connected,
+    copy.appleIapStoreUnavailableReady,
+    copy.appleIapUnavailable,
+    productFetchStatus,
+  ]);
 
   useEffect(() => {
     if (product) {
@@ -358,6 +377,43 @@ export default function AppleIapSubscriptionCard({
         <Text style={[styles.price, { color: activeTheme.accent }]}>{productPrice}</Text>
       </View>
 
+      <View style={[styles.subscriptionInfoBox, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+        <Text style={[styles.infoTitle, { color: activeTheme.textPrimary }]}>
+          {copy.appleIapSubscriptionInfoTitle}
+        </Text>
+        <Text style={[styles.infoLine, { color: activeTheme.textSecondary }]}>
+          {copy.appleIapProductName}
+        </Text>
+        <Text style={[styles.infoLine, { color: activeTheme.textSecondary }]}>
+          {copy.appleIapSubscriptionLength}
+        </Text>
+        <Text style={[styles.infoLine, { color: activeTheme.textSecondary }]}>
+          {copy.appleIapSubscriptionPriceLabel}: {productPrice}
+        </Text>
+        <Text style={[styles.infoNote, { color: activeTheme.textSecondary }]}>
+          {copy.appleIapSubscriptionPriceNote}
+        </Text>
+        <Text style={[styles.infoNote, { color: activeTheme.textSecondary }]}>
+          {copy.appleIapRequiredInfo}
+        </Text>
+        <View style={styles.legalLinkRow}>
+          <NmPressable
+            style={[styles.legalLinkButton, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
+            onPress={onOpenPrivacy}
+            disabled={!onOpenPrivacy}
+          >
+            <Text style={[styles.legalLinkText, { color: activeTheme.accent }]}>{copy.appleIapOpenPrivacy}</Text>
+          </NmPressable>
+          <NmPressable
+            style={[styles.legalLinkButton, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
+            onPress={onOpenTerms}
+            disabled={!onOpenTerms}
+          >
+            <Text style={[styles.legalLinkText, { color: activeTheme.accent }]}>{copy.appleIapOpenTerms}</Text>
+          </NmPressable>
+        </View>
+      </View>
+
       {showProductIssue ? (
         <View style={[styles.productNotice, { backgroundColor: activeTheme.noticeBg, borderColor: activeTheme.inputBorder }]}>
           <Text style={[styles.hint, { color: activeTheme.noticeText }]}>{productIssueMessage}</Text>
@@ -486,6 +542,41 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "700",
+  },
+  subscriptionInfoBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  infoLine: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  infoNote: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  legalLinkRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  legalLinkButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  legalLinkText: {
+    fontSize: 12,
+    fontWeight: "900",
   },
   actionRow: {
     flexDirection: "row",

@@ -2252,6 +2252,8 @@ function App() {
                     fetchUsage={fetchUsage}
                     setNotice={setNotice}
                     setError={setError}
+                    onOpenPrivacy={() => openLegalDocument("privacy")}
+                    onOpenTerms={() => openLegalDocument("terms")}
                   />
                 </FadeInView>
               ) : null}
