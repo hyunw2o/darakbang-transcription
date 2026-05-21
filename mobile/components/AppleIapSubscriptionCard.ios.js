@@ -288,7 +288,7 @@ export default function AppleIapSubscriptionCard({
   const handleSubscribe = useCallback(async () => {
     const requestId = purchaseRequestRef.current + 1;
     purchaseRequestRef.current = requestId;
-    setBusyAction("subscribe");
+    setNotice(copy.appleIapPurchaseStarted);
     try {
       if (!connected) {
         setNotice(copy.appleIapDisconnected);
@@ -311,7 +311,6 @@ export default function AppleIapSubscriptionCard({
       if (result === "__iap_request_timeout__") {
         if (purchaseRequestRef.current === requestId) {
           setNotice(copy.appleIapPurchaseDispatchTimeout || copy.appleIapPurchaseStarted);
-          setBusyAction("");
         }
         return;
       }
@@ -326,8 +325,6 @@ export default function AppleIapSubscriptionCard({
       if (!/cancel|user/i.test(message)) {
         setError(getFriendlyIapError(message, copy));
       }
-    } finally {
-      setBusyAction("");
     }
   }, [
     connected,

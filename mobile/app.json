@@ -21,7 +21,7 @@
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.mallog24.app",
-      "buildNumber": "1.0.53",
+      "buildNumber": "1.0.54",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -55,6 +55,7 @@
     "owner": "hyun_w_k",
     "plugins": [
       "expo-apple-authentication",
+      "expo-iap",
       "expo-web-browser"
     ]
   }
