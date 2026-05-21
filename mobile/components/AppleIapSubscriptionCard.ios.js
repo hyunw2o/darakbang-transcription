@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import {
   deepLinkToSubscriptions,
   fetchProducts as fetchStoreProducts,
@@ -13,7 +13,18 @@ import { APPLE_IAP_PRODUCT_ID_PRO } from "../config";
 import { requestApi } from "../utils/network";
 import NmPressable from "./NmPressable";
 
-const PRODUCT_FETCH_TIMEOUT_MS = 25000;
+const PRODUCT_FETCH_TIMEOUT_MS = 10000;
+const PURCHASE_REQUEST_TIMEOUT_MS = 12000;
+
+function withTimeout(promise, timeoutMs, fallbackValue) {
+  let timeoutId;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    new Promise((resolve) => {
+      timeoutId = setTimeout(() => resolve(fallbackValue), timeoutMs);
+    }),
+  ]);
+}
 
 async function readAppleReceiptData() {
   try {
@@ -71,6 +82,7 @@ export default function AppleIapSubscriptionCard({
   const [storefront, setStorefront] = useState("");
   const verifyingRef = useRef(false);
   const productFetchRequestRef = useRef(0);
+  const purchaseRequestRef = useRef(0);
 
   const {
     connected,
@@ -114,7 +126,7 @@ export default function AppleIapSubscriptionCard({
     }, PRODUCT_FETCH_TIMEOUT_MS);
 
     try {
-      const nextStorefront = await getStorefront().catch(() => "");
+      const nextStorefront = await withTimeout(getStorefront().catch(() => ""), 2500, "");
       if (nextStorefront) {
         setStorefront(nextStorefront);
       }
@@ -126,14 +138,25 @@ export default function AppleIapSubscriptionCard({
       let lastError = null;
       for (const queryType of queryTypes) {
         try {
-          const directResult = await fetchStoreProducts({
-            skus: [APPLE_IAP_PRODUCT_ID_PRO],
-            type: queryType,
-          });
+          const directResult = await withTimeout(
+            fetchStoreProducts({
+              skus: [APPLE_IAP_PRODUCT_ID_PRO],
+              type: queryType,
+            }),
+            PRODUCT_FETCH_TIMEOUT_MS,
+            null,
+          );
+          if (directResult === null) {
+            throw new Error(copy.appleIapProductTimeout);
+          }
           const matchedProduct = findProSubscription(directResult);
           if (matchedProduct) {
             setProductOverride(matchedProduct);
-            await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: queryType }).catch(() => undefined);
+            await withTimeout(
+              fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: queryType }).catch(() => undefined),
+              2500,
+              undefined,
+            );
             if (productFetchRequestRef.current === requestId) {
               setProductFetchStatus("loaded");
             }
@@ -144,15 +167,11 @@ export default function AppleIapSubscriptionCard({
         }
 
         try {
-          await fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: queryType });
-          const matchedProduct = findProSubscription(subscriptions);
-          if (matchedProduct) {
-            setProductOverride(matchedProduct);
-            if (productFetchRequestRef.current === requestId) {
-              setProductFetchStatus("loaded");
-            }
-            return matchedProduct;
-          }
+          await withTimeout(
+            fetchProducts({ skus: [APPLE_IAP_PRODUCT_ID_PRO], type: queryType }),
+            PRODUCT_FETCH_TIMEOUT_MS,
+            null,
+          );
         } catch (error) {
           lastError = error;
         }
@@ -180,7 +199,6 @@ export default function AppleIapSubscriptionCard({
     connected,
     copy,
     fetchProducts,
-    subscriptions,
   ]);
 
   useEffect(() => {
@@ -209,6 +227,16 @@ export default function AppleIapSubscriptionCard({
       setProductFetchError("");
     }
   }, [product]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        setBusyAction("");
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   const verifyPurchaseWithServer = useCallback(async (purchase, source = "purchase") => {
     if (!purchase || verifyingRef.current || !authToken) return;
@@ -258,26 +286,35 @@ export default function AppleIapSubscriptionCard({
   ]);
 
   const handleSubscribe = useCallback(async () => {
+    const requestId = purchaseRequestRef.current + 1;
+    purchaseRequestRef.current = requestId;
     setBusyAction("subscribe");
     try {
       if (!connected) {
         setNotice(copy.appleIapDisconnected);
       }
-      if (connected && !product) {
-        // StoreKit can still fail with a clear native error, but keeping this path
-        // tappable makes App Review and TestFlight diagnostics much less ambiguous.
-        try {
-          await fetchAppleProducts({ quiet: true });
-        } catch {
-          // Continue to requestPurchase so the user sees the native StoreKit result.
-        }
-      }
-      const result = await requestPurchase({
+      const purchasePromise = requestPurchase({
         type: "subs",
         request: {
           apple: { sku: APPLE_IAP_PRODUCT_ID_PRO },
         },
       });
+      purchasePromise.catch((error) => {
+        if (purchaseRequestRef.current !== requestId) return;
+        const message = String(error?.message || "");
+        if (!/cancel|user/i.test(message)) {
+          setError(getFriendlyIapError(message, copy));
+        }
+        setBusyAction("");
+      });
+      const result = await withTimeout(purchasePromise, PURCHASE_REQUEST_TIMEOUT_MS, "__iap_request_timeout__");
+      if (result === "__iap_request_timeout__") {
+        if (purchaseRequestRef.current === requestId) {
+          setNotice(copy.appleIapPurchaseDispatchTimeout || copy.appleIapPurchaseStarted);
+          setBusyAction("");
+        }
+        return;
+      }
       const purchase = Array.isArray(result) ? result[0] : result;
       if (purchase) {
         await verifyPurchaseWithServer(purchase, "purchase");
@@ -294,11 +331,9 @@ export default function AppleIapSubscriptionCard({
     }
   }, [
     connected,
-    copy.appleIapPurchaseFailed,
+    copy,
     copy.appleIapPurchaseStarted,
     copy.appleIapDisconnected,
-    fetchAppleProducts,
-    product,
     requestPurchase,
     setError,
     setNotice,
@@ -349,7 +384,7 @@ export default function AppleIapSubscriptionCard({
   }
 
   const isBusy = !!busyAction;
-  const isProductLoading = productFetchStatus === "loading" || productFetchStatus === "idle";
+  const isProductLoading = productFetchStatus === "loading";
   const canAttemptSubscribe = !isBusy;
   const showProductIssue = !product && !isProductLoading;
   const productIssueMessage = productFetchStatus === "timeout"
