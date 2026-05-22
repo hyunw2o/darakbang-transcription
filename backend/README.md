@@ -53,6 +53,7 @@ uvicorn main:app --reload
    - `backend/sql/transcription_jobs.sql` (작업 상태 영속 저장: guest + 로그인 공용)
    - `backend/sql/transcription_storage_bucket.sql` (대기열용 원본 파일 공유 버킷)
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
+   - `backend/sql/user_glossary_terms.sql` (사용자 용어집 테이블 + RLS 정책)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
    - `backend/sql/billing_subscriptions.sql` (구독 결제 상태 저장 + RLS 정책)

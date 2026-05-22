@@ -201,6 +201,12 @@ GUEST_RESULT_TTL_SECONDS = max(600, int(os.getenv("GUEST_RESULT_TTL_SECONDS", "7
 GUEST_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
 TRANSCRIPTION_JOBS_TABLE_NAME = "transcription_jobs"
 USAGE_TABLE_NAME = "user_usage_quotas"
+USER_GLOSSARY_TABLE_NAME = "user_glossary_terms"
+MAX_USER_GLOSSARY_TERMS = max(1, int(os.getenv("MAX_USER_GLOSSARY_TERMS", "100")))
+MAX_USER_GLOSSARY_TERM_CHARS = max(10, int(os.getenv("MAX_USER_GLOSSARY_TERM_CHARS", "80")))
+MAX_USER_GLOSSARY_MEANING_CHARS = max(20, int(os.getenv("MAX_USER_GLOSSARY_MEANING_CHARS", "240")))
+MAX_USER_GLOSSARY_ALIAS_COUNT = max(0, int(os.getenv("MAX_USER_GLOSSARY_ALIAS_COUNT", "20")))
+MAX_USER_GLOSSARY_CONTEXT_COUNT = max(0, int(os.getenv("MAX_USER_GLOSSARY_CONTEXT_COUNT", "20")))
 USAGE_FREE_PLAN = "free"
 USAGE_GUEST_PLAN = "guest"
 USAGE_ADMIN_PLAN = "admin"
@@ -460,6 +466,7 @@ TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
 BILLING_SCOPE_VALIDATED = False
 BILLING_REFUND_SCOPE_VALIDATED = False
+USER_GLOSSARY_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -2423,6 +2430,35 @@ def _ensure_user_usage_scope_ready() -> None:
                     "Supabase 설정 필요: backend/sql/user_usage_quota.sql 을 실행한 뒤 "
                     "SQL Editor에서 `NOTIFY pgrst, 'reload schema';` 를 실행하세요."
                 ),
+            )
+        raise
+
+
+def _ensure_user_glossary_scope_ready() -> None:
+    global USER_GLOSSARY_SCOPE_VALIDATED
+    if USER_GLOSSARY_SCOPE_VALIDATED:
+        return
+
+    try:
+        (
+            _get_supabase_client()
+            .table(USER_GLOSSARY_TABLE_NAME)
+            .select("id,user_id,term,meaning,aliases,contexts,is_active,created_at,updated_at")
+            .limit(1)
+            .execute()
+        )
+        USER_GLOSSARY_SCOPE_VALIDATED = True
+    except Exception as e:
+        error_text = str(e).lower()
+        if (
+            USER_GLOSSARY_TABLE_NAME in error_text
+            or "schema cache" in error_text
+            or "could not find" in error_text
+            or "does not exist" in error_text
+        ):
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase 설정 필요: backend/sql/user_glossary_terms.sql 을 실행한 뒤 API 서버를 다시 시작하세요.",
             )
         raise
 
@@ -5541,6 +5577,212 @@ async def _read_optional_json_payload(request: Request) -> dict:
     return payload
 
 
+def _normalize_glossary_scalar(value, max_chars: int, field_label: str, *, required: bool = False) -> str:
+    normalized = re.sub(r"\s+", " ", str(value or "")).strip()
+    if required and not normalized:
+        raise HTTPException(status_code=400, detail=f"{field_label} 값을 입력하세요.")
+    if len(normalized) > max_chars:
+        raise HTTPException(status_code=400, detail=f"{field_label}은 {max_chars}자 이하여야 합니다.")
+    return normalized
+
+
+def _normalize_glossary_list(value, max_items: int, max_chars: int, field_label: str) -> list[str]:
+    if value is None:
+        raw_items: list[str] = []
+    elif isinstance(value, list):
+        raw_items = [str(item or "") for item in value]
+    else:
+        raw_items = re.split(r"[\n,;]+", str(value or ""))
+
+    normalized_items: list[str] = []
+    seen: set[str] = set()
+    for raw_item in raw_items:
+        item = _normalize_glossary_scalar(raw_item, max_chars, field_label)
+        if not item:
+            continue
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized_items.append(item)
+
+    if len(normalized_items) > max_items:
+        raise HTTPException(status_code=400, detail=f"{field_label}은 최대 {max_items}개까지 저장할 수 있습니다.")
+    return normalized_items
+
+
+def _normalize_glossary_payload(payload: dict, *, partial: bool = False) -> dict:
+    normalized: dict = {}
+    if not partial or "term" in payload:
+        normalized["term"] = _normalize_glossary_scalar(
+            payload.get("term"),
+            MAX_USER_GLOSSARY_TERM_CHARS,
+            "용어",
+            required=True,
+        )
+    if not partial or "meaning" in payload:
+        normalized["meaning"] = _normalize_glossary_scalar(
+            payload.get("meaning"),
+            MAX_USER_GLOSSARY_MEANING_CHARS,
+            "뜻/설명",
+        )
+    if not partial or "aliases" in payload:
+        normalized["aliases"] = _normalize_glossary_list(
+            payload.get("aliases"),
+            MAX_USER_GLOSSARY_ALIAS_COUNT,
+            MAX_USER_GLOSSARY_TERM_CHARS,
+            "오인식/별칭",
+        )
+    if not partial or "contexts" in payload:
+        normalized["contexts"] = _normalize_glossary_list(
+            payload.get("contexts"),
+            MAX_USER_GLOSSARY_CONTEXT_COUNT,
+            MAX_USER_GLOSSARY_TERM_CHARS,
+            "문맥 힌트",
+        )
+    if "is_active" in payload:
+        normalized["is_active"] = bool(payload.get("is_active"))
+    return normalized
+
+
+async def _fetch_user_glossary_term_or_404(term_id: int, user_id: str) -> dict:
+    query = (
+        _get_supabase_client()
+        .table(USER_GLOSSARY_TABLE_NAME)
+        .select("*")
+        .eq("id", term_id)
+        .eq("user_id", user_id)
+        .limit(1)
+    )
+    response = await asyncio.to_thread(query.execute)
+    if not response.data:
+        raise HTTPException(status_code=404, detail="용어를 찾을 수 없습니다.")
+    return response.data[0]
+
+
+@app.get("/api/glossary")
+async def get_user_glossary(authorization: str | None = Header(default=None)):
+    """로그인 사용자별 사용자 용어집 조회"""
+    _ensure_user_glossary_scope_ready()
+    user = await _get_current_user(authorization)
+    query = (
+        _get_supabase_client()
+        .table(USER_GLOSSARY_TABLE_NAME)
+        .select("*")
+        .eq("user_id", user["id"])
+        .order("created_at", desc=True)
+    )
+    response = await asyncio.to_thread(query.execute)
+    return {
+        "success": True,
+        "terms": response.data or [],
+        "limit": MAX_USER_GLOSSARY_TERMS,
+    }
+
+
+@app.post("/api/glossary")
+async def create_user_glossary_term(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 사용자 용어 추가"""
+    _ensure_user_glossary_scope_ready()
+    user = await _get_current_user(authorization)
+    payload = await _read_optional_json_payload(request)
+    normalized = _normalize_glossary_payload(payload)
+
+    count_query = (
+        _get_supabase_client()
+        .table(USER_GLOSSARY_TABLE_NAME)
+        .select("id")
+        .eq("user_id", user["id"])
+        .limit(MAX_USER_GLOSSARY_TERMS + 1)
+    )
+    count_response = await asyncio.to_thread(count_query.execute)
+    if len(count_response.data or []) >= MAX_USER_GLOSSARY_TERMS:
+        raise HTTPException(status_code=400, detail=f"사용자 용어는 최대 {MAX_USER_GLOSSARY_TERMS}개까지 저장할 수 있습니다.")
+
+    now_iso = datetime.now().isoformat()
+    insert_row = {
+        "user_id": user["id"],
+        **normalized,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    try:
+        response = await asyncio.to_thread(
+            _get_supabase_client().table(USER_GLOSSARY_TABLE_NAME).insert(insert_row).execute
+        )
+    except Exception as e:
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+            raise HTTPException(status_code=409, detail="이미 등록된 용어입니다.")
+        raise HTTPException(status_code=500, detail=f"사용자 용어 저장 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "term": response.data[0] if response.data else insert_row,
+    }
+
+
+@app.put("/api/glossary/{term_id}")
+async def update_user_glossary_term(
+    term_id: int,
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 사용자 용어 수정"""
+    _ensure_user_glossary_scope_ready()
+    user = await _get_current_user(authorization)
+    await _fetch_user_glossary_term_or_404(term_id, user["id"])
+    payload = await _read_optional_json_payload(request)
+    normalized = _normalize_glossary_payload(payload, partial=True)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="수정할 값이 없습니다.")
+    normalized["updated_at"] = datetime.now().isoformat()
+
+    try:
+        query = (
+            _get_supabase_client()
+            .table(USER_GLOSSARY_TABLE_NAME)
+            .update(normalized)
+            .eq("id", term_id)
+            .eq("user_id", user["id"])
+        )
+        response = await asyncio.to_thread(query.execute)
+    except Exception as e:
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+            raise HTTPException(status_code=409, detail="이미 등록된 용어입니다.")
+        raise HTTPException(status_code=500, detail=f"사용자 용어 수정 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "term": response.data[0] if response.data else {**normalized, "id": term_id, "user_id": user["id"]},
+    }
+
+
+@app.delete("/api/glossary/{term_id}")
+async def delete_user_glossary_term(
+    term_id: int,
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 사용자 용어 삭제"""
+    _ensure_user_glossary_scope_ready()
+    user = await _get_current_user(authorization)
+    await _fetch_user_glossary_term_or_404(term_id, user["id"])
+    query = (
+        _get_supabase_client()
+        .table(USER_GLOSSARY_TABLE_NAME)
+        .delete()
+        .eq("id", term_id)
+        .eq("user_id", user["id"])
+    )
+    await asyncio.to_thread(query.execute)
+    return {
+        "success": True,
+        "deleted_id": term_id,
+    }
+
+
 @app.post("/api/billing/apple/verify")
 async def verify_apple_iap_subscription(
     request: Request,
@@ -7333,6 +7575,7 @@ def _delete_user_app_data(user_id: str) -> None:
     if not user_id:
         return
     cleanup_targets = [
+        (USER_GLOSSARY_TABLE_NAME, "user_id"),
         ("saved_records", "user_id"),
         ("transcriptions", "user_id"),
         (USAGE_TABLE_NAME, "user_id"),
