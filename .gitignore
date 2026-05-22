@@ -11,6 +11,7 @@ backend/venv/
 backend/.env
 backend/transcripts/
 backend/uploads/
+backend/finetune_datasets/
 
 # Node / Frontend
 frontend/node_modules/

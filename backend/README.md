@@ -111,6 +111,31 @@ python worker.py
 
 4. Worker에도 동일한 환경변수(`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` 등)를 넣습니다.
 
+## 교정 파인튜닝 데이터셋 준비
+
+사용자가 기록본 초안을 직접 수정한 뒤 저장하면 `user_correction_samples`에 원본 초안과 수정본이 누적됩니다.
+실제 파인튜닝을 시작하기 전에 아래 스크립트로 JSONL 데이터셋을 만들고 필터링 통계를 확인하세요.
+
+```bash
+python backend/scripts/export_correction_finetune_dataset.py \
+  --from-supabase \
+  --output backend/finetune_datasets/correction_train.jsonl \
+  --stats-output backend/finetune_datasets/correction_train.stats.json
+```
+
+로컬 샘플 JSON을 먼저 검증할 수도 있습니다.
+
+```bash
+python backend/scripts/export_correction_finetune_dataset.py \
+  --input-json samples.json \
+  --dry-run
+```
+
+- 출력 파일은 OpenAI chat fine-tuning JSONL 형식의 `messages` 배열만 포함합니다.
+- 동일/너무 짧은/길이 비율이 과한 샘플은 자동 제외합니다.
+- 생성된 `backend/finetune_datasets/`는 로컬 산출물이므로 Git에 포함하지 않습니다.
+- 실제 모델 업로드 전에는 개인정보/민감정보 포함 여부와 샘플 품질을 반드시 검토하세요.
+
 ## 다락방 용어 특화
 
 - 렘넌트, 237, 5000종족
