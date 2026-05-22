@@ -318,6 +318,7 @@ python backend/scripts/build_feature_sql_bundle.py \
 - `GET /api/billing/mock/complete/{session_id}` : 테스트 결제 성공/취소 완료 처리
 - `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
 - `POST /api/records` : 기록본 저장 (인증 필요)
+- `PUT /api/records/{record_id}` : 내 저장 기록본 수정 (인증 필요)
 - `GET /api/records` : 내 기록본 목록 조회 (인증 필요)
 - `POST /api/corrections` : 사용자가 수정한 결과 저장 (인증 필요)
 - `POST /api/summarize` : 설교 요약 (인증 필요)

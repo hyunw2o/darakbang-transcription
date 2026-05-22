@@ -8088,6 +8088,64 @@ async def save_record(
     }
 
 
+async def _fetch_saved_record_or_404(record_id: int, user_id: str) -> dict:
+    try:
+        response = await asyncio.to_thread(
+            _get_supabase_client()
+            .table("saved_records")
+            .select("*")
+            .eq("id", record_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"saved_records 조회 실패: {str(e)}")
+    if not response.data:
+        raise HTTPException(status_code=404, detail="저장 기록본을 찾을 수 없습니다.")
+    return response.data[0]
+
+
+@app.put("/api/records/{record_id}")
+async def update_record(
+    record_id: int,
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 저장 기록본 수정"""
+    user = await _get_current_user(authorization)
+    existing_record = await _fetch_saved_record_or_404(record_id, user["id"])
+    payload = await _read_optional_json_payload(request)
+    normalized_content = str(payload.get("content") or "").strip()
+    if not normalized_content:
+        raise HTTPException(status_code=400, detail="저장할 기록 내용이 비어 있습니다.")
+    if len(normalized_content) > MAX_RECORD_CONTENT_CHARS:
+        raise HTTPException(status_code=400, detail=f"기록 내용은 {MAX_RECORD_CONTENT_CHARS}자 이하여야 합니다.")
+
+    normalized_title = str(payload.get("title") or "").strip()
+    update_row = {
+        "title": normalized_title or existing_record.get("title") or _get_record_category_label(existing_record.get("category") or "", "ko"),
+        "content": normalized_content,
+    }
+
+    try:
+        query = (
+            _get_supabase_client()
+            .table("saved_records")
+            .update(update_row)
+            .eq("id", record_id)
+            .eq("user_id", user["id"])
+        )
+        response = await asyncio.to_thread(query.execute)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"saved_records 수정 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "record": response.data[0] if response.data else {**existing_record, **update_row},
+    }
+
+
 @app.get("/api/records")
 async def get_records(
     category: str = "",
