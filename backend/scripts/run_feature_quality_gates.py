@@ -22,6 +22,7 @@ PYTHON_FILES = [
     "backend/scripts/check_feature_readiness.py",
     "backend/scripts/build_feature_sql_bundle.py",
     "backend/scripts/smoke_transcription_api.py",
+    "backend/scripts/smoke_glossary_api.py",
     "backend/scripts/smoke_correction_sample_api.py",
     "backend/scripts/smoke_saved_record_edit_api.py",
     "backend/scripts/run_post_deploy_checks.py",
@@ -75,6 +76,7 @@ def run_script_self_tests() -> None:
     run_command([sys.executable, "backend/scripts/export_correction_finetune_dataset.py", "--self-test", "--dry-run", "--min-kept", "1"])
     run_command([sys.executable, "backend/scripts/build_feature_sql_bundle.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/smoke_transcription_api.py", "--self-test"])
+    run_command([sys.executable, "backend/scripts/smoke_glossary_api.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/smoke_correction_sample_api.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/smoke_saved_record_edit_api.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/run_post_deploy_checks.py", "--self-test"])

@@ -102,6 +102,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help=f"Backend API URL. Default: {DEFAULT_API_URL}")
     parser.add_argument("--min-finetune-examples", type=int, default=50, help="Minimum kept samples expected before fine-tune readiness.")
     parser.add_argument("--auth-token", default=os.getenv("MALLOG24_AUTH_TOKEN", ""), help="Auth token for correction smoke. Defaults to MALLOG24_AUTH_TOKEN.")
+    parser.add_argument("--exercise-glossary", action="store_true", help="Create, list, update, and clean up a smoke user glossary term.")
+    parser.add_argument("--require-glossary-smoke", action="store_true", help="Fail when no auth token is available for glossary smoke.")
     parser.add_argument("--store-correction-sample", action="store_true", help="Insert a smoke correction sample instead of unchanged preflight.")
     parser.add_argument("--require-correction-smoke", action="store_true", help="Fail when no auth token is available for correction smoke.")
     parser.add_argument("--exercise-saved-record-edit", action="store_true", help="Create, update, capture, and clean up a smoke saved record.")
@@ -128,6 +130,9 @@ def run_self_test() -> int:
     assert normalize_api_url("api.example.test") == "https://api.example.test"
     args = parse_args_for_self_test(["--client-platform", "web", "--client-platform", "android"])
     assert args.client_platform == ["web", "android"]
+    args = parse_args_for_self_test(["--exercise-glossary", "--require-glossary-smoke"])
+    assert args.exercise_glossary is True
+    assert args.require_glossary_smoke is True
     args = parse_args_for_self_test(["--exercise-saved-record-edit", "--require-saved-record-edit-smoke"])
     assert args.exercise_saved_record_edit is True
     assert args.require_saved_record_edit_smoke is True
@@ -166,6 +171,25 @@ def main() -> int:
         ],
         required=True,
     ))
+
+    if args.auth_token:
+        glossary_command = [
+            sys.executable,
+            "backend/scripts/smoke_glossary_api.py",
+            "--api-url",
+            api_url,
+            "--bearer-token",
+            args.auth_token,
+        ]
+        if args.exercise_glossary:
+            glossary_command.append("--exercise-write-path")
+        checks.append(run_command("glossary-smoke", glossary_command, required=True))
+    else:
+        checks.append(skipped_check(
+            "glossary-smoke",
+            "--auth-token or MALLOG24_AUTH_TOKEN is required.",
+            required=bool(args.require_glossary_smoke),
+        ))
 
     if args.auth_token:
         correction_command = [
