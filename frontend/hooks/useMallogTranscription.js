@@ -1184,6 +1184,7 @@ export default function useMallogTranscription({
         body: JSON.stringify({
           title: record?.title || recordTypeLabels[record?.category] || record?.category || messages.recordDefaultLabel,
           content,
+          language: result?.language || language || messages.defaultLanguage,
         }),
       })
       const data = await readResponseData(response, messages.recordUpdateFailed)
@@ -1191,36 +1192,13 @@ export default function useMallogTranscription({
       setSavedRecords((prev) => prev.map((item) => (String(item.id || '') === recordId ? updatedRecord : item)))
       handleCancelSavedRecordEdit(recordId)
 
-      apiFetch(`${apiUrl}/api/corrections`, {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          source_type: 'saved_record_edit',
-          category: record?.category || record?.source_type || result?.transcription_type || transcriptionType,
-          language: result?.language || language || messages.defaultLanguage,
-          task_id: record?.task_id || result?.task_id || '',
-          original_text: originalText,
-          edited_text: content,
-          metadata: {
-            record_id: recordId,
-            record_title: record?.title || '',
-            source_type: record?.source_type || '',
-          },
-        }),
-      }).catch((correctionError) => {
-        console.warn('Saved record correction sample save failed:', correctionError?.message || correctionError)
-      })
-
       setNotice(messages.recordUpdateSuccess)
     } catch (error) {
       setError(error?.message || messages.recordUpdateFailed)
     } finally {
       setSavedRecordSavingId('')
     }
-  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, result?.task_id, result?.transcription_type, savedRecordEditDrafts, setError, setNotice, transcriptionType])
+  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, savedRecordEditDrafts, setError, setNotice])
 
   const usageState = useMemo(() => {
     return (usage) => {

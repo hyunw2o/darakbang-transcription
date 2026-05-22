@@ -1475,31 +1475,12 @@ function App() {
         body: JSON.stringify({
           title: record?.title || record?.category || copy.recordsTitle,
           content: editedText,
+          language: result?.language || transcriptionLanguage || "ko",
         }),
       });
       const updatedRecord = data?.record || { ...record, content: editedText };
       setRecords((prev) => prev.map((item) => (String(item.id || "") === recordId ? updatedRecord : item)));
       handleCancelRecordEdit(recordId);
-
-      requestApi("/api/corrections", {
-        method: "POST",
-        token: authToken,
-        body: JSON.stringify({
-          source_type: "saved_record_edit",
-          category: record?.category || record?.source_type || result?.transcription_type || transcriptionType,
-          language: result?.language || transcriptionLanguage || "ko",
-          task_id: record?.task_id || result?.task_id || "",
-          original_text: originalText,
-          edited_text: editedText,
-          metadata: {
-            record_id: recordId,
-            record_title: record?.title || "",
-            source_type: record?.source_type || "",
-          },
-        }),
-      }).catch((correctionError) => {
-        console.warn("Saved record correction sample save failed:", correctionError?.message || correctionError);
-      });
 
       setNotice(copy.notices.recordUpdated);
     } catch (e) {
@@ -1507,7 +1488,7 @@ function App() {
     } finally {
       setRecordSavingId("");
     }
-  }, [authToken, clearMessages, copy.errors.recordUpdateFailed, copy.errors.saveNeedLogin, copy.errors.saveNoContent, copy.notices.correctionNoChange, copy.notices.recordUpdated, copy.recordsTitle, handleCancelRecordEdit, isLoggedIn, recordEditDrafts, result?.language, result?.task_id, result?.transcription_type, transcriptionLanguage, transcriptionType]);
+  }, [authToken, clearMessages, copy.errors.recordUpdateFailed, copy.errors.saveNeedLogin, copy.errors.saveNoContent, copy.notices.correctionNoChange, copy.notices.recordUpdated, copy.recordsTitle, handleCancelRecordEdit, isLoggedIn, recordEditDrafts, result?.language, transcriptionLanguage]);
 
   const handleResetTranscriptEdit = () => {
     setTranscriptEditText(transcriptSourceText);
