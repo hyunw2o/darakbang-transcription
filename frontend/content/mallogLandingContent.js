@@ -80,7 +80,7 @@ export const KO_MALLOG_LANDING_CONTENT = {
     eyebrow: 'Before / After',
     title: '입력은 거칠어도 결과는 구조화됩니다',
     description:
-      '설교, 통화, 회의는 출력 방식이 다릅니다. 탭을 눌러 어떤 문서가 생성되는지 먼저 확인할 수 있습니다.',
+      '설교, 통화, 회의는 출력 방식이 다릅니다. 원본 음성과 구조화 결과를 나란히 보며 어떤 문서가 생성되는지 확인할 수 있습니다.',
     beforeLabel: 'INPUT',
     afterLabel: 'OUTPUT',
     cases: [
@@ -276,7 +276,7 @@ export const EN_MALLOG_LANDING_CONTENT = {
     eyebrow: 'Before / After',
     title: 'Messy input can still become structured output',
     description:
-      'Sermons, calls, and meetings should not end in the same format. Switch tabs to inspect each output style.',
+      'Sermons, calls, and meetings should not end in the same format. Compare the original voice sentence and generated document side by side.',
     beforeLabel: 'INPUT',
     afterLabel: 'OUTPUT',
     cases: [

@@ -164,20 +164,20 @@ export default function HeaderMenuControls({
             aria-label={labels.close}
             onClick={() => setMobileOpen(false)}
           />
-          <div className="absolute inset-x-4 top-20 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-[0_20px_60px_rgba(15,23,42,0.16)] dark:border-white/10 dark:bg-[#0F172A]">
+          <div className="absolute inset-x-4 top-20 rounded-lg border-[0.5px] border-black/[0.1] bg-white p-4 dark:border-white/10 dark:bg-[#1A1916]">
             <div className="space-y-2">
               {navItems.map((item) => (
                 <NavItem
                   key={`${item.label}-${item.href}-mobile`}
                   item={item}
                   onClick={() => setMobileOpen(false)}
-                  className="flex min-h-[48px] items-center rounded-xl px-4 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8F9FF] dark:text-white dark:hover:bg-white/10"
+                  className="flex min-h-[48px] items-center rounded-lg px-4 text-sm font-semibold text-[#1A1916] transition hover:bg-[#F4F3EF] dark:text-white dark:hover:bg-white/10"
                 />
               ))}
               <Link
                 href={languageHref}
                 onClick={() => setMobileOpen(false)}
-                className="flex min-h-[48px] items-center rounded-xl px-4 text-sm font-semibold text-[#0F172A] transition hover:bg-[#F8F9FF] whitespace-nowrap dark:text-white dark:hover:bg-white/10"
+                className="flex min-h-[48px] items-center rounded-lg px-4 text-sm font-semibold text-[#1A1916] transition hover:bg-[#F4F3EF] whitespace-nowrap dark:text-white dark:hover:bg-white/10"
               >
                 {labels.switchLanguage}
               </Link>

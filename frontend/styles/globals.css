@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/GeistVF.woff') format('woff');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMonoVF.woff') format('woff');
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
@@ -29,7 +45,7 @@ html {
   --nm-text-primary: #1f2b47;
   --nm-text-secondary: #607093;
   --nm-glow-1: rgba(116, 150, 255, 0.26);
-  --nm-glow-2: rgba(184, 162, 255, 0.2);
+  --nm-glow-2: rgba(45, 91, 227, 0.12);
   --nm-transition: 250ms;
   --nm-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mallog24-logo-text: #1E2A44;
@@ -63,7 +79,7 @@ html[data-ui-theme='aurora'] {
   --nm-text-primary: #1f2b47;
   --nm-text-secondary: #607093;
   --nm-glow-1: rgba(116, 150, 255, 0.26);
-  --nm-glow-2: rgba(184, 162, 255, 0.2);
+  --nm-glow-2: rgba(45, 91, 227, 0.12);
 }
 
 html.dark[data-ui-theme='aurora'] {
@@ -153,10 +169,7 @@ body {
   font-family: 'Pretendard Variable', 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background:
-    radial-gradient(1100px 520px at 10% -12%, var(--nm-glow-1), transparent 62%),
-    radial-gradient(920px 480px at 108% 0%, var(--nm-glow-2), transparent 65%),
-    linear-gradient(180deg, color-mix(in oklab, var(--nm-bg) 92%, #ffffff 8%), var(--nm-bg));
+  background: var(--nm-bg);
   color: var(--nm-text-primary);
   transition: background 0.3s ease, color 0.3s ease;
 }
@@ -459,11 +472,11 @@ body {
   --nm-radius: 16px;
   --nm-radius-sm: 12px;
   --nm-accent: #3B82F6;
-  --nm-accent-soft: #7C3AED;
+  --nm-accent-soft: #1A3FA0;
   --nm-text-primary: #0F172A;
   --nm-text-secondary: #64748B;
   --nm-glow-1: rgba(59, 130, 246, 0.1);
-  --nm-glow-2: rgba(124, 58, 237, 0.08);
+  --nm-glow-2: rgba(45, 91, 227, 0.08);
   --mallog24-logo-text: #0F172A;
 }
 
@@ -475,27 +488,21 @@ html.dark {
   --nm-shadow-light: rgba(255, 255, 255, 0.03);
   --nm-shadow-dark: rgba(2, 6, 23, 0.42);
   --nm-accent: #60A5FA;
-  --nm-accent-soft: #A78BFA;
+  --nm-accent-soft: #93AFFA;
   --nm-text-primary: #F8FAFC;
   --nm-text-secondary: #94A3B8;
   --nm-glow-1: rgba(59, 130, 246, 0.16);
-  --nm-glow-2: rgba(124, 58, 237, 0.14);
+  --nm-glow-2: rgba(91, 130, 240, 0.12);
   --mallog24-logo-text: #F8FAFC;
 }
 
 body {
-  background:
-    radial-gradient(780px 360px at 0% 0%, rgba(59,130,246,0.08), transparent 60%),
-    radial-gradient(680px 320px at 100% 0%, rgba(124,58,237,0.07), transparent 55%),
-    linear-gradient(180deg, #FFFFFF, #FFFFFF);
+  background: #FFFFFF;
   color: var(--nm-text-primary);
 }
 
 html.dark body {
-  background:
-    radial-gradient(780px 360px at 0% 0%, rgba(59,130,246,0.12), transparent 60%),
-    radial-gradient(680px 320px at 100% 0%, rgba(124,58,237,0.12), transparent 55%),
-    linear-gradient(180deg, #020617, #020617);
+  background: #020617;
 }
 
 .nm-raised,
@@ -536,7 +543,7 @@ html.dark .nm-btn:hover {
 }
 
 .nm-btn-primary {
-  background: linear-gradient(135deg, #3B82F6, #7C3AED);
+  background: #2D5BE3;
   color: #ffffff;
   border-radius: 8px;
   border: none;
@@ -546,7 +553,7 @@ html.dark .nm-btn:hover {
 .nm-btn-primary:hover {
   opacity: 0.9;
   transform: translateY(-1px);
-  background: linear-gradient(135deg, #3B82F6, #7C3AED);
+  background: #1A3FA0;
 }
 
 .nm-input {
@@ -611,7 +618,7 @@ html.dark .nm-icon-btn:hover {
 }
 
 .text-gradient-brand {
-  background-image: linear-gradient(135deg, #3B82F6, #7C3AED);
+  background-image: none;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -642,5 +649,113 @@ html.dark .nm-icon-btn:hover {
 @media (max-width: 767px) {
   .landing-anchor-offset {
     scroll-margin-top: 84px;
+  }
+}
+
+/* ========== Precision SaaS Landing Refresh ========== */
+:root,
+html[data-ui-theme='aurora'],
+html[data-ui-theme='noir'],
+html[data-ui-theme='sunset'] {
+  --nm-bg: #F9F8F6;
+  --nm-surface: #FFFFFF;
+  --nm-surface-soft: #F4F3EF;
+  --nm-border: rgba(26, 25, 22, 0.1);
+  --nm-shadow-light: rgba(255, 255, 255, 0.7);
+  --nm-shadow-dark: rgba(26, 25, 22, 0.08);
+  --nm-radius: 8px;
+  --nm-radius-sm: 8px;
+  --nm-accent: #2D5BE3;
+  --nm-accent-soft: #1A3FA0;
+  --nm-text-primary: #1A1916;
+  --nm-text-secondary: #6B6860;
+  --nm-glow-1: transparent;
+  --nm-glow-2: transparent;
+  --mallog24-logo-text: #1A1916;
+}
+
+html.dark,
+html.dark[data-ui-theme='aurora'],
+html.dark[data-ui-theme='noir'],
+html.dark[data-ui-theme='sunset'] {
+  --nm-bg: #111110;
+  --nm-surface: #1A1916;
+  --nm-surface-soft: #222120;
+  --nm-border: rgba(255, 255, 255, 0.1);
+  --nm-shadow-light: rgba(255, 255, 255, 0.03);
+  --nm-shadow-dark: rgba(0, 0, 0, 0.34);
+  --nm-accent: #5B82F0;
+  --nm-accent-soft: #93AFFA;
+  --nm-text-primary: #F0EDE8;
+  --nm-text-secondary: #B7B2A8;
+  --mallog24-logo-text: #F0EDE8;
+}
+
+body,
+html.dark body {
+  font-family: 'Geist', 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--nm-bg);
+  color: var(--nm-text-primary);
+}
+
+.nm-raised,
+.nm-flat,
+.nm-concave {
+  border-radius: 8px;
+  border: 0.5px solid var(--nm-border);
+  box-shadow: none;
+}
+
+.nm-btn,
+.nm-icon-btn,
+.nm-input,
+.nm-segment-group,
+.nm-menu {
+  border-radius: 8px;
+  border-color: var(--nm-border);
+  box-shadow: none;
+}
+
+.nm-btn-primary,
+.nm-btn-primary:hover {
+  background: var(--nm-text-primary);
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--nm-surface);
+}
+
+html.dark .nm-btn-primary,
+html.dark .nm-btn-primary:hover {
+  background: var(--nm-text-primary);
+  color: var(--nm-bg);
+}
+
+.text-gradient-brand {
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--nm-accent);
+}
+
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: mallog-landing-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes mallog-landing-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-reveal,
+  .mallog-output-item {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

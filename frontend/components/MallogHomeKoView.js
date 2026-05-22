@@ -213,8 +213,8 @@ export default function MallogHomeKoView(props) {
         className={`sticky top-0 z-50 border-b transition-all duration-200 ${
           isScrolled || authToken
             ? darkMode
-              ? 'border-white/10 bg-[rgba(15,23,42,0.8)] backdrop-blur-xl'
-              : 'border-black/[0.06] bg-[rgba(255,255,255,0.8)] backdrop-blur-xl'
+              ? 'border-white/10 bg-[rgba(17,17,16,0.84)] backdrop-blur-xl'
+              : 'border-black/[0.08] bg-[rgba(249,248,246,0.88)] backdrop-blur-xl'
             : 'border-transparent bg-transparent'
         }`}
       >
@@ -222,11 +222,11 @@ export default function MallogHomeKoView(props) {
           <div className="flex items-center gap-2.5">
             <a
               href={OURS_URL}
-              className="text-sm font-semibold text-[#64748B] transition hover:text-[#0F172A] dark:text-white/60 dark:hover:text-white whitespace-nowrap"
+              className="text-sm font-semibold text-[#6B6860] transition hover:text-[#1A1916] dark:text-white/60 dark:hover:text-white whitespace-nowrap"
             >
               OURS
             </a>
-            <span className="text-[#CBD5E1] dark:text-white/20">/</span>
+            <span className="text-black/20 dark:text-white/20">/</span>
             <Mallog24Logo className="h-[18px] w-auto shrink-0" />
           </div>
           <HeaderMenuControls

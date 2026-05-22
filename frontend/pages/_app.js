@@ -5,6 +5,15 @@ import '../styles/globals.css'
 const THEME_KEY = 'mallog24-ui-theme'
 const THEME_MODE_KEY = 'mallog24-ui-theme-mode'
 
+function readStoredBoolean(value, fallback) {
+  if (value === null) return fallback
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback
+  }
+}
+
 export default function App({ Component, pageProps }) {
   const [darkMode, setDarkMode] = useState(false)
   const [uiThemeMode, setUiThemeMode] = useState('auto')
@@ -14,16 +23,11 @@ export default function App({ Component, pageProps }) {
     const saved = localStorage.getItem('darkMode')
     const savedTheme = localStorage.getItem(THEME_KEY)
     const savedThemeMode = localStorage.getItem(THEME_MODE_KEY)
-    const systemDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const initialThemeMode = savedThemeMode === 'manual' || savedThemeMode === 'auto'
-      ? savedThemeMode
-      : 'auto'
+    const initialThemeMode = 'manual'
 
-    const initialDarkMode = initialThemeMode === 'auto'
-      ? systemDarkMode
-      : saved !== null
-        ? JSON.parse(saved)
-        : systemDarkMode
+    const initialDarkMode = savedThemeMode === 'manual' && saved !== null
+      ? readStoredBoolean(saved, false)
+      : false
 
     setDarkMode(initialDarkMode)
 
