@@ -42,6 +42,10 @@ class FineTuneReadiness:
     enabled: bool
     model_configured: bool
     max_chars: int
+    sample_count: int | None
+    min_examples: int
+    enough_samples: bool
+    ready_to_train: bool
     ready_to_run: bool
 
 
@@ -113,17 +117,22 @@ def check_table(client: Any, table_name: str) -> TableReadiness:
         )
 
 
-def build_fine_tune_readiness() -> FineTuneReadiness:
+def build_fine_tune_readiness(correction_sample_count: int | None, min_examples: int) -> FineTuneReadiness:
     enabled = os.getenv("ENABLE_FINE_TUNED_CORRECTION", "false").strip().lower() == "true"
     model_configured = bool((os.getenv("CORRECTION_FINE_TUNED_MODEL") or "").strip())
     try:
         max_chars = int(os.getenv("FINE_TUNED_CORRECTION_MAX_CHARS", "6000"))
     except ValueError:
         max_chars = 0
+    enough_samples = correction_sample_count is not None and correction_sample_count >= min_examples
     return FineTuneReadiness(
         enabled=enabled,
         model_configured=model_configured,
         max_chars=max_chars,
+        sample_count=correction_sample_count,
+        min_examples=min_examples,
+        enough_samples=enough_samples,
+        ready_to_train=enough_samples,
         ready_to_run=enabled and model_configured and max_chars >= 1000,
     )
 
@@ -149,6 +158,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-url", default="", help="Optional backend API base URL for /health check.")
     parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout seconds.")
+    parser.add_argument(
+        "--min-finetune-examples",
+        type=int,
+        default=50,
+        help="Minimum correction samples before recommending a fine-tuning dataset export.",
+    )
     parser.add_argument("--warn-only", action="store_true", help="Always exit 0 after printing readiness JSON.")
     parser.add_argument("--self-test", action="store_true", help="Run deterministic local summary test without network.")
     return parser.parse_args()
@@ -162,10 +177,11 @@ def run_self_test() -> int:
     payload = summarize_result(
         tables,
         ApiReadiness(url="https://api.example.test/health", ok=True, status_code=200),
-        FineTuneReadiness(enabled=False, model_configured=False, max_chars=6000, ready_to_run=False),
+        build_fine_tune_readiness(correction_sample_count=None, min_examples=50),
     )
     assert payload["ok"] is False
     assert payload["missing_sql"][0]["table"] == "user_correction_samples"
+    assert payload["fine_tuned_correction"]["ready_to_train"] is False
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 
@@ -184,7 +200,12 @@ def main() -> int:
         return 0 if args.warn_only else 1
 
     api = check_api_health(args.api_url, args.timeout)
-    payload = summarize_result(tables, api, build_fine_tune_readiness())
+    correction_count = next((item.count for item in tables if item.table == "user_correction_samples"), None)
+    payload = summarize_result(
+        tables,
+        api,
+        build_fine_tune_readiness(correction_count, args.min_finetune_examples),
+    )
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     if args.warn_only:
         return 0

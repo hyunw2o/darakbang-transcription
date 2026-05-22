@@ -171,11 +171,14 @@ Supabase SQL 적용 여부, 수정 샘플 수, 백엔드 `/health` 상태를 한
 
 ```bash
 python backend/scripts/check_feature_readiness.py \
-  --api-url https://api.mallog24.com
+  --api-url https://api.mallog24.com \
+  --min-finetune-examples 50
 ```
 
 `missing_sql`에 항목이 있으면 표시된 SQL 파일을 Supabase SQL Editor에서 실행한 뒤
 `NOTIFY pgrst, 'reload schema';` 를 실행하세요.
+`fine_tuned_correction.ready_to_train`이 `true`가 되면 교정 샘플이 충분히 쌓인 상태입니다.
+그 전에는 4차 파인튜닝을 시작하지 않고 샘플 수집을 계속합니다.
 용어집/수정 샘플 테이블을 한 번에 적용할 SQL 파일이 필요하면 아래 명령으로 번들을 만들 수 있습니다.
 
 ```bash
