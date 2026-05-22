@@ -247,6 +247,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-chars", type=int, default=20, help="Skip examples shorter than this after whitespace compaction.")
     parser.add_argument("--max-chars", type=int, default=120000, help="Skip examples with either side longer than this.")
     parser.add_argument("--max-length-ratio", type=float, default=5.0, help="Skip pairs where one side is much longer.")
+    parser.add_argument("--min-kept", type=int, default=0, help="Fail if fewer than this many examples remain after filtering.")
     parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="System prompt to embed in each JSONL row.")
     return parser.parse_args()
 
@@ -270,6 +271,13 @@ def main() -> int:
     examples, stats = build_dataset(samples, args)
     if args.self_test and stats.kept != 1:
         print(f"Self-test failed: expected 1 kept example, got {stats.kept}", file=sys.stderr)
+        return 1
+    if args.min_kept and stats.kept < args.min_kept:
+        print(json.dumps(asdict(stats), ensure_ascii=False, sort_keys=True))
+        print(
+            f"Dataset kept {stats.kept} examples after filtering, but --min-kept is {args.min_kept}.",
+            file=sys.stderr,
+        )
         return 1
     if not args.dry_run and args.output:
         write_jsonl(examples, args.output)

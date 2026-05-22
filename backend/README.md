@@ -120,7 +120,8 @@ python worker.py
 python backend/scripts/export_correction_finetune_dataset.py \
   --from-supabase \
   --output backend/finetune_datasets/correction_train.jsonl \
-  --stats-output backend/finetune_datasets/correction_train.stats.json
+  --stats-output backend/finetune_datasets/correction_train.stats.json \
+  --min-kept 50
 ```
 
 로컬 샘플 JSON을 먼저 검증할 수도 있습니다.
@@ -133,6 +134,7 @@ python backend/scripts/export_correction_finetune_dataset.py \
 
 - 출력 파일은 OpenAI chat fine-tuning JSONL 형식의 `messages` 배열만 포함합니다.
 - 동일/너무 짧은/길이 비율이 과한 샘플은 자동 제외합니다.
+- `--min-kept`보다 적은 샘플만 남으면 JSONL을 쓰지 않고 실패하므로, 샘플을 더 모은 뒤 다시 실행합니다.
 - 생성된 `backend/finetune_datasets/`는 로컬 산출물이므로 Git에 포함하지 않습니다.
 - 실제 모델 업로드 전에는 개인정보/민감정보 포함 여부와 샘플 품질을 반드시 검토하세요.
 
