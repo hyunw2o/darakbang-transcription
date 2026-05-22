@@ -106,6 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--require-correction-smoke", action="store_true", help="Fail when no auth token is available for correction smoke.")
     parser.add_argument("--audio-file", default="", help="Optional short audio file for transcription smoke.")
     parser.add_argument("--expect-corrected-contains", action="append", default=[], help="Expected term in corrected_text. Can be repeated.")
+    parser.add_argument("--client-platform", action="append", default=[], help="Client platform to smoke, e.g. web or android. Can be repeated. Default: web.")
     parser.add_argument("--require-transcription-smoke", action="store_true", help="Fail when --audio-file is missing.")
     parser.add_argument("--with-sample-report", action="store_true", help="Also run the Supabase correction sample quality report.")
     parser.add_argument("--self-test", action="store_true", help="Run deterministic local summary tests without network.")
@@ -123,8 +124,21 @@ def run_self_test() -> int:
     ])
     assert payload["ok"] is False
     assert normalize_api_url("api.example.test") == "https://api.example.test"
+    args = parse_args_for_self_test(["--client-platform", "web", "--client-platform", "android"])
+    assert args.client_platform == ["web", "android"]
     print("post-deploy-checks-self-test-ok")
     return 0
+
+
+def parse_args_for_self_test(argv: list[str]) -> argparse.Namespace:
+    original_argv = sys.argv
+    try:
+        sys.argv = [original_argv[0], *argv, "--self-test"]
+        args = parse_args()
+        args.self_test = False
+        return args
+    finally:
+        sys.argv = original_argv
 
 
 def main() -> int:
@@ -168,17 +182,21 @@ def main() -> int:
         ))
 
     if args.audio_file:
-        transcription_command = [
-            sys.executable,
-            "backend/scripts/smoke_transcription_api.py",
-            "--api-url",
-            api_url,
-            "--audio-file",
-            args.audio_file,
-        ]
-        for expected in args.expect_corrected_contains:
-            transcription_command.extend(["--expect-corrected-contains", expected])
-        checks.append(run_command("transcription-smoke", transcription_command, required=True))
+        platforms = args.client_platform or ["web"]
+        for platform in platforms:
+            transcription_command = [
+                sys.executable,
+                "backend/scripts/smoke_transcription_api.py",
+                "--api-url",
+                api_url,
+                "--audio-file",
+                args.audio_file,
+                "--client-platform",
+                platform,
+            ]
+            for expected in args.expect_corrected_contains:
+                transcription_command.extend(["--expect-corrected-contains", expected])
+            checks.append(run_command(f"transcription-smoke-{platform}", transcription_command, required=True))
     else:
         checks.append(skipped_check(
             "transcription-smoke",

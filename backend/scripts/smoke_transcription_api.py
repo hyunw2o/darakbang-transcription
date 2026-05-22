@@ -71,6 +71,14 @@ def request_json(url: str, *, method: str = "GET", body: bytes | None = None, he
         raise RuntimeError(f"HTTP {exc.code} from {url}: {payload}") from exc
 
 
+def build_request_headers(args: argparse.Namespace, guest_session_id: str) -> dict[str, str]:
+    headers = {"X-Guest-Session-Id": guest_session_id}
+    client_platform = str(getattr(args, "client_platform", "") or "").strip()
+    if client_platform:
+        headers["X-Mallog24-Client-Platform"] = client_platform
+    return headers
+
+
 def submit_transcription(args: argparse.Namespace, guest_session_id: str) -> dict[str, Any]:
     body, boundary = build_multipart_body(
         {
@@ -81,11 +89,11 @@ def submit_transcription(args: argparse.Namespace, guest_session_id: str) -> dic
         "file",
         args.audio_file,
     )
-    headers = {
+    headers = build_request_headers(args, guest_session_id)
+    headers.update({
         "Content-Type": f"multipart/form-data; boundary={boundary}",
         "Content-Length": str(len(body)),
-        "X-Guest-Session-Id": guest_session_id,
-    }
+    })
     return request_json(
         f"{normalize_api_url(args.api_url)}/api/transcribe",
         method="POST",
@@ -105,7 +113,7 @@ def poll_until_done(args: argparse.Namespace, payload: dict[str, Any], guest_ses
         return payload
 
     deadline = time.time() + args.poll_timeout
-    headers = {"X-Guest-Session-Id": guest_session_id}
+    headers = build_request_headers(args, guest_session_id)
     while time.time() < deadline:
         time.sleep(args.poll_interval)
         payload = request_json(
@@ -141,6 +149,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--correction-mode", default="normal", help="Correction mode. Default: normal")
     parser.add_argument("--expect-corrected-contains", action="append", default=[], help="Term that must appear in corrected_text. Can be repeated.")
     parser.add_argument("--guest-session-id", help="Optional guest session id. Generated when omitted.")
+    parser.add_argument("--client-platform", default="", help="Optional X-Mallog24-Client-Platform value, e.g. web/android/ios.")
     parser.add_argument("--timeout", type=int, default=60, help="HTTP timeout seconds.")
     parser.add_argument("--poll-interval", type=float, default=2.0, help="Status poll interval seconds.")
     parser.add_argument("--poll-timeout", type=int, default=180, help="Maximum seconds to wait for queued tasks.")
@@ -150,6 +159,11 @@ def parse_args() -> argparse.Namespace:
 
 def run_self_test() -> int:
     validate_payload({"status": "completed", "success": True, "corrected_text": "RVS and RUTC"}, ["RVS", "RUTC"])
+    dummy_args = argparse.Namespace(client_platform="android")
+    assert build_request_headers(dummy_args, "guest-self-test") == {
+        "X-Guest-Session-Id": "guest-self-test",
+        "X-Mallog24-Client-Platform": "android",
+    }
     try:
         validate_payload({"status": "completed", "success": True, "corrected_text": "RVH and NRDC"}, ["RVS"])
     except RuntimeError:

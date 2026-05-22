@@ -217,6 +217,8 @@ python backend/scripts/check_feature_readiness.py \
 MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
   --api-url https://api.mallog24.com \
   --audio-file /path/to/short-sample.mp3 \
+  --client-platform web \
+  --client-platform android \
   --expect-corrected-contains RVS \
   --expect-corrected-contains RUTC
 ```
@@ -227,6 +229,7 @@ MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
 python backend/scripts/smoke_transcription_api.py \
   --api-url https://api.mallog24.com \
   --audio-file /path/to/short-sample.mp3 \
+  --client-platform android \
   --expect-corrected-contains RVS \
   --expect-corrected-contains RUTC
 ```
