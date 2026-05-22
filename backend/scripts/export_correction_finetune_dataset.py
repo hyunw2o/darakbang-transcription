@@ -13,7 +13,7 @@ from typing import Any
 
 
 DEFAULT_TABLE = "user_correction_samples"
-DEFAULT_SELECT = "id,task_id,source_type,category,language,original_text,edited_text,created_at"
+DEFAULT_SELECT = "id,task_id,source_type,category,language,original_text,edited_text,metadata,created_at"
 DEFAULT_SYSTEM_PROMPT = (
     "You are mallog24's transcript correction model. Correct speech-to-text output "
     "without summarizing or adding new claims. Preserve meaning, speaker labels, paragraph "
@@ -331,6 +331,9 @@ def main() -> int:
         print(f"Self-test failed: expected 1 kept example, got {stats.kept}", file=sys.stderr)
         return 1
     if args.self_test:
+        if "metadata" not in DEFAULT_SELECT.split(","):
+            print("Self-test failed: DEFAULT_SELECT must include metadata to exclude smoke samples.", file=sys.stderr)
+            return 1
         smoke_samples = [
             *SELF_TEST_SAMPLES,
             {
