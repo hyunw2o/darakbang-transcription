@@ -12,6 +12,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from church_terms import SPECIAL_TERM_RULES
 from export_correction_finetune_dataset import (
     DEFAULT_TABLE,
     SELF_TEST_SAMPLES,
@@ -25,6 +30,24 @@ from export_correction_finetune_dataset import (
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+|[가-힣]+|[^\s]", re.UNICODE)
 EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE_PATTERN = re.compile(r"\b(?:\+?\d[\d .-]{7,}\d)\b")
+
+
+def normalize_domain_key(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", str(value or "")).upper()
+
+
+def domain_term_meanings() -> dict[str, tuple[str, str]]:
+    terms: dict[str, tuple[str, str]] = {}
+    for rule in SPECIAL_TERM_RULES:
+        canonical = str(rule.get("canonical") or "").strip()
+        if not canonical:
+            continue
+        key = normalize_domain_key(canonical)
+        if not key:
+            continue
+        meaning = str(rule.get("meaning") or "").strip()
+        terms[key] = (canonical, meaning)
+    return terms
 
 
 def tokenize_for_diff(text: str) -> list[str]:
@@ -66,6 +89,28 @@ def count_field(samples: list[dict[str, Any]], field: str, fallback: str = "unkn
     return dict(sorted(counter.items(), key=lambda item: (-item[1], item[0])))
 
 
+def build_asr_escalation_candidates(
+    replacement_counter: Counter[tuple[str, str]],
+    threshold: int,
+    limit: int,
+) -> list[dict[str, Any]]:
+    threshold = max(1, threshold)
+    domain_terms = domain_term_meanings()
+    candidates = []
+    for (source, target), count in replacement_counter.items():
+        canonical = domain_terms.get(normalize_domain_key(target))
+        if not canonical or count < threshold:
+            continue
+        candidates.append({
+            "from": source,
+            "to": target,
+            "canonical": canonical[0],
+            "meaning": canonical[1],
+            "count": count,
+        })
+    return sorted(candidates, key=lambda item: (-item["count"], item["canonical"], item["from"]))[:limit]
+
+
 def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
     _examples, export_stats = build_dataset(samples, args)
     replacement_counter: Counter[tuple[str, str]] = Counter()
@@ -91,16 +136,24 @@ def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dic
         {"from": source, "to": target, "count": count}
         for (source, target), count in replacement_counter.most_common(args.max_replacements)
     ]
+    asr_candidates = build_asr_escalation_candidates(
+        replacement_counter,
+        args.asr_threshold,
+        args.max_asr_candidates,
+    )
     kept = export_stats.kept
     return {
         "total_samples": len(samples),
         "min_kept": args.min_kept,
         "ready_to_train": kept >= args.min_kept,
+        "asr_escalation_threshold": args.asr_threshold,
+        "ready_for_asr_fine_tune": bool(asr_candidates),
         "export_stats": asdict(export_stats),
         "by_language": count_field(samples, "language"),
         "by_category": count_field(samples, "category"),
         "by_source_type": count_field(samples, "source_type"),
         "top_replacements": top_replacements,
+        "asr_escalation_candidates": asr_candidates,
         "examples": preview_examples,
     }
 
@@ -130,6 +183,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--system-prompt", default="", help="Compatibility with export dataset filtering.")
     parser.add_argument("--min-kept", type=int, default=50, help="Minimum kept examples for ready_to_train.")
     parser.add_argument("--max-replacements", type=int, default=20, help="Maximum replacement patterns to report.")
+    parser.add_argument("--asr-threshold", type=int, default=20, help="Repeated domain-term replacements needed before ASR fine-tuning is considered.")
+    parser.add_argument("--max-asr-candidates", type=int, default=10, help="Maximum ASR escalation candidates to report.")
     parser.add_argument("--include-examples", action="store_true", help="Include redacted short text previews.")
     parser.add_argument("--max-examples", type=int, default=5, help="Maximum redacted examples when --include-examples is set.")
     return parser.parse_args()
@@ -151,6 +206,16 @@ def main() -> int:
         assert report["export_stats"]["kept"] == 1
         assert report["ready_to_train"] is False
         assert any(item["from"] == "RBS" and item["to"] == "RVS" for item in report["top_replacements"])
+        if args.asr_threshold > 1:
+            assert report["ready_for_asr_fine_tune"] is False
+        else:
+            assert any(item["canonical"] == "RVS" for item in report["asr_escalation_candidates"])
+        low_threshold_candidates = build_asr_escalation_candidates(
+            Counter({("RBS", "RVS"): 1}),
+            threshold=1,
+            limit=5,
+        )
+        assert low_threshold_candidates[0]["canonical"] == "RVS"
     if args.output:
         write_json(args.output, report)
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))

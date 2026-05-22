@@ -122,8 +122,13 @@ python worker.py
 python backend/scripts/report_correction_samples.py \
   --from-supabase \
   --min-kept 50 \
+  --asr-threshold 20 \
   --output backend/finetune_datasets/correction_sample_report.json
 ```
+
+리포트의 `ready_to_train`은 교정 모델 파인튜닝 준비 여부이고,
+`ready_for_asr_fine_tune`은 RVS/RUTC 같은 도메인 용어로 반복 교정되는 패턴이
+`--asr-threshold` 이상 누적됐는지 보는 5차 판단 신호입니다.
 
 ```bash
 python backend/scripts/export_correction_finetune_dataset.py \
@@ -237,6 +242,8 @@ python backend/scripts/build_feature_sql_bundle.py \
 - 교정 모델이 원문에 없는 소리를 안정적으로 복원할 수 없을 만큼 STT 원문 품질이 낮은 경우
 - 동일 화자/동일 녹음 환경에서 20건 이상 반복되는 오류 패턴이 쌓인 경우
 - 짧은 파일 실변환 QA에서 용어집/교정 모델만으로 재현 오류가 해결되지 않는 경우
+- `report_correction_samples.py`의 `ready_for_asr_fine_tune`이 `true`이고,
+  `asr_escalation_candidates`에 같은 핵심 용어 오류가 반복 표시되는 경우
 
 ## 다락방 용어 특화
 
