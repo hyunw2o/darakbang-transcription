@@ -235,6 +235,7 @@ python backend/scripts/check_feature_readiness.py \
 `fine_tuned_correction.ready_to_train`이 `true`가 되면 export 필터를 통과한 교정 샘플이 충분히 쌓인 상태입니다.
 원본 row 수는 `sample_count`, 실제 학습에 남는 수는 `kept_examples`와 `dataset_stats.kept`로 확인합니다.
 그 전에는 4차 파인튜닝을 시작하지 않고 샘플 수집을 계속합니다.
+`report_correction_samples.py`의 `recommended_commands`에는 현재 단계에서 바로 실행할 점검/내보내기/파인튜닝 명령이 함께 표시됩니다.
 
 배포 직후에는 아래 러너로 health/readiness, 사용자 용어집 preflight, 수정 샘플 API preflight, 저장 기록본 수정 preflight,
 선택적 실제 변환 스모크를 한 번에 확인할 수 있습니다. 토큰이나 오디오 파일이 없으면 해당 단계는 건너뛰며,

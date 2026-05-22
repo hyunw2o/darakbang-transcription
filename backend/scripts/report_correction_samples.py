@@ -152,6 +152,51 @@ def build_next_action(
     }
 
 
+def build_recommended_commands(next_action: dict[str, Any], min_kept: int) -> list[str]:
+    stage = str(next_action.get("stage") or "")
+    if stage == "collect_more_correction_samples":
+        return [
+            (
+                "MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py "
+                "--api-url https://api.mallog24.com "
+                "--require-saved-record-create-capture-smoke "
+                "--with-sample-report"
+            ),
+            (
+                "python backend/scripts/report_correction_samples.py "
+                "--from-supabase "
+                f"--min-kept {min_kept} "
+                "--asr-threshold 20"
+            ),
+        ]
+    if stage in {"create_correction_finetune", "create_correction_finetune_then_evaluate_asr"}:
+        return [
+            (
+                "python backend/scripts/export_correction_finetune_dataset.py "
+                "--from-supabase "
+                "--output backend/finetune_datasets/correction_train.jsonl "
+                "--validation-output backend/finetune_datasets/correction_validation.jsonl "
+                "--stats-output backend/finetune_datasets/correction_export_stats.json "
+                f"--min-kept {min_kept}"
+            ),
+            (
+                "python backend/scripts/manage_correction_finetune.py create "
+                "--training-file backend/finetune_datasets/correction_train.jsonl "
+                "--validation-file backend/finetune_datasets/correction_validation.jsonl "
+                "--dry-run "
+                f"--min-examples {min_kept}"
+            ),
+            (
+                "python backend/scripts/manage_correction_finetune.py create "
+                "--training-file backend/finetune_datasets/correction_train.jsonl "
+                "--validation-file backend/finetune_datasets/correction_validation.jsonl "
+                "--output backend/finetune_datasets/correction_finetune_job.json "
+                f"--min-examples {min_kept}"
+            ),
+        ]
+    return []
+
+
 def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
     _examples, export_stats = build_dataset(samples, args)
     smoke_test_samples = [sample for sample in samples if is_smoke_test_sample(sample)]
@@ -203,6 +248,7 @@ def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dic
         "asr_escalation_threshold": args.asr_threshold,
         "ready_for_asr_fine_tune": bool(asr_candidates),
         "next_action": next_action,
+        "recommended_commands": build_recommended_commands(next_action, args.min_kept),
         "export_stats": asdict(export_stats),
         "by_language": count_field(report_samples, "language"),
         "by_category": count_field(report_samples, "category"),
@@ -266,8 +312,10 @@ def main() -> int:
         assert report["kept_gap"] == max(0, args.min_kept - 1)
         if expected_ready_to_train:
             assert report["next_action"]["stage"] == "create_correction_finetune"
+            assert any("export_correction_finetune_dataset.py" in command for command in report["recommended_commands"])
         else:
             assert report["next_action"]["stage"] == "collect_more_correction_samples"
+            assert any("run_post_deploy_checks.py" in command for command in report["recommended_commands"])
         assert any(item["from"] == "RBS" and item["to"] == "RVS" for item in report["top_replacements"])
         if args.asr_threshold > 1:
             assert report["ready_for_asr_fine_tune"] is False
