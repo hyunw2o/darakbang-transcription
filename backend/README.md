@@ -176,6 +176,13 @@ python backend/scripts/check_feature_readiness.py \
 
 `missing_sql`에 항목이 있으면 표시된 SQL 파일을 Supabase SQL Editor에서 실행한 뒤
 `NOTIFY pgrst, 'reload schema';` 를 실행하세요.
+용어집/수정 샘플 테이블을 한 번에 적용할 SQL 파일이 필요하면 아래 명령으로 번들을 만들 수 있습니다.
+
+```bash
+python backend/scripts/build_feature_sql_bundle.py
+```
+
+기본 출력은 `/private/tmp/mallog24_feature_setup.sql`입니다.
 
 ### 5차 ASR 파인튜닝 판단 기준
 
