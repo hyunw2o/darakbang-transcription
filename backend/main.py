@@ -2824,6 +2824,55 @@ def _upsert_billing_row(user_id: str, patch: dict) -> dict:
     raise HTTPException(status_code=500, detail="결제 구독 상태를 저장하지 못했습니다.")
 
 
+def _delete_billing_row_by_user_id(user_id: str) -> None:
+    if not user_id:
+        return
+    _ensure_billing_scope_ready()
+    _get_supabase_client().table(BILLING_TABLE_NAME).delete().eq("user_id", user_id).execute()
+
+
+def _upsert_or_transfer_apple_billing_row(user_id: str, subscription_id: str, patch: dict) -> dict:
+    existing_subscription_row = _fetch_billing_row_by_subscription_id(subscription_id)
+    if not existing_subscription_row:
+        return _upsert_billing_row(user_id, patch)
+
+    previous_user_id = str(existing_subscription_row.get("user_id") or "").strip()
+    if previous_user_id == user_id:
+        return _upsert_billing_row(user_id, patch)
+
+    # An App Store subscription belongs to the Apple account, not to the app
+    # login provider. If the same Apple subscription is restored while another
+    # mallog24 account is logged in, reattach it instead of surfacing a DB
+    # unique-constraint error as "Internal Server Error".
+    current_user_row = _fetch_billing_row_by_user_id(user_id)
+    if current_user_row:
+        _delete_billing_row_by_user_id(user_id)
+
+    payload = {
+        "user_id": user_id,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    payload.update(patch or {})
+
+    response = (
+        _get_supabase_client().table(BILLING_TABLE_NAME)
+        .update(payload)
+        .eq("subscription_id", subscription_id)
+        .execute()
+    )
+    if response.data:
+        if previous_user_id:
+            _set_user_plan_tier(previous_user_id, USAGE_FREE_PLAN)
+        return response.data[0]
+
+    fresh = _fetch_billing_row_by_user_id(user_id)
+    if fresh:
+        if previous_user_id:
+            _set_user_plan_tier(previous_user_id, USAGE_FREE_PLAN)
+        return fresh
+    raise HTTPException(status_code=500, detail="Apple 구독 상태를 현재 계정에 연결하지 못했습니다.")
+
+
 def _to_iso_datetime_from_unix(unix_ts: int | float | None) -> str | None:
     if not unix_ts:
         return None
@@ -5533,20 +5582,21 @@ async def verify_apple_iap_subscription(
     should_write_apple_row = is_active or not existing_billing_row or existing_provider == "apple"
 
     if should_write_apple_row:
-        _upsert_billing_row(
-            user_id,
-            {
-                "provider": "apple",
-                "customer_id": subscription_id or user_id,
-                "subscription_id": subscription_id or None,
-                "price_id": APPLE_IAP_PRODUCT_ID_PRO,
-                "status": status,
-                "plan_tier": plan_tier,
-                "current_period_end": subscription.get("expires_at"),
-                "cancel_at_period_end": False,
-                "checkout_completed_at": datetime.utcnow().isoformat(),
-            },
-        )
+        billing_patch = {
+            "provider": "apple",
+            "customer_id": subscription_id or user_id,
+            "subscription_id": subscription_id or None,
+            "price_id": APPLE_IAP_PRODUCT_ID_PRO,
+            "status": status,
+            "plan_tier": plan_tier,
+            "current_period_end": subscription.get("expires_at"),
+            "cancel_at_period_end": False,
+            "checkout_completed_at": datetime.utcnow().isoformat(),
+        }
+        if subscription_id:
+            _upsert_or_transfer_apple_billing_row(user_id, subscription_id, billing_patch)
+        else:
+            _upsert_billing_row(user_id, billing_patch)
 
     if is_active:
         _set_user_plan_tier(user_id, PAID_PLAN_TIER)
