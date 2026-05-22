@@ -117,7 +117,22 @@ def fetch_supabase_samples(args: argparse.Namespace) -> list[dict[str, Any]]:
         if args.category:
             query = query.eq("category", args.category)
 
-        response = query.execute()
+        try:
+            response = query.execute()
+        except Exception as exc:
+            error_text = str(exc).lower()
+            if (
+                args.table in error_text
+                or "schema cache" in error_text
+                or "could not find the table" in error_text
+                or "pgrst205" in error_text
+            ):
+                raise RuntimeError(
+                    f"Supabase table '{args.table}' is not available. "
+                    "Run backend/sql/user_correction_samples.sql in Supabase SQL Editor, "
+                    "then execute NOTIFY pgrst, 'reload schema'; before exporting."
+                ) from exc
+            raise
         rows = response.data or []
         if not rows:
             break
@@ -241,12 +256,16 @@ def main() -> int:
     if not args.dry_run and not args.output:
         raise SystemExit("--output is required unless --dry-run is set.")
 
-    if args.self_test:
-        samples = SELF_TEST_SAMPLES
-    elif args.input_json:
-        samples = load_json_samples(args.input_json)
-    else:
-        samples = fetch_supabase_samples(args)
+    try:
+        if args.self_test:
+            samples = SELF_TEST_SAMPLES
+        elif args.input_json:
+            samples = load_json_samples(args.input_json)
+        else:
+            samples = fetch_supabase_samples(args)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     examples, stats = build_dataset(samples, args)
     if args.self_test and stats.kept != 1:
