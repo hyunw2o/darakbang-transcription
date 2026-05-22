@@ -279,6 +279,7 @@ function App() {
   const [glossaryForm, setGlossaryForm] = useState(EMPTY_GLOSSARY_FORM);
 
   const [recordDrafts, setRecordDrafts] = useState({});
+  const [recordDraftSources, setRecordDraftSources] = useState({});
   const [draftLoadingCategory, setDraftLoadingCategory] = useState("");
   const [savingCategory, setSavingCategory] = useState("");
   const [workspaceScrollEnabled, setWorkspaceScrollEnabled] = useState(true);
@@ -406,6 +407,7 @@ function App() {
     setResult(null);
     setSummaryLoading(false);
     setRecordDrafts({});
+    setRecordDraftSources({});
     setDraftLoadingCategory("");
     setSavingCategory("");
     setTaskStateText("");
@@ -1301,7 +1303,18 @@ function App() {
       });
 
       if (draftEpoch !== resultEpochRef.current) return;
-      setRecordDrafts((prev) => ({ ...prev, [category]: data?.content || "" }));
+      const draftContent = data?.content || "";
+      setRecordDrafts((prev) => ({ ...prev, [category]: draftContent }));
+      setRecordDraftSources((prev) => ({
+        ...prev,
+        [category]: {
+          originalText: draftContent,
+          sourceText,
+          taskId: result?.task_id || "",
+          language: result?.language || transcriptionLanguage || "ko",
+          transcriptionType: result?.transcription_type || transcriptionType,
+        },
+      }));
       const label = data?.category_label || copy.recordCategories[category] || category;
       setNotice(copy.notices.draftDone.replace("{label}", label));
     } catch (e) {
@@ -1342,6 +1355,28 @@ function App() {
       });
 
       await fetchRecords(authToken);
+      const draftSource = recordDraftSources[category] || {};
+      const originalDraftText = String(draftSource.originalText || "").trim();
+      if (originalDraftText && originalDraftText !== content) {
+        requestApi("/api/corrections", {
+          method: "POST",
+          token: authToken,
+          body: JSON.stringify({
+            source_type: "record_draft",
+            category,
+            language: draftSource.language || result?.language || transcriptionLanguage || "ko",
+            task_id: draftSource.taskId || result?.task_id || "",
+            original_text: originalDraftText,
+            edited_text: content,
+            metadata: {
+              transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
+              source_text_preview: String(draftSource.sourceText || "").slice(0, 1000),
+            },
+          }),
+        }).catch((correctionError) => {
+          console.warn("Correction sample save failed:", correctionError?.message || correctionError);
+        });
+      }
       setNotice(copy.notices.recordSaved);
       setActiveTab("records");
     } catch (e) {
