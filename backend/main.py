@@ -2832,7 +2832,10 @@ def _delete_billing_row_by_user_id(user_id: str) -> None:
 
 
 def _upsert_or_transfer_apple_billing_row(user_id: str, subscription_id: str, patch: dict) -> dict:
-    existing_subscription_row = _fetch_billing_row_by_subscription_id(subscription_id)
+    existing_subscription_row = (
+        _fetch_billing_row_by_subscription_id(subscription_id)
+        or _fetch_billing_row_by_customer_id(subscription_id)
+    )
     if not existing_subscription_row:
         return _upsert_billing_row(user_id, patch)
 
@@ -2854,12 +2857,13 @@ def _upsert_or_transfer_apple_billing_row(user_id: str, subscription_id: str, pa
     }
     payload.update(patch or {})
 
-    response = (
-        _get_supabase_client().table(BILLING_TABLE_NAME)
-        .update(payload)
-        .eq("subscription_id", subscription_id)
-        .execute()
-    )
+    update_query = _get_supabase_client().table(BILLING_TABLE_NAME).update(payload)
+    if previous_user_id:
+        update_query = update_query.eq("user_id", previous_user_id)
+    else:
+        update_query = update_query.eq("subscription_id", subscription_id)
+
+    response = update_query.execute()
     if response.data:
         if previous_user_id:
             _set_user_plan_tier(previous_user_id, USAGE_FREE_PLAN)
