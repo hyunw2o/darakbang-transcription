@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Summarize correction samples before exporting/fine-tuning."""
+
+from __future__ import annotations
+
+import argparse
+import difflib
+import json
+import re
+from collections import Counter
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from export_correction_finetune_dataset import (
+    DEFAULT_TABLE,
+    SELF_TEST_SAMPLES,
+    build_dataset,
+    compact_for_compare,
+    fetch_supabase_samples,
+    load_json_samples,
+)
+
+
+TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+|[가-힣]+|[^\s]", re.UNICODE)
+EMAIL_PATTERN = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+PHONE_PATTERN = re.compile(r"\b(?:\+?\d[\d .-]{7,}\d)\b")
+
+
+def tokenize_for_diff(text: str) -> list[str]:
+    return TOKEN_PATTERN.findall(compact_for_compare(text))
+
+
+def redact_preview(text: str, limit: int = 240) -> str:
+    redacted = EMAIL_PATTERN.sub("[email]", str(text or ""))
+    redacted = PHONE_PATTERN.sub("[phone]", redacted)
+    redacted = re.sub(r"\s+", " ", redacted).strip()
+    if len(redacted) <= limit:
+        return redacted
+    return redacted[: limit - 1].rstrip() + "..."
+
+
+def extract_replacements(original: str, edited: str, max_tokens: int = 8) -> list[tuple[str, str]]:
+    original_tokens = tokenize_for_diff(original)
+    edited_tokens = tokenize_for_diff(edited)
+    matcher = difflib.SequenceMatcher(a=original_tokens, b=edited_tokens, autojunk=False)
+    replacements: list[tuple[str, str]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != "replace":
+            continue
+        source_tokens = original_tokens[i1:i2]
+        target_tokens = edited_tokens[j1:j2]
+        if not source_tokens or not target_tokens:
+            continue
+        if len(source_tokens) > max_tokens or len(target_tokens) > max_tokens:
+            continue
+        source = " ".join(source_tokens)
+        target = " ".join(target_tokens)
+        if source and target and source != target:
+            replacements.append((source, target))
+    return replacements
+
+
+def count_field(samples: list[dict[str, Any]], field: str, fallback: str = "unknown") -> dict[str, int]:
+    counter = Counter(str(sample.get(field) or fallback).strip() or fallback for sample in samples)
+    return dict(sorted(counter.items(), key=lambda item: (-item[1], item[0])))
+
+
+def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
+    _examples, export_stats = build_dataset(samples, args)
+    replacement_counter: Counter[tuple[str, str]] = Counter()
+    preview_examples = []
+
+    for sample in samples:
+        original = str(sample.get("original_text") or "")
+        edited = str(sample.get("edited_text") or "")
+        if compact_for_compare(original) == compact_for_compare(edited):
+            continue
+        replacement_counter.update(extract_replacements(original, edited))
+        if args.include_examples and len(preview_examples) < args.max_examples:
+            preview_examples.append({
+                "id": sample.get("id"),
+                "language": sample.get("language") or "unknown",
+                "category": sample.get("category") or "unknown",
+                "source_type": sample.get("source_type") or "unknown",
+                "original_preview": redact_preview(original),
+                "edited_preview": redact_preview(edited),
+            })
+
+    top_replacements = [
+        {"from": source, "to": target, "count": count}
+        for (source, target), count in replacement_counter.most_common(args.max_replacements)
+    ]
+    kept = export_stats.kept
+    return {
+        "total_samples": len(samples),
+        "min_kept": args.min_kept,
+        "ready_to_train": kept >= args.min_kept,
+        "export_stats": asdict(export_stats),
+        "by_language": count_field(samples, "language"),
+        "by_category": count_field(samples, "category"),
+        "by_source_type": count_field(samples, "source_type"),
+        "top_replacements": top_replacements,
+        "examples": preview_examples,
+    }
+
+
+def write_json(path: str, payload: dict[str, Any]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--from-supabase", action="store_true", help="Read samples from Supabase.")
+    source_group.add_argument("--input-json", help="Read samples from a local JSON file or '-' for stdin.")
+    source_group.add_argument("--self-test", action="store_true", help="Run against built-in sample rows.")
+    parser.add_argument("--output", help="Optional JSON report output path.")
+    parser.add_argument("--table", default=DEFAULT_TABLE, help=f"Supabase table name. Default: {DEFAULT_TABLE}.")
+    parser.add_argument("--since", help="Supabase created_at lower bound, e.g. 2026-05-01T00:00:00+09:00.")
+    parser.add_argument("--language", help="Optional Supabase language filter.")
+    parser.add_argument("--category", help="Optional Supabase category filter.")
+    parser.add_argument("--limit", type=int, default=0, help="Maximum rows to fetch from Supabase. 0 means no explicit limit.")
+    parser.add_argument("--batch-size", type=int, default=500, help="Supabase fetch batch size.")
+    parser.add_argument("--min-chars", type=int, default=20, help="Match dataset export minimum compacted chars.")
+    parser.add_argument("--max-chars", type=int, default=120000, help="Match dataset export maximum text chars.")
+    parser.add_argument("--max-length-ratio", type=float, default=5.0, help="Match dataset export length-ratio filter.")
+    parser.add_argument("--system-prompt", default="", help="Compatibility with export dataset filtering.")
+    parser.add_argument("--min-kept", type=int, default=50, help="Minimum kept examples for ready_to_train.")
+    parser.add_argument("--max-replacements", type=int, default=20, help="Maximum replacement patterns to report.")
+    parser.add_argument("--include-examples", action="store_true", help="Include redacted short text previews.")
+    parser.add_argument("--max-examples", type=int, default=5, help="Maximum redacted examples when --include-examples is set.")
+    return parser.parse_args()
+
+
+def load_samples(args: argparse.Namespace) -> list[dict[str, Any]]:
+    if args.self_test:
+        return SELF_TEST_SAMPLES
+    if args.input_json:
+        return load_json_samples(args.input_json)
+    return fetch_supabase_samples(args)
+
+
+def main() -> int:
+    args = parse_args()
+    samples = load_samples(args)
+    report = build_report(samples, args)
+    if args.self_test:
+        assert report["export_stats"]["kept"] == 1
+        assert report["ready_to_train"] is False
+        assert any(item["from"] == "RBS" and item["to"] == "RVS" for item in report["top_replacements"])
+    if args.output:
+        write_json(args.output, report)
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -116,6 +116,15 @@ python worker.py
 사용자가 기록본 초안을 직접 수정한 뒤 저장하면 `user_correction_samples`에 원본 초안과 수정본이 누적됩니다.
 실제 파인튜닝을 시작하기 전에 아래 스크립트로 JSONL 데이터셋을 만들고 필터링 통계를 확인하세요.
 
+먼저 누적 샘플의 분포와 주요 교정 패턴을 확인합니다. 기본 출력에는 원문/수정문 전문을 넣지 않습니다.
+
+```bash
+python backend/scripts/report_correction_samples.py \
+  --from-supabase \
+  --min-kept 50 \
+  --output backend/finetune_datasets/correction_sample_report.json
+```
+
 ```bash
 python backend/scripts/export_correction_finetune_dataset.py \
   --from-supabase \
