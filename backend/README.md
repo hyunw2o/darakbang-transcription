@@ -136,6 +136,33 @@ python backend/scripts/export_correction_finetune_dataset.py \
 - 생성된 `backend/finetune_datasets/`는 로컬 산출물이므로 Git에 포함하지 않습니다.
 - 실제 모델 업로드 전에는 개인정보/민감정보 포함 여부와 샘플 품질을 반드시 검토하세요.
 
+JSONL을 검토한 뒤 파인튜닝 잡을 만들려면 먼저 dry-run으로 행 수와 형식을 확인합니다.
+
+```bash
+python backend/scripts/manage_correction_finetune.py create \
+  --training-file backend/finetune_datasets/correction_train.jsonl \
+  --dry-run \
+  --min-examples 50
+```
+
+충분한 샘플이 있고 검토가 끝난 뒤 실제 잡을 생성합니다.
+
+```bash
+python backend/scripts/manage_correction_finetune.py create \
+  --training-file backend/finetune_datasets/correction_train.jsonl \
+  --output backend/finetune_datasets/correction_finetune_job.json \
+  --min-examples 50
+```
+
+진행 상태는 아래처럼 확인합니다.
+
+```bash
+python backend/scripts/manage_correction_finetune.py status ftjob_...
+python backend/scripts/manage_correction_finetune.py events ftjob_...
+```
+
+잡이 성공하면 결과의 `fine_tuned_model` 값을 `CORRECTION_FINE_TUNED_MODEL`에 기록하고, 별도 작은 커밋으로 런타임 적용 여부를 결정합니다.
+
 ## 다락방 용어 특화
 
 - 렘넌트, 237, 5000종족
