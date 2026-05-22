@@ -193,6 +193,15 @@ def build_recommended_commands(next_action: dict[str, Any], min_kept: int) -> li
                 "--output backend/finetune_datasets/correction_finetune_job.json "
                 f"--min-examples {min_kept}"
             ),
+            "python backend/scripts/manage_correction_finetune.py status ftjob_...",
+            "python backend/scripts/manage_correction_finetune.py events ftjob_...",
+            (
+                "python backend/scripts/evaluate_correction_model.py "
+                "--validation-jsonl backend/finetune_datasets/correction_validation.jsonl "
+                "--model ft:gpt-4o-mini:... "
+                "--output backend/finetune_datasets/correction_eval_report.json "
+                "--fail-unready"
+            ),
         ]
     return []
 
@@ -313,6 +322,7 @@ def main() -> int:
         if expected_ready_to_train:
             assert report["next_action"]["stage"] == "create_correction_finetune"
             assert any("export_correction_finetune_dataset.py" in command for command in report["recommended_commands"])
+            assert any("evaluate_correction_model.py" in command for command in report["recommended_commands"])
         else:
             assert report["next_action"]["stage"] == "collect_more_correction_samples"
             assert any("run_post_deploy_checks.py" in command for command in report["recommended_commands"])
