@@ -77,11 +77,13 @@ DARAKBANG_CORE = [
     "RVIS", # Remnant Vision International School
     "RRTS", # Remnant Reformed Theological Seminary
     "REA",  # Rwanda, East Africa, Africa
-    "RUTC", # Remnant Training Unity Center
+    "RUTC", # Remnant Unity Training Center
+    "Remnant Unity Training Center",
     "RTS",  # Remnant Theological Seminary
     "RSTS", # Remnant Summit Training School
     "RBS",  # Remnant Bible School / context-dependent abbreviation
     "RVS",  # Remnant Vision School
+    "Remnant Vision School",
     "RPS",  # Remnant Parents School
     "RLS",  # Remnant Leader School
     "RGS",  # Remnant Global School
@@ -185,6 +187,13 @@ COMMON_MISTAKES = {
     "R V I S": "RVIS",
     "알 브이 아이 에스": "RVIS",
     "알브이아이에스": "RVIS",
+    "R U T C": "RUTC",
+    "알 유 티 씨": "RUTC",
+    "알유티씨": "RUTC",
+    "알 유 티 시": "RUTC",
+    "알유티시": "RUTC",
+    "아르 유 티 씨": "RUTC",
+    "아르유티씨": "RUTC",
     "R T S": "RTS",
     "알 티 에스": "RTS",
     "알티에스": "RTS",
@@ -197,6 +206,8 @@ COMMON_MISTAKES = {
     "R V S": "RVS",
     "알 브이 에스": "RVS",
     "알브이에스": "RVS",
+    "알 브이 애스": "RVS",
+    "알브이애스": "RVS",
     "R P S": "RPS",
     "알 피 에스": "RPS",
     "알피에스": "RPS",
@@ -589,6 +600,16 @@ MEDICAL_CORRECTIONS = {
     "시 디 이": "CDE",
     "커먼 데이터 엘리먼츠": "Common Data Elements",
     "커먼데이터엘리먼츠": "Common Data Elements",
+    "알 유 티 씨": "RUTC",
+    "알유티씨": "RUTC",
+    "알 유 티 시": "RUTC",
+    "알유티시": "RUTC",
+    "아르 유 티 씨": "RUTC",
+    "아르유티씨": "RUTC",
+    "알 브이 에스": "RVS",
+    "알브이에스": "RVS",
+    "알 브이 애스": "RVS",
+    "알브이애스": "RVS",
 }
 
 # ===== 통합 용어 리스트 =====
@@ -649,6 +670,7 @@ EN_COMMON_CORRECTIONS = {
     "h m v s": "HMVS",
     "r r t s": "RRTS",
     "r v i s": "RVIS",
+    "r u t c": "RUTC",
     "r s t s": "RSTS",
     "r b s": "RBS",
     "r v s": "RVS",
@@ -661,6 +683,7 @@ EN_COMMON_CORRECTIONS = {
     "hmvs": "HMVS",
     "rrts": "RRTS",
     "rvis": "RVIS",
+    "rutc": "RUTC",
     "rts": "RTS",
     "rsts": "RSTS",
     "rbs": "RBS",
@@ -682,6 +705,9 @@ EN_COMMON_CORRECTIONS = {
     "missionhome": "Mission Home",
     "prayerjournal": "Prayer Journal",
     "pre natal mission home": "Prenatal Mission Home",
+    "remnant training unity center": "Remnant Unity Training Center",
+    "remnant unity training center": "Remnant Unity Training Center",
+    "remnant vision school": "Remnant Vision School",
 }
 
 EN_MINISTRY_CORRECTIONS = {
@@ -703,6 +729,9 @@ EN_MINISTRY_CORRECTIONS = {
     "prenatal mission home": "Prenatal Mission Home",
     "harvester mission church": "Harvester Mission Church",
     "troas church": "Troas Church",
+    "remnant training unity center": "Remnant Unity Training Center",
+    "remnant unity training center": "Remnant Unity Training Center",
+    "remnant vision school": "Remnant Vision School",
     "common data element": "Common Data Elements",
     "common data elements": "Common Data Elements",
 }
@@ -835,9 +864,10 @@ def get_gemini_prompt(custom_terms: list[str] = None):
 
 [필수 용어]
 237, 5000, 237나라, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
-드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 앉은뱅이
 (이삼칠→237, 칠칠칠→777, 오천종족→5000종족 등 숫자/영어 표기 유지)
+RVS는 Remnant Vision School, RUTC는 Remnant Unity Training Center로 해석하고 정확히 이 약어로 표기한다.
 
 [가장 중요한 규칙 - 완전 녹취]
 - 이것은 '요약'이 아니라 '받아쓰기'이다. 설교자가 말한 모든 문장을 빠짐없이 기록하라.
@@ -968,7 +998,8 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
   237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중, 앉은뱅이
   Heavenly, Thronely, Eternally, TCK, CCK, NCK, REA, RRTS, Blessing, 블레싱
-  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, 대학부, 교역자
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, 대학부, 교역자
+  RVS=Remnant Vision School, RUTC=Remnant Unity Training Center로 유지
   이삼칠→237, 칠칠칠→777, 오천종족→5000종족 (숫자/영어 표기 유지)
 - 음성인식 오류를 문맥에 맞게 교정하라:
   드로우게 교회/드로에게 교회→드로아교회, 하베스터 선교 교회→하베스터선교교회, 미션 홈→미션홈, 태중미션홈→태중 미션홈, 기도 수첩→기도수첩, 아수르→앗수르, 유락민/노량민→유랑민
@@ -977,7 +1008,7 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
   삼오늘/세오늘/사모늘/삼 오늘/세 오늘→3오늘
   안즌뱅이/안은뱅이/앉은 뱅이→앉은뱅이
   '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 유지하고 교회명으로 치환하지 마라.
-  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘/세오늘/사모늘, 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 요것도/이것도, Blessing/블레싱, 배설물, 대학부, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS, 디모데/D 모델, CDE/CD(Common Data Elements)는 기계적으로 치환하지 말고 문맥으로 구분
+  올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘/세오늘/사모늘, 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 요것도/이것도, Blessing/블레싱, 배설물, 대학부, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS(Remnant Vision School 맥락=RVS), RUTC(Remnant Unity Training Center), 디모데/D 모델, CDE/CD(Common Data Elements)는 기계적으로 치환하지 말고 문맥으로 구분
   (연도/시점=올해, 기간/오랜 시간=오래 / 승인=결재, 지불=결제 / 회복=낫다, 출산=낳다, 높이 반대=낮다 / 숫자 의미면 3오늘 / 모임 공간 의미면 포럼방 / '알리'는 인명·브랜드·일반 고유명사면 유지, 선교 약어를 철자로 말한 맥락일 때만 REA / 의료 인력 맥락=수련의, 교회 집회 맥락=수련회 / 교단 회의 맥락=노회 / 교회 부서 맥락=유초등부·대학부 / 목회·사역 맥락=교역자·부교역자 / 학교·수업 맥락=교육자·부교육자 / 교회 방문 사역 맥락=심방 / 예배 마무리·기도 안내 맥락=기도 / 독립된 추임새 '요,'는 삭제, '요것도'는 '이것도' / 영어 찬양·축복 맥락=Blessing / 의료·배변·검체 맥락=배설물 / 의료정보 표준 맥락=CD 대신 CDE(Common Data Elements))
 - 인명 교정: 김근이→김건희, 김소현→김소영, 이지훈/이지호→이주현, 장현승→장한샘
 - 성경 구절은 반드시 "책약어장:절" 형식으로 표기하라. (예: 행1:8, 시23:1, 롬8:28)
@@ -1065,6 +1096,16 @@ GENERAL_CORRECTIONS = {
     "시 디 이": "CDE",
     "커먼 데이터 엘리먼츠": "Common Data Elements",
     "커먼데이터엘리먼츠": "Common Data Elements",
+    "알 유 티 씨": "RUTC",
+    "알유티씨": "RUTC",
+    "알 유 티 시": "RUTC",
+    "알유티시": "RUTC",
+    "아르 유 티 씨": "RUTC",
+    "아르유티씨": "RUTC",
+    "알 브이 에스": "RVS",
+    "알브이에스": "RVS",
+    "알 브이 애스": "RVS",
+    "알브이애스": "RVS",
 }
 
 
@@ -1138,7 +1179,7 @@ def get_phonecall_correction_prompt(custom_terms: list[str] = None):
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 인명, 지명, 회사명 등 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
-  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 - 전화번호, 주소, 날짜, 시간, 금액은 정확하게 기록하라.
 - 의료 관련 통화인 경우 의료 용어를 정확히 표기하라:
@@ -1264,7 +1305,7 @@ def get_conversation_correction_prompt(custom_terms: list[str] = None):
 - 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
 - 전문 용어, 프로젝트명, 고유명사는 문맥을 고려하여 정확하게 기록하라.
 - 교회/학교 고유명사는 아래 표기를 우선 유지하라:
-  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+  드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 - 숫자, 금액, 날짜, 퍼센트 등은 아라비아 숫자로 통일하라 (예: 삼십 퍼센트 → 30%)
 - 의료 관련 회의인 경우 의료 용어를 정확히 표기하라:
@@ -1369,7 +1410,7 @@ Correct and structure this text following the rules below.
 - If church name appears, normalize "Droa Church" (and similar misspellings) to "Troas Church".
 - Keep ministry terms exact if mentioned:
   Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing,
-  HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, REA
+  HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, REA
 - Medical terminology must be accurately spelled if mentioned:
   Drug names (acetaminophen, metformin, amoxicillin, etc.)
   Disease names (hypertension, diabetes, epilepsy, seizure, etc.)
@@ -1462,7 +1503,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Proper nouns (names, companies, locations) should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - Phone numbers, addresses, dates, times, amounts should be recorded accurately.
 - Medical terminology must be accurately spelled:
   Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
@@ -1555,7 +1596,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Technical terms, project names, proper nouns should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
 - Medical terminology if applicable: drug names, disease names, procedure names
 - Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
@@ -2214,6 +2255,7 @@ def _normalize_contextual_homophones(text: str) -> str:
     - 쉬고와/기도
     - 대위/대희
     - RBS/RVS
+    - RUTC
     - 디모데/D 모델
     - CDE/CD (Common Data Elements)
     """
@@ -2227,12 +2269,40 @@ def _normalize_contextual_homophones(text: str) -> str:
     # 고정 오인식: 유초동부 -> 유초등부
     corrected = re.sub(r"유초\s*동부", "유초등부", corrected)
 
-    # RBS/RVS: 드로아교회 유아유치/비전스쿨 맥락에서는 RVS를 우선 복원
-    rvs_context = r"(드로아교회|렘넌트|비전\s*스쿨|비전학교|vision\s*school|유아유치|유치부|유초등부|어린이|학교)"
-    corrected = re.sub(rf"((?:{rvs_context})\s*)RBS\b", r"\1RVS", corrected, flags=re.IGNORECASE)
-    corrected = re.sub(rf"\bRBS(?=\s*(?:{rvs_context}))", "RVS", corrected, flags=re.IGNORECASE)
-    corrected = re.sub(rf"((?:{rvs_context})\s*)알\s*비\s*에스", r"\1RVS", corrected)
-    corrected = re.sub(rf"알\s*비\s*에스(?=\s*(?:{rvs_context}))", "RVS", corrected)
+    latin_left = r"(?<![A-Za-z0-9])"
+    latin_right = r"(?![A-Za-z0-9])"
+
+    # RUTC: Remnant Unity Training Center는 약어와 풀네임 모두 표기를 고정한다.
+    corrected = re.sub(rf"{latin_left}R\s*U\s*T\s*C{latin_right}", "RUTC", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(r"알\s*유\s*티\s*(?:씨|시)", "RUTC", corrected)
+    corrected = re.sub(r"아르\s*유\s*티\s*(?:씨|시)", "RUTC", corrected)
+    corrected = re.sub(
+        rf"{latin_left}Remnant\s+Training\s+Unity\s+Center{latin_right}",
+        "Remnant Unity Training Center",
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(
+        rf"{latin_left}Remnant\s+Unity\s+Training\s+Center{latin_right}",
+        "Remnant Unity Training Center",
+        corrected,
+        flags=re.IGNORECASE,
+    )
+
+    # RBS/RVS: Remnant Vision School/비전스쿨 맥락에서는 RVS를 우선 복원
+    rvs_context = r"(?:드로아교회|렘넌트|비전\s*스쿨|비전학교|Remnant\s+Vision\s+School|Remnant\s+Vision|vision\s*school|유아유치|유치부|유초등부|어린이|학교)"
+    corrected = re.sub(
+        rf"{latin_left}Remnant\s+Vision\s+School{latin_right}",
+        "Remnant Vision School",
+        corrected,
+        flags=re.IGNORECASE,
+    )
+    corrected = re.sub(rf"{latin_left}R\s*V\s*S{latin_right}", "RVS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(r"알\s*브이\s*(?:에스|애스)", "RVS", corrected)
+    corrected = re.sub(rf"({rvs_context}[^\n.!?]{{0,60}}){latin_left}RBS{latin_right}", r"\1RVS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"{latin_left}RBS{latin_right}(?=[^\n.!?]{{0,60}}{rvs_context})", "RVS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"({rvs_context}[^\n.!?]{{0,60}})알\s*비\s*에스", r"\1RVS", corrected)
+    corrected = re.sub(rf"알\s*비\s*에스(?=[^\n.!?]{{0,60}}{rvs_context})", "RVS", corrected)
 
     # 디모데/D 모델: 성경/교회 인물 맥락에서는 디모데로 복원
     timothy_context = r"(성경|말씀|신약|사도|바울|서신|디모데전서|디모데후서|딤전|딤후|교회|목회|제자|복음|은혜|기도|설교)"
@@ -2350,7 +2420,8 @@ def _normalize_english_contextual_terms(text: str) -> str:
     church_context = (
         r"(church|sermon|scripture|gospel|pastor|prayer|worship|ministry|grace|faith|"
         r"mission|fellowship|congregation|elder|deacon|benediction|remnant|covenant|"
-        r"immanuel|troas|harvester|blessing|prayer journal|acts|psalm|romans|john)"
+        r"immanuel|troas|harvester|blessing|prayer journal|vision school|unity training|RUTC|"
+        r"acts|psalm|romans|john)"
     )
     medical_info_context = (
         r"(medical data|clinical data|clinical research|common data elements|data standard|"
@@ -2384,6 +2455,13 @@ def _normalize_english_contextual_terms(text: str) -> str:
             segment = re.sub(r"\btroas church\b", "Troas Church", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\btrose church\b", "Troas Church", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\btrous church\b", "Troas Church", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\br\s*u\s*t\s*c\b", "RUTC", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\brutc\b", "RUTC", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bremnant training unity center\b", "Remnant Unity Training Center", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bremnant unity training center\b", "Remnant Unity Training Center", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bremnant vision school\b", "Remnant Vision School", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bRBS\b(?=(?:[^.!?\n]{0,60}\b(?:Remnant Vision|Vision School)\b))", "RVS", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\b((?:Remnant Vision|Vision School)[^.!?\n]{0,60})RBS\b", r"\1RVS", segment, flags=re.IGNORECASE)
 
         if has_medical_info_context:
             segment = re.sub(r"\bcommon data element(?:s)?\b", "Common Data Elements", segment, flags=re.IGNORECASE)
@@ -2448,9 +2526,17 @@ def correct_text(
 
     if language == "en":
         # ===== 영어 교정 =====
+        def _english_acronym_pattern(wrong: str, right: str) -> str:
+            escaped = re.escape(wrong)
+            is_spelled_acronym = re.fullmatch(r"[a-z](?: [a-z])+", wrong) is not None
+            is_compact_acronym = re.fullmatch(r"[a-z]{2,6}", wrong) is not None
+            if right.isupper() and (is_spelled_acronym or is_compact_acronym):
+                return rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])"
+            return escaped
+
         # 영어 일반 STT 오류 교정
         for wrong, right in EN_COMMON_CORRECTIONS.items():
-            corrected = re.sub(re.escape(wrong), right, corrected, flags=re.IGNORECASE)
+            corrected = re.sub(_english_acronym_pattern(wrong, right), right, corrected, flags=re.IGNORECASE)
 
         # 영어 사역/교회 고유명사 교정
         for wrong, right in EN_MINISTRY_CORRECTIONS.items():
@@ -2571,7 +2657,7 @@ def get_claude_context():
 【영문 용어】
 - Heavenly, Thronely, Eternally (영문 그대로)
 - TCK, CCK, NCK, CVDIP (약어 그대로)
-- HMC, HMIS, HMVS, RRTS, RVIS, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+- HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 
 【목회자】
 - 류광수 목사님
