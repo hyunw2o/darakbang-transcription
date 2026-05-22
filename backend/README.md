@@ -129,6 +129,8 @@ python backend/scripts/report_correction_samples.py \
 리포트의 `ready_to_train`은 교정 모델 파인튜닝 준비 여부이고,
 `ready_for_asr_fine_tune`은 RVS/RUTC 같은 도메인 용어로 반복 교정되는 패턴이
 `--asr-threshold` 이상 누적됐는지 보는 5차 판단 신호입니다.
+`kept_gap`과 `next_action.stage`는 4차로 넘어가기 전 추가로 필요한 샘플 수와 다음 작업을 요약합니다.
+CI나 수동 배포 점검에서 준비가 안 된 상태를 실패로 보고 싶으면 `--fail-unready`를 붙입니다.
 
 ```bash
 python backend/scripts/export_correction_finetune_dataset.py \

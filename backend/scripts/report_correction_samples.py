@@ -112,6 +112,46 @@ def build_asr_escalation_candidates(
     return sorted(candidates, key=lambda item: (-item["count"], item["canonical"], item["from"]))[:limit]
 
 
+def build_next_action(
+    *,
+    kept: int,
+    min_kept: int,
+    reportable_samples: int,
+    smoke_test_samples: int,
+    asr_candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    kept_gap = max(0, min_kept - kept)
+    if kept_gap > 0:
+        stage = "collect_more_correction_samples"
+        if reportable_samples == 0:
+            message = "No real correction samples are available yet. Verify deployed edit flows, then collect user corrections before fine-tuning."
+        elif kept == 0:
+            message = "Correction samples exist, but none pass export filters. Review sample quality before fine-tuning."
+        else:
+            message = f"Collect at least {kept_gap} more kept correction example(s) before creating a correction fine-tune."
+        return {
+            "stage": stage,
+            "kept_gap": kept_gap,
+            "message": message,
+            "ignore_smoke_samples": smoke_test_samples > 0,
+        }
+
+    if asr_candidates:
+        return {
+            "stage": "create_correction_finetune_then_evaluate_asr",
+            "kept_gap": 0,
+            "message": "Correction fine-tune data is ready. Train/evaluate the correction model before considering ASR fine-tuning candidates.",
+            "ignore_smoke_samples": smoke_test_samples > 0,
+        }
+
+    return {
+        "stage": "create_correction_finetune",
+        "kept_gap": 0,
+        "message": "Correction fine-tune data is ready. Export the dataset and create the correction fine-tuning job.",
+        "ignore_smoke_samples": smoke_test_samples > 0,
+    }
+
+
 def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
     _examples, export_stats = build_dataset(samples, args)
     smoke_test_samples = [sample for sample in samples if is_smoke_test_sample(sample)]
@@ -145,14 +185,24 @@ def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dic
         args.max_asr_candidates,
     )
     kept = export_stats.kept
+    next_action = build_next_action(
+        kept=kept,
+        min_kept=args.min_kept,
+        reportable_samples=len(report_samples),
+        smoke_test_samples=len(smoke_test_samples),
+        asr_candidates=asr_candidates,
+    )
     return {
         "total_samples": len(samples),
         "reportable_samples": len(report_samples),
         "smoke_test_samples": len(smoke_test_samples),
         "min_kept": args.min_kept,
+        "kept_examples": kept,
+        "kept_gap": next_action["kept_gap"],
         "ready_to_train": kept >= args.min_kept,
         "asr_escalation_threshold": args.asr_threshold,
         "ready_for_asr_fine_tune": bool(asr_candidates),
+        "next_action": next_action,
         "export_stats": asdict(export_stats),
         "by_language": count_field(report_samples, "language"),
         "by_category": count_field(report_samples, "category"),
@@ -192,6 +242,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-asr-candidates", type=int, default=10, help="Maximum ASR escalation candidates to report.")
     parser.add_argument("--include-examples", action="store_true", help="Include redacted short text previews.")
     parser.add_argument("--max-examples", type=int, default=5, help="Maximum redacted examples when --include-examples is set.")
+    parser.add_argument("--fail-unready", action="store_true", help="Exit non-zero when kept examples are below --min-kept.")
     return parser.parse_args()
 
 
@@ -209,7 +260,14 @@ def main() -> int:
     report = build_report(samples, args)
     if args.self_test:
         assert report["export_stats"]["kept"] == 1
-        assert report["ready_to_train"] is False
+        assert report["kept_examples"] == 1
+        expected_ready_to_train = report["kept_examples"] >= args.min_kept
+        assert report["ready_to_train"] is expected_ready_to_train
+        assert report["kept_gap"] == max(0, args.min_kept - 1)
+        if expected_ready_to_train:
+            assert report["next_action"]["stage"] == "create_correction_finetune"
+        else:
+            assert report["next_action"]["stage"] == "collect_more_correction_samples"
         assert any(item["from"] == "RBS" and item["to"] == "RVS" for item in report["top_replacements"])
         if args.asr_threshold > 1:
             assert report["ready_for_asr_fine_tune"] is False
@@ -245,6 +303,8 @@ def main() -> int:
     if args.output:
         write_json(args.output, report)
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    if args.fail_unready and not report["ready_to_train"]:
+        return 2
     return 0
 
 
