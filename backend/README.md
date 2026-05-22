@@ -165,6 +165,27 @@ python backend/scripts/manage_correction_finetune.py events ftjob_...
 런타임 적용은 `ENABLE_FINE_TUNED_CORRECTION=true`일 때만 동작하며, 기본값은 `false`입니다.
 초기 적용은 짧은 텍스트부터 검증할 수 있도록 `FINE_TUNED_CORRECTION_MAX_CHARS` 한도 안에서만 실행됩니다.
 
+### 배포 전후 준비 상태 확인
+
+Supabase SQL 적용 여부, 수정 샘플 수, 백엔드 `/health` 상태를 한 번에 확인합니다.
+
+```bash
+python backend/scripts/check_feature_readiness.py \
+  --api-url https://api.mallog24.com
+```
+
+`missing_sql`에 항목이 있으면 표시된 SQL 파일을 Supabase SQL Editor에서 실행한 뒤
+`NOTIFY pgrst, 'reload schema';` 를 실행하세요.
+
+### 5차 ASR 파인튜닝 판단 기준
+
+교정 모델 파인튜닝 후에도 아래 조건이 반복될 때만 오디오 ASR 파인튜닝을 검토합니다.
+
+- 원문 전사 단계에서 RVS/RUTC 같은 핵심 약어가 아예 누락되거나 다른 발음으로 고정 출력되는 경우
+- 교정 모델이 원문에 없는 소리를 안정적으로 복원할 수 없을 만큼 STT 원문 품질이 낮은 경우
+- 동일 화자/동일 녹음 환경에서 20건 이상 반복되는 오류 패턴이 쌓인 경우
+- 짧은 파일 실변환 QA에서 용어집/교정 모델만으로 재현 오류가 해결되지 않는 경우
+
 ## 다락방 용어 특화
 
 - 렘넌트, 237, 5000종족
