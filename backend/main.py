@@ -4761,6 +4761,12 @@ def _process_transcription_sync(
     engine = "gemini-only"
     persisted_user_id = None if is_guest else user_id
     try:
+        runtime_custom_terms = _merge_custom_terms(
+            custom_terms,
+            [] if is_guest else _fetch_active_user_glossary_prompt_terms(user_id),
+        )
+        if runtime_custom_terms:
+            print(f"[{task_id}] Custom/user glossary terms loaded: {len(runtime_custom_terms)}")
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
         _upsert_transcription_job(task_id, user_id, {
             "status": "processing",
@@ -4808,7 +4814,7 @@ def _process_transcription_sync(
                     language,
                     transcription_type,
                     task_id=task_id,
-                    custom_terms=custom_terms,
+                    custom_terms=runtime_custom_terms,
                 )
                 print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
                 _log_stage_memory(task_id, "after_whisper")
@@ -4828,7 +4834,7 @@ def _process_transcription_sync(
                         transcription_type,
                         language,
                         correction_mode=correction_mode,
-                        custom_terms=custom_terms,
+                        custom_terms=runtime_custom_terms,
                     )
                 )
                 _touch_task_runtime_state(task_id)
@@ -4866,7 +4872,7 @@ def _process_transcription_sync(
                     transcription_type=transcription_type,
                     language=language,
                     correction_mode=correction_mode,
-                    custom_terms=custom_terms,
+                    custom_terms=runtime_custom_terms,
                 )
                 _log_stage_memory(task_id, "after_gemini_fallback")
 
@@ -4893,7 +4899,7 @@ def _process_transcription_sync(
                 transcription_type=transcription_type,
                 language=language,
                 correction_mode=correction_mode,
-                custom_terms=custom_terms,
+                custom_terms=runtime_custom_terms,
             )
             _log_stage_memory(task_id, "after_postprocess")
 
@@ -5658,6 +5664,103 @@ async def _fetch_user_glossary_term_or_404(term_id: int, user_id: str) -> dict:
     if not response.data:
         raise HTTPException(status_code=404, detail="용어를 찾을 수 없습니다.")
     return response.data[0]
+
+
+def _coerce_glossary_prompt_items(value, max_items: int = 3) -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = [value]
+    else:
+        items = []
+    normalized = []
+    for item in items:
+        text = _normalize_glossary_scalar(
+            item,
+            MAX_USER_GLOSSARY_TERM_CHARS,
+            "사용자 용어",
+        )
+        if text and text not in normalized:
+            normalized.append(text)
+        if len(normalized) >= max_items:
+            break
+    return normalized
+
+
+def _format_user_glossary_prompt_term(row: dict) -> str | None:
+    term = _normalize_glossary_scalar(
+        row.get("term"),
+        MAX_USER_GLOSSARY_TERM_CHARS,
+        "용어",
+    )
+    if not term:
+        return None
+
+    details = []
+    meaning = _normalize_glossary_scalar(
+        row.get("meaning"),
+        MAX_USER_GLOSSARY_MEANING_CHARS,
+        "뜻/설명",
+    )
+    aliases = _coerce_glossary_prompt_items(row.get("aliases"))
+    contexts = _coerce_glossary_prompt_items(row.get("contexts"))
+    if meaning:
+        details.append(meaning)
+    if aliases:
+        details.append(f"misheard as {', '.join(aliases)}")
+    if contexts:
+        details.append(f"context: {', '.join(contexts)}")
+    if not details:
+        return term
+    return f"{term} ({'; '.join(details)})"
+
+
+def _fetch_active_user_glossary_prompt_terms(user_id: str) -> list[str]:
+    if not user_id:
+        return []
+    try:
+        response = (
+            _get_supabase_client()
+            .table(USER_GLOSSARY_TABLE_NAME)
+            .select("term,meaning,aliases,contexts")
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .order("updated_at", desc=True)
+            .limit(MAX_USER_GLOSSARY_TERMS)
+            .execute()
+        )
+    except Exception as e:
+        print(f"User glossary prompt terms unavailable: {e}")
+        return []
+
+    prompt_terms = []
+    seen = set()
+    for row in response.data or []:
+        try:
+            prompt_term = _format_user_glossary_prompt_term(row)
+        except Exception as e:
+            print(f"Skipping malformed user glossary term: {e}")
+            continue
+        key = (prompt_term or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        prompt_terms.append(prompt_term)
+    return prompt_terms
+
+
+def _merge_custom_terms(*term_groups: list[str] | None) -> list[str]:
+    merged = []
+    seen = set()
+    for terms in term_groups:
+        for term in terms or []:
+            normalized = str(term or "").strip()
+            key = normalized.lower()
+            if not normalized or key in seen:
+                continue
+            seen.add(key)
+            merged.append(normalized)
+    return merged
 
 
 @app.get("/api/glossary")
