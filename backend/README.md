@@ -210,6 +210,17 @@ python backend/scripts/check_feature_readiness.py \
 원본 row 수는 `sample_count`, 실제 학습에 남는 수는 `kept_examples`와 `dataset_stats.kept`로 확인합니다.
 그 전에는 4차 파인튜닝을 시작하지 않고 샘플 수집을 계속합니다.
 
+배포 직후에는 아래 러너로 health/readiness, 수정 샘플 API preflight, 선택적 실제 변환 스모크를 한 번에 확인할 수 있습니다.
+토큰이나 오디오 파일이 없으면 해당 단계는 건너뛰며, 필수로 강제하려면 `--require-correction-smoke`, `--require-transcription-smoke`를 붙입니다.
+
+```bash
+MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
+  --api-url https://api.mallog24.com \
+  --audio-file /path/to/short-sample.mp3 \
+  --expect-corrected-contains RVS \
+  --expect-corrected-contains RUTC
+```
+
 배포 직후 짧은 파일로 실제 변환 경로를 확인하려면 아래처럼 실행합니다.
 
 ```bash
