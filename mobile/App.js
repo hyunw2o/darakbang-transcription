@@ -49,6 +49,21 @@ import useMobileAuth from "./hooks/useMobileAuth";
 
 import { I18N, LEGAL_DOCUMENTS } from "./content";
 
+const CREATE_GLOSSARY_ACTION_ID = "__create_glossary__";
+const EMPTY_GLOSSARY_FORM = {
+  term: "",
+  meaning: "",
+  aliases: "",
+  contexts: "",
+};
+
+function parseGlossaryListInput(value) {
+  return String(value || "")
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function getMobileLegalDocuments(baseDocs, language) {
   const businessSection = baseDocs?.terms?.sections?.find((section) =>
     String(section?.title || "").includes(language === "en" ? "Business" : "사업자")
@@ -257,6 +272,11 @@ function App() {
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsLoaded, setRecordsLoaded] = useState(false);
+  const [glossaryTerms, setGlossaryTerms] = useState([]);
+  const [glossaryLoaded, setGlossaryLoaded] = useState(false);
+  const [glossaryLoading, setGlossaryLoading] = useState(false);
+  const [glossaryActionId, setGlossaryActionId] = useState("");
+  const [glossaryForm, setGlossaryForm] = useState(EMPTY_GLOSSARY_FORM);
 
   const [recordDrafts, setRecordDrafts] = useState({});
   const [draftLoadingCategory, setDraftLoadingCategory] = useState("");
@@ -518,6 +538,30 @@ function App() {
     }
   }, [copy.errors.recordsReadFailed]);
 
+  const fetchGlossary = useCallback(async (token, { quiet = true } = {}) => {
+    if (!token) {
+      setGlossaryTerms([]);
+      setGlossaryLoaded(false);
+      return [];
+    }
+    setGlossaryLoading(true);
+    try {
+      const data = await requestApi("/api/glossary", { token });
+      const terms = Array.isArray(data?.terms) ? data.terms : Array.isArray(data) ? data : [];
+      setGlossaryTerms(terms);
+      setGlossaryLoaded(true);
+      return terms;
+    } catch (e) {
+      setGlossaryLoaded(true);
+      if (!quiet) {
+        setError(e.message || copy.errors.glossaryReadFailed);
+      }
+      return [];
+    } finally {
+      setGlossaryLoading(false);
+    }
+  }, [copy.errors.glossaryReadFailed]);
+
   const resetAppWorkspace = useCallback(() => {
     invalidatePollingSession();
     setHistory([]);
@@ -526,6 +570,11 @@ function App() {
     setHistoryBulkDeleting(false);
     setRecords([]);
     setRecordsLoaded(false);
+    setGlossaryTerms([]);
+    setGlossaryLoaded(false);
+    setGlossaryLoading(false);
+    setGlossaryActionId("");
+    setGlossaryForm(EMPTY_GLOSSARY_FORM);
     resetResultWorkspace(true);
     setPickedFile(null);
     setTaskStateText("");
@@ -566,6 +615,7 @@ function App() {
       setGuestModeStarted(false);
       fetchHistory(token);
       fetchRecords(token);
+      fetchGlossary(token, { quiet: true });
     },
     onSessionCleared: resetAppWorkspace,
   });
@@ -597,6 +647,124 @@ function App() {
   const planLabel = copy.planLabels?.[displayUsagePlan] || displayUsagePlan;
   const usageSettingsTitle = copy.settingsUsageTitle;
   const usageSettingsHint = copy.settingsUsageHint;
+
+  const handleCreateGlossaryTerm = useCallback(async () => {
+    if (!isLoggedIn || !authToken) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+    const payload = {
+      term: glossaryForm.term.trim(),
+      meaning: glossaryForm.meaning.trim(),
+      aliases: parseGlossaryListInput(glossaryForm.aliases),
+      contexts: parseGlossaryListInput(glossaryForm.contexts),
+    };
+    if (!payload.term) {
+      setError(copy.errors.glossaryTermRequired);
+      return;
+    }
+    setGlossaryActionId(CREATE_GLOSSARY_ACTION_ID);
+    try {
+      const data = await requestApi("/api/glossary", {
+        method: "POST",
+        token: authToken,
+        body: JSON.stringify(payload),
+      });
+      const savedTerm = data?.term || payload;
+      setGlossaryTerms((prev) => {
+        const existing = Array.isArray(prev) ? prev : [];
+        const savedId = savedTerm?.id == null ? "" : String(savedTerm.id);
+        const savedKey = String(savedTerm?.term || "").trim().toLowerCase();
+        const filtered = existing.filter((item) => {
+          const itemId = item?.id == null ? "" : String(item.id);
+          const itemKey = String(item?.term || "").trim().toLowerCase();
+          return itemId !== savedId && itemKey !== savedKey;
+        });
+        return [savedTerm, ...filtered];
+      });
+      setGlossaryLoaded(true);
+      setGlossaryForm(EMPTY_GLOSSARY_FORM);
+      setNotice(copy.notices.glossarySaved);
+    } catch (e) {
+      setError(e.message || copy.errors.glossarySaveFailed);
+    } finally {
+      setGlossaryActionId("");
+    }
+  }, [
+    authToken,
+    copy.errors.authRequired,
+    copy.errors.glossarySaveFailed,
+    copy.errors.glossaryTermRequired,
+    copy.notices.glossarySaved,
+    glossaryForm.aliases,
+    glossaryForm.contexts,
+    glossaryForm.meaning,
+    glossaryForm.term,
+    isLoggedIn,
+  ]);
+
+  const handleToggleGlossaryTerm = useCallback(async (item) => {
+    if (!isLoggedIn || !authToken || !item?.id) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+    const termId = String(item.id);
+    setGlossaryActionId(termId);
+    try {
+      const data = await requestApi(`/api/glossary/${encodeURIComponent(termId)}`, {
+        method: "PUT",
+        token: authToken,
+        body: JSON.stringify({ is_active: !item.is_active }),
+      });
+      const updatedTerm = data?.term || { ...item, is_active: !item.is_active };
+      setGlossaryTerms((prev) =>
+        (Array.isArray(prev) ? prev : []).map((term) =>
+          String(term?.id) === termId ? updatedTerm : term
+        )
+      );
+      setNotice(copy.notices.glossaryUpdated);
+    } catch (e) {
+      setError(e.message || copy.errors.glossaryUpdateFailed);
+    } finally {
+      setGlossaryActionId("");
+    }
+  }, [
+    authToken,
+    copy.errors.authRequired,
+    copy.errors.glossaryUpdateFailed,
+    copy.notices.glossaryUpdated,
+    isLoggedIn,
+  ]);
+
+  const handleDeleteGlossaryTerm = useCallback(async (item) => {
+    if (!isLoggedIn || !authToken || !item?.id) {
+      setError(copy.errors.authRequired);
+      return;
+    }
+    const termId = String(item.id);
+    setGlossaryActionId(termId);
+    try {
+      await requestApi(`/api/glossary/${encodeURIComponent(termId)}`, {
+        method: "DELETE",
+        token: authToken,
+      });
+      setGlossaryTerms((prev) =>
+        (Array.isArray(prev) ? prev : []).filter((term) => String(term?.id) !== termId)
+      );
+      setNotice(copy.notices.glossaryDeleted);
+    } catch (e) {
+      setError(e.message || copy.errors.glossaryDeleteFailed);
+    } finally {
+      setGlossaryActionId("");
+    }
+  }, [
+    authToken,
+    copy.errors.authRequired,
+    copy.errors.glossaryDeleteFailed,
+    copy.notices.glossaryDeleted,
+    isLoggedIn,
+  ]);
+
   const handleRequestDeleteAccount = useCallback(() => {
     if (!isLoggedIn) {
       setError(copy.errors.authRequired);
@@ -680,6 +848,11 @@ function App() {
     recordsLoading,
     authToken,
   ]);
+
+  useEffect(() => {
+    if (!isLoggedIn || activeTab !== "settings" || glossaryLoaded || glossaryLoading) return;
+    fetchGlossary(authToken, { quiet: true });
+  }, [activeTab, authToken, fetchGlossary, glossaryLoaded, glossaryLoading, isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -2243,6 +2416,146 @@ function App() {
                 </View>
               </FadeInView>
 
+              {isLoggedIn ? (
+                <FadeInView key="settings-glossary" delay={70}>
+                  <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                    <View style={styles.inlineBetween}>
+                      <View style={styles.glossaryTitleBlock}>
+                        <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsGlossaryTitle}</Text>
+                        <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsGlossaryHint}</Text>
+                      </View>
+                      <NmPressable
+                        style={[styles.tinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        onPress={() => fetchGlossary(authToken, { quiet: false })}
+                        disabled={glossaryLoading}
+                      >
+                        <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {glossaryLoading ? copy.loading : copy.glossaryRefresh}
+                        </Text>
+                      </NmPressable>
+                    </View>
+
+                    <View style={styles.glossaryForm}>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                        value={glossaryForm.term}
+                        onChangeText={(term) => setGlossaryForm((prev) => ({ ...prev, term }))}
+                        placeholder={copy.glossaryTermPlaceholder}
+                        placeholderTextColor={activeTheme.textMuted}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                        value={glossaryForm.meaning}
+                        onChangeText={(meaning) => setGlossaryForm((prev) => ({ ...prev, meaning }))}
+                        placeholder={copy.glossaryMeaningPlaceholder}
+                        placeholderTextColor={activeTheme.textMuted}
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        style={[styles.recordEditor, styles.glossaryTextarea, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                        value={glossaryForm.aliases}
+                        onChangeText={(aliases) => setGlossaryForm((prev) => ({ ...prev, aliases }))}
+                        placeholder={copy.glossaryAliasesPlaceholder}
+                        placeholderTextColor={activeTheme.textMuted}
+                        multiline
+                        autoCorrect={false}
+                      />
+                      <TextInput
+                        style={[styles.recordEditor, styles.glossaryTextarea, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                        value={glossaryForm.contexts}
+                        onChangeText={(contexts) => setGlossaryForm((prev) => ({ ...prev, contexts }))}
+                        placeholder={copy.glossaryContextsPlaceholder}
+                        placeholderTextColor={activeTheme.textMuted}
+                        multiline
+                        autoCorrect={false}
+                      />
+                      <NmPressable
+                        style={[
+                          styles.primaryButton,
+                          { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                          glossaryActionId === CREATE_GLOSSARY_ACTION_ID ? styles.buttonDisabled : null,
+                        ]}
+                        onPress={handleCreateGlossaryTerm}
+                        disabled={glossaryActionId === CREATE_GLOSSARY_ACTION_ID}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          {glossaryActionId === CREATE_GLOSSARY_ACTION_ID ? copy.processing : copy.glossaryAdd}
+                        </Text>
+                      </NmPressable>
+                    </View>
+
+                    <View style={styles.glossaryTermList}>
+                      {glossaryLoading && glossaryTerms.length === 0 ? (
+                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.loading}</Text>
+                      ) : null}
+                      {!glossaryLoading && glossaryTerms.length === 0 ? (
+                        <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>{copy.glossaryEmpty}</Text>
+                      ) : null}
+                      {glossaryTerms.map((item) => {
+                        const termId = item?.id == null ? item?.term : item.id;
+                        const aliases = Array.isArray(item?.aliases) ? item.aliases : [];
+                        const contexts = Array.isArray(item?.contexts) ? item.contexts : [];
+                        const busy = glossaryActionId === String(item?.id);
+                        return (
+                          <View key={`glossary-${termId}`} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                            <View style={styles.glossaryTermHeader}>
+                              <View style={styles.glossaryTermText}>
+                                <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.term}</Text>
+                                {item.meaning ? (
+                                  <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{item.meaning}</Text>
+                                ) : null}
+                              </View>
+                              <View
+                                style={[
+                                  styles.glossaryStatusPill,
+                                  { backgroundColor: item.is_active ? activeTheme.noticeBg : activeTheme.inputBg, borderColor: activeTheme.inputBorder },
+                                ]}
+                              >
+                                <Text style={[styles.glossaryStatusText, { color: item.is_active ? activeTheme.accent : activeTheme.textSecondary }]}>
+                                  {item.is_active ? copy.glossaryActive : copy.glossaryInactive}
+                                </Text>
+                              </View>
+                            </View>
+                            {aliases.length ? (
+                              <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
+                                {copy.glossaryAliasesLabel}: {aliases.join(", ")}
+                              </Text>
+                            ) : null}
+                            {contexts.length ? (
+                              <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
+                                {copy.glossaryContextsLabel}: {contexts.join(", ")}
+                              </Text>
+                            ) : null}
+                            <View style={styles.glossaryActionRow}>
+                              <NmPressable
+                                style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, busy ? styles.buttonDisabled : null]}
+                                onPress={() => handleToggleGlossaryTerm(item)}
+                                disabled={busy}
+                              >
+                                <Text style={[styles.tinyButtonText, { color: activeTheme.textPrimary }]}>
+                                  {item.is_active ? copy.glossaryDisable : copy.glossaryEnable}
+                                </Text>
+                              </NmPressable>
+                              <NmPressable
+                                style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, busy ? styles.buttonDisabled : null]}
+                                onPress={() => handleDeleteGlossaryTerm(item)}
+                                disabled={busy}
+                              >
+                                <Text style={[styles.tinyButtonText, { color: activeTheme.errorText || "#b4233a" }]}>
+                                  {busy ? copy.deleting : copy.glossaryDelete}
+                                </Text>
+                              </NmPressable>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </FadeInView>
+              ) : null}
+
               {isLoggedIn && Platform.OS === "ios" ? (
                 <FadeInView key="settings-apple-iap" delay={70}>
                   <AppleIapSubscriptionCard
@@ -3013,6 +3326,45 @@ const styles = StyleSheet.create({
     flexBasis: 88,
     alignItems: "center",
     justifyContent: "center",
+  },
+  glossaryTitleBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  glossaryForm: {
+    gap: 8,
+  },
+  glossaryTextarea: {
+    minHeight: 72,
+  },
+  glossaryTermList: {
+    gap: 8,
+  },
+  glossaryTermHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  glossaryTermText: {
+    flex: 1,
+    gap: 3,
+  },
+  glossaryStatusPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  glossaryStatusText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  glossaryActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
   },
   destructiveConfirmButton: {
     shadowColor: "#dc2626",
