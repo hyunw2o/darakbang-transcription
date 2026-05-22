@@ -19,6 +19,7 @@ PYTHON_FILES = [
     "backend/worker.py",
     "backend/scripts/export_correction_finetune_dataset.py",
     "backend/scripts/manage_correction_finetune.py",
+    "backend/scripts/evaluate_correction_model.py",
     "backend/scripts/check_feature_readiness.py",
     "backend/scripts/build_feature_sql_bundle.py",
     "backend/scripts/smoke_transcription_api.py",
@@ -74,6 +75,7 @@ def run_special_term_sample() -> None:
 def run_script_self_tests() -> None:
     run_command([sys.executable, "backend/scripts/check_feature_readiness.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/export_correction_finetune_dataset.py", "--self-test", "--dry-run", "--min-kept", "1"])
+    run_command([sys.executable, "backend/scripts/evaluate_correction_model.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/build_feature_sql_bundle.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/smoke_transcription_api.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/smoke_glossary_api.py", "--self-test"])

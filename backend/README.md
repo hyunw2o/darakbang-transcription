@@ -185,7 +185,17 @@ python backend/scripts/manage_correction_finetune.py status ftjob_...
 python backend/scripts/manage_correction_finetune.py events ftjob_...
 ```
 
-잡이 성공하면 결과의 `fine_tuned_model` 값을 `CORRECTION_FINE_TUNED_MODEL`에 기록합니다.
+잡이 성공하면 결과의 `fine_tuned_model` 값을 검증 세트로 먼저 평가합니다.
+
+```bash
+python backend/scripts/evaluate_correction_model.py \
+  --validation-jsonl backend/finetune_datasets/correction_validation.jsonl \
+  --model ft:gpt-4o-mini:... \
+  --output backend/finetune_datasets/correction_eval_report.json \
+  --fail-unready
+```
+
+평가 리포트의 `ready_to_promote`가 `true`일 때만 `CORRECTION_FINE_TUNED_MODEL`에 모델 ID를 기록합니다.
 런타임 적용은 `ENABLE_FINE_TUNED_CORRECTION=true`일 때만 동작하며, 기본값은 `false`입니다.
 초기 적용은 짧은 텍스트부터 검증할 수 있도록 `FINE_TUNED_CORRECTION_MAX_CHARS` 한도 안에서만 실행됩니다.
 
