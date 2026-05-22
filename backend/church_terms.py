@@ -92,6 +92,80 @@ DARAKBANG_CORE = [
     "교독", "합독", "교독문",
 ]
 
+# ===== 특수 용어 강화 규칙 =====
+# 1차 품질 개선용 중앙 규칙입니다. 새 특수 용어가 생기면 여기부터 추가합니다.
+SPECIAL_TERM_RULES = [
+    {
+        "canonical": "RUTC",
+        "meaning": "Remnant Unity Training Center",
+        "aliases": [
+            "RUTC",
+            "R U T C",
+            "rutc",
+            "r u t c",
+            "알 유 티 씨",
+            "알유티씨",
+            "알 유 티 시",
+            "알유티시",
+            "아르 유 티 씨",
+            "아르유티씨",
+        ],
+        "full_name_aliases": [
+            "Remnant Unity Training Center",
+            "Remnant Training Unity Center",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RUTC",
+            "Remnant Unity Training Center",
+            "렘넌트",
+            "훈련",
+            "센터",
+            "Training Center",
+            "Unity Training",
+        ],
+    },
+    {
+        "canonical": "RVS",
+        "meaning": "Remnant Vision School",
+        "aliases": [
+            "RVS",
+            "R V S",
+            "rvs",
+            "r v s",
+            "알 브이 에스",
+            "알브이에스",
+            "알 브이 애스",
+            "알브이애스",
+        ],
+        "full_name_aliases": [
+            "Remnant Vision School",
+        ],
+        "context_mistakes": [
+            "RBS",
+            "R B S",
+            "rbs",
+            "r b s",
+            "알 비 에스",
+            "알비에스",
+        ],
+        "context_terms": [
+            "RVS",
+            "Remnant Vision School",
+            "Remnant Vision",
+            "Vision School",
+            "비전 스쿨",
+            "비전스쿨",
+            "비전학교",
+            "드로아교회",
+            "유아유치",
+            "유치부",
+            "유초등부",
+            "어린이",
+        ],
+    },
+]
+
 # ===== 3. 담임목사 =====
 PASTORS = [
     "류광수 목사", "류광수 목사님",
@@ -613,8 +687,22 @@ MEDICAL_CORRECTIONS = {
 }
 
 # ===== 통합 용어 리스트 =====
+def _build_special_term_terms() -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for rule in SPECIAL_TERM_RULES:
+        for term in [rule["canonical"], rule["meaning"], *rule.get("full_name_aliases", [])]:
+            if term and term not in seen:
+                seen.add(term)
+                terms.append(term)
+    return terms
+
+
+SPECIAL_TERM_TERMS = _build_special_term_terms()
+
 ALL_CHURCH_TERMS = (
     DARAKBANG_CORE +
+    SPECIAL_TERM_TERMS +
     PASTORS +
     TRINITY +
     WORSHIP_TERMS +
@@ -836,6 +924,128 @@ EN_MEDICAL_CORRECTIONS = {
     "frontal lob epilepsy": "frontal lobe epilepsy",
 }
 
+def _loose_term_pattern(term: str) -> str:
+    """Build a regex pattern that tolerates STT spacing inside known terms."""
+    import re
+
+    normalized = (term or "").strip()
+    if not normalized:
+        return ""
+    parts = normalized.split()
+    if len(parts) <= 1:
+        return re.escape(normalized)
+    if all(re.fullmatch(r"[A-Za-z]", part) for part in parts):
+        return r"\s*".join(re.escape(part) for part in parts)
+    if all(re.fullmatch(r"[가-힣]+", part) for part in parts):
+        return r"\s*".join(re.escape(part) for part in parts)
+    return r"\s+".join(re.escape(part) for part in parts)
+
+
+def _special_term_alias_pattern(term: str) -> str:
+    import re
+
+    pattern = _loose_term_pattern(term)
+    if not pattern:
+        return pattern
+    if re.fullmatch(r"[A-Za-z0-9\s]+", (term or "").strip()):
+        return rf"(?<![A-Za-z0-9]){pattern}(?![A-Za-z0-9])"
+    return pattern
+
+
+def _special_term_context_pattern(term: str) -> str:
+    return _loose_term_pattern(term)
+
+
+def _normalize_special_term_rules(text: str) -> str:
+    """Normalize app-level special terms before/after broader correction."""
+    import re
+
+    if not text:
+        return text
+
+    corrected = text
+    for rule in SPECIAL_TERM_RULES:
+        canonical = rule["canonical"]
+        meaning = rule["meaning"]
+
+        for alias in rule.get("aliases", []):
+            pattern = _special_term_alias_pattern(alias)
+            if pattern:
+                corrected = re.sub(pattern, canonical, corrected, flags=re.IGNORECASE)
+
+        for alias in rule.get("full_name_aliases", []):
+            pattern = _special_term_alias_pattern(alias)
+            if pattern:
+                corrected = re.sub(pattern, meaning, corrected, flags=re.IGNORECASE)
+
+        context_terms = [term for term in rule.get("context_terms", []) if term]
+        mistakes = [term for term in rule.get("context_mistakes", []) if term]
+        if not context_terms or not mistakes:
+            continue
+
+        context_pattern = "|".join(_special_term_context_pattern(term) for term in context_terms)
+        if not context_pattern:
+            continue
+
+        for mistake in mistakes:
+            mistake_pattern = _special_term_alias_pattern(mistake)
+            if not mistake_pattern:
+                continue
+            corrected = re.sub(
+                rf"((?:{context_pattern})[^\n.!?]{{0,80}}){mistake_pattern}",
+                lambda match: f"{match.group(1)}{canonical}",
+                corrected,
+                flags=re.IGNORECASE,
+            )
+            corrected = re.sub(
+                rf"{mistake_pattern}(?=[^\n.!?]{{0,80}}(?:{context_pattern}))",
+                canonical,
+                corrected,
+                flags=re.IGNORECASE,
+            )
+
+    return corrected
+
+
+def get_special_term_prompt_hint(language: str = "ko") -> str:
+    """Return a concise prompt hint generated from SPECIAL_TERM_RULES."""
+    term_pairs = "; ".join(
+        f"{rule['canonical']}={rule['meaning']}" for rule in SPECIAL_TERM_RULES
+    )
+    context_notes = []
+    for rule in SPECIAL_TERM_RULES:
+        mistakes = ", ".join(rule.get("context_mistakes", [])[:3])
+        contexts = ", ".join(rule.get("context_terms", [])[:4])
+        if mistakes and contexts:
+            context_notes.append(
+                f"{mistakes} -> {rule['canonical']} when context includes {contexts}"
+            )
+
+    if language == "en":
+        note = "; ".join(context_notes)
+        return (
+            "\n\n[Special Domain Terms]\n"
+            f"- Keep these terms exact: {term_pairs}.\n"
+            f"- Context-sensitive corrections: {note}.\n"
+            "- Preserve these abbreviations exactly when they appear as domain terms."
+        )
+    if language == "ja":
+        note = "; ".join(context_notes)
+        return (
+            "\n\n[専門用語]\n"
+            f"- 次の表記を正確に維持してください: {term_pairs}.\n"
+            f"- 文脈補正: {note}.\n"
+            "- これらの略語は専門用語として正確に表記してください。"
+        )
+    note = "; ".join(context_notes)
+    return (
+        "\n\n[특수 용어 고정]\n"
+        f"- 다음 용어는 정확히 유지하라: {term_pairs}.\n"
+        f"- 문맥 보정: {note}.\n"
+        "- 약어를 풀어 쓰거나 다른 비슷한 약어로 바꾸지 말고, 도메인 문맥에서는 위 표기를 우선하라."
+    )
+
+
 def _build_name_correction_instruction(custom_terms: list[str] = None, language: str = "ko") -> str:
     global PASTORS, HISTORICAL_PEOPLE
     names = list(PASTORS) + list(HISTORICAL_PEOPLE)
@@ -903,7 +1113,7 @@ RVS는 Remnant Vision School, RUTC는 Remnant Unity Training Center로 해석하
 9. 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 누락 없이 기록하라.
    - 음절이 붙어 들리면 단어 경계를 문맥으로 복원하라.
    - 짧은 기능어(은/는/이/가/을/를/에/에서/에게/에게는)와 어미를 임의로 삭제하지 마라.
-   - 통역이 없는 구간에서 한 사람이 길게 연속 발화하면 단일 화자로 간주하고 문장을 이어서 복원하라.""" + _build_name_correction_instruction(custom_terms, "ko")
+   - 통역이 없는 구간에서 한 사람이 길게 연속 발화하면 단일 화자로 간주하고 문장을 이어서 복원하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
 
 
 def get_gemini_content_prompt(custom_terms: list[str] = None):
@@ -959,7 +1169,7 @@ def get_gemini_content_prompt(custom_terms: list[str] = None):
 5. '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 6. 매우 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 음절 단위로 끊어 문맥을 복원하고 누락 없이 기록하라.
 7. 통역이 없는 단독 화자 구간은 문장을 짧게 끊어 요약하지 말고, 원문 흐름대로 연결해 기록하라.
-8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라.""" + _build_name_correction_instruction(custom_terms, "ko")
+8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
 
 def get_gemini_correction_prompt(custom_terms: list[str] = None):
     """
@@ -1051,7 +1261,7 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 기도하시겠습니다.
 하나님께 감사드립니다.
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + _build_name_correction_instruction(custom_terms, "ko")
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
 
 
 # ===== 일반 한국어 교정 (모든 유형 공통) =====
@@ -1235,7 +1445,7 @@ def get_phonecall_correction_prompt(custom_terms: list[str] = None):
 2. 참석 인원: 5명 확정
 3. 자료 공유: 회의 전날까지
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + _build_name_correction_instruction(custom_terms, "ko")
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
 
 
 def get_conversation_correction_prompt(custom_terms: list[str] = None):
@@ -1371,7 +1581,7 @@ def get_conversation_correction_prompt(custom_terms: list[str] = None):
 1. 담당: 이대리 - 온라인 마케팅 세부 계획 수립 (2주 내)
 2. 담당: 박과장 - 오프라인 매장 분석 보고서 작성 (1주 내)
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + _build_name_correction_instruction(custom_terms, "ko")
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
 
 
 # ===== 영어 교정 프롬프트 =====
@@ -1440,7 +1650,7 @@ Correct and structure this text following the rules below.
 - Separate paragraphs with blank lines when the topic changes.
 - Colloquial expressions should be smoothed into natural sentences while preserving meaning.
 
-Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
+Correct the [Original Text] following this format. Do NOT shorten the content.""" + get_special_term_prompt_hint("en") + _build_name_correction_instruction(custom_terms, "en")
 
 
 def get_en_phonecall_correction_prompt(custom_terms: list[str] = None):
@@ -1533,7 +1743,7 @@ Key Points
 2. Second key point
 3. Third key point
 
-Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
+Correct the [Original Text] following this format. Do NOT shorten the content.""" + get_special_term_prompt_hint("en") + _build_name_correction_instruction(custom_terms, "en")
 
 
 def get_en_conversation_correction_prompt(custom_terms: list[str] = None):
@@ -1632,7 +1842,7 @@ Action Items
 1. Owner: Name - Task (Deadline)
 2. Owner: Name - Task (Deadline)
 
-Correct the [Original Text] following this format. Do NOT shorten the content.""" + _build_name_correction_instruction(custom_terms, "en")
+Correct the [Original Text] following this format. Do NOT shorten the content.""" + get_special_term_prompt_hint("en") + _build_name_correction_instruction(custom_terms, "en")
 
 
 def get_ja_sermon_correction_prompt(custom_terms: list[str] = None):
@@ -1674,7 +1884,7 @@ def get_ja_sermon_correction_prompt(custom_terms: list[str] = None):
 - Markdown 記号は禁止
 - 話題が変わる箇所では空行で段落を分けてください。
 
-[元の文字起こし] を上記の形式で補正してください。""" + _build_name_correction_instruction(custom_terms, "ja")
+[元の文字起こし] を上記の形式で補正してください。""" + get_special_term_prompt_hint("ja") + _build_name_correction_instruction(custom_terms, "ja")
 
 
 def get_ja_phonecall_correction_prompt(custom_terms: list[str] = None):
@@ -1724,7 +1934,7 @@ def get_ja_phonecall_correction_prompt(custom_terms: list[str] = None):
 2. ...
 3. ...
 
-[元の文字起こし] を上記の形式で補正してください。""" + _build_name_correction_instruction(custom_terms, "ja")
+[元の文字起こし] を上記の形式で補正してください。""" + get_special_term_prompt_hint("ja") + _build_name_correction_instruction(custom_terms, "ja")
 
 
 def get_ja_conversation_correction_prompt(custom_terms: list[str] = None):
@@ -1780,7 +1990,7 @@ def get_ja_conversation_correction_prompt(custom_terms: list[str] = None):
 1. 担当: ... - 作業内容（期限）
 2. 担当: ... - 作業内容（期限）
 
-[元の文字起こし] を上記の形式で補正してください。""" + _build_name_correction_instruction(custom_terms, "ja")
+[元の文字起こし] を上記の形式で補正してください。""" + get_special_term_prompt_hint("ja") + _build_name_correction_instruction(custom_terms, "ja")
 
 
 KO_BIBLE_BOOK_ABBREVIATIONS = {
@@ -2290,7 +2500,7 @@ def _normalize_contextual_homophones(text: str) -> str:
     )
 
     # RBS/RVS: Remnant Vision School/비전스쿨 맥락에서는 RVS를 우선 복원
-    rvs_context = r"(?:드로아교회|렘넌트|비전\s*스쿨|비전학교|Remnant\s+Vision\s+School|Remnant\s+Vision|vision\s*school|유아유치|유치부|유초등부|어린이|학교)"
+    rvs_context = r"(?:드로아교회|비전\s*스쿨|비전학교|Remnant\s+Vision\s+School|Remnant\s+Vision|vision\s*school|유아유치|유치부|유초등부|어린이)"
     corrected = re.sub(
         rf"{latin_left}Remnant\s+Vision\s+School{latin_right}",
         "Remnant Vision School",
@@ -2524,6 +2734,8 @@ def correct_text(
     if normalized_mode == "raw":
         return re.sub(r"\n{3,}", "\n\n", corrected)
 
+    corrected = _normalize_special_term_rules(corrected)
+
     if language == "en":
         # ===== 영어 교정 =====
         def _english_acronym_pattern(wrong: str, right: str) -> str:
@@ -2622,6 +2834,7 @@ def correct_text(
         corrected = re.sub(r'(?<=[.?!])\s*(?:예|아|자|어|음|응|네|요)[,~]\s*', ' ', corrected)
         corrected = re.sub(r'\n{3,}', '\n\n', corrected)
 
+    corrected = _normalize_special_term_rules(corrected)
     return corrected
 
 def get_claude_context():

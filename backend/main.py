@@ -47,6 +47,7 @@ from church_terms import (
     get_gemini_content_prompt,
     get_gemini_correction_prompt,
     get_correction_prompt_by_type,
+    get_special_term_prompt_hint,
     correct_text,
     get_claude_context,
     get_summary_prompt,
@@ -3544,46 +3545,47 @@ def _build_gemini_only_system_instruction(
 ) -> str:
     if language == "ko":
         return f"{get_gemini_prompt(custom_terms)}\n\n{_gemini_audio_continuity_guard(language)}"
+    special_term_hint = get_special_term_prompt_hint(language)
     if language == "ja":
         if transcription_type == "phonecall":
             return (
                 "あなたは日本語通話録音の高精度文字起こしエンジンです。"
                 "音声に含まれる内容を省略せず、話者の切り替わりを維持しながら全文を書き起こしてください。"
                 "聞き取りにくい単語は文脈から補正し、不要な要約や説明は加えないでください。"
-                f"\n\n{_gemini_audio_continuity_guard(language)}"
+                f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
             )
         if transcription_type == "conversation":
             return (
                 "あなたは日本語会議録音の高精度文字起こしエンジンです。"
                 "複数話者の発言順を保ち、内容を省略せず全文を書き起こしてください。"
                 "不明瞭な語は前後文脈から自然に復元し、要約や説明を加えないでください。"
-                f"\n\n{_gemini_audio_continuity_guard(language)}"
+                f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
             )
         return (
             "あなたは日本語説教・講義録音の高精度文字起こしエンジンです。"
             "一人の話者の長い発話も途切れさせず、内容を省略せず全文を書き起こしてください。"
             "不明瞭な語は文脈から復元し、不要な説明や要約は加えないでください。"
-            f"\n\n{_gemini_audio_continuity_guard(language)}"
+            f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
         )
     if transcription_type == "phonecall":
         return (
             "You are a high-accuracy English phone-call transcription engine. "
             "Transcribe the full conversation without summarizing, preserve speaker turns, "
             "and restore unclear words from context when confidence is reasonable."
-            f"\n\n{_gemini_audio_continuity_guard(language)}"
+            f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
         )
     if transcription_type == "conversation":
         return (
             "You are a high-accuracy English meeting transcription engine. "
             "Transcribe all audible content without summarizing, preserve turn changes, "
             "and recover unclear specialized terms from context when possible."
-            f"\n\n{_gemini_audio_continuity_guard(language)}"
+            f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
         )
     return (
         "You are a high-accuracy English sermon and lecture transcription engine. "
         "Transcribe all audible content without summarizing, preserving long monologues and "
         "restoring unclear words from context when possible."
-        f"\n\n{_gemini_audio_continuity_guard(language)}"
+        f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
     )
 
 
@@ -4320,7 +4322,7 @@ def whisper_transcribe(
                 f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
 
-    whisper_prompt = custom_names_str + whisper_prompt
+    whisper_prompt = f"{custom_names_str}{whisper_prompt} {get_special_term_prompt_hint(language)}"
     chunks = split_audio_file(file_path, transcription_type)
     all_text: list[str] = [""] * len(chunks)
 
