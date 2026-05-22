@@ -183,6 +183,13 @@ python backend/scripts/build_feature_sql_bundle.py
 ```
 
 기본 출력은 `/private/tmp/mallog24_feature_setup.sql`입니다.
+현재 Supabase에서 빠진 테이블만 묶으려면 아래처럼 실행합니다.
+
+```bash
+python backend/scripts/build_feature_sql_bundle.py \
+  --missing-only \
+  --output /private/tmp/mallog24_missing_feature_setup.sql
+```
 
 ### 5차 ASR 파인튜닝 판단 기준
 
