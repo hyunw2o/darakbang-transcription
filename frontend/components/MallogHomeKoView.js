@@ -6,6 +6,7 @@ import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
 import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
+import UserGlossaryPanel from './UserGlossaryPanel'
 import { KO_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
 
@@ -61,6 +62,16 @@ export default function MallogHomeKoView(props) {
     handleSocialLogin,
     handleLogout,
     authUserFallbackLabel,
+    glossaryLabels,
+    glossaryTerms,
+    glossaryLoading,
+    glossaryActionId,
+    glossaryForm,
+    handleGlossaryFieldChange,
+    handleCreateGlossaryTerm,
+    handleToggleGlossaryTerm,
+    handleDeleteGlossaryTerm,
+    fetchGlossary,
     file,
     setFile,
     setFileDurationSeconds,
@@ -388,6 +399,19 @@ export default function MallogHomeKoView(props) {
                 </span>
               </p>
             </div>
+            <UserGlossaryPanel
+              labels={glossaryLabels}
+              authToken={authToken}
+              glossaryTerms={glossaryTerms}
+              glossaryLoading={glossaryLoading}
+              glossaryActionId={glossaryActionId}
+              glossaryForm={glossaryForm}
+              handleGlossaryFieldChange={handleGlossaryFieldChange}
+              handleCreateGlossaryTerm={handleCreateGlossaryTerm}
+              handleToggleGlossaryTerm={handleToggleGlossaryTerm}
+              handleDeleteGlossaryTerm={handleDeleteGlossaryTerm}
+              fetchGlossary={fetchGlossary}
+            />
             {/* 업로드 카드 */}
             <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
               <form onSubmit={handleSubmit}>

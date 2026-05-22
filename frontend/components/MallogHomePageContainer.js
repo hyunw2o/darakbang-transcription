@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import useMallogAuth from '../hooks/useMallogAuth'
+import useMallogGlossary from '../hooks/useMallogGlossary'
 import useMallogTranscription from '../hooks/useMallogTranscription'
 import useUiFeedback from '../hooks/useUiFeedback'
 import MallogHomeKoView from './MallogHomeKoView'
@@ -102,6 +103,14 @@ export default function MallogHomePageContainer({
     setNotice,
     showToast,
     recordTypeLabels,
+  })
+  const glossary = useMallogGlossary({
+    apiUrl: API_URL,
+    locale,
+    authToken: auth.authToken,
+    getAuthHeaders: auth.getAuthHeaders,
+    setError,
+    setNotice,
   })
 
   useEffect(() => {
@@ -315,6 +324,47 @@ export default function MallogHomePageContainer({
         { key: 'kakao', label: '카카오로 로그인' },
       ]
   const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치', 'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
+  const glossaryLabels = isEnglish
+    ? {
+        title: 'User Glossary',
+        refresh: 'Refresh',
+        loading: 'Loading...',
+        saving: 'Saving...',
+        add: 'Add term',
+        empty: 'No user glossary terms saved yet.',
+        termPlaceholder: 'Preferred spelling (e.g. RVS)',
+        meaningPlaceholder: 'Meaning (e.g. Remnant Vision School)',
+        aliasesPlaceholder: 'Aliases or misrecognitions',
+        contextsPlaceholder: 'Context hints',
+        active: 'Active',
+        inactive: 'Inactive',
+        aliasesLabel: 'Aliases',
+        contextsLabel: 'Context',
+        enable: 'Enable',
+        disable: 'Disable',
+        delete: 'Delete',
+        deleting: 'Deleting...',
+      }
+    : {
+        title: '사용자 용어집',
+        refresh: '새로고침',
+        loading: '불러오는 중...',
+        saving: '저장 중...',
+        add: '용어 추가',
+        empty: '아직 저장된 사용자 용어가 없습니다.',
+        termPlaceholder: '정확한 표기 (예: RVS)',
+        meaningPlaceholder: '뜻/설명 (예: Remnant Vision School)',
+        aliasesPlaceholder: '오인식/별칭',
+        contextsPlaceholder: '문맥 힌트',
+        active: '활성',
+        inactive: '비활성',
+        aliasesLabel: '별칭',
+        contextsLabel: '문맥',
+        enable: '활성화',
+        disable: '비활성',
+        delete: '삭제',
+        deleting: '삭제 중...',
+      }
 
   const ViewComponent = isEnglish ? MallogHomeEnView : MallogHomeKoView
 
@@ -373,6 +423,16 @@ export default function MallogHomePageContainer({
       handleSocialLogin={handleSocialLogin}
       handleLogout={handleLogout}
       authUserFallbackLabel={authUserFallbackLabel}
+      glossaryLabels={glossaryLabels}
+      glossaryTerms={glossary.glossaryTerms}
+      glossaryLoading={glossary.glossaryLoading}
+      glossaryActionId={glossary.glossaryActionId}
+      glossaryForm={glossary.glossaryForm}
+      handleGlossaryFieldChange={glossary.handleGlossaryFieldChange}
+      handleCreateGlossaryTerm={glossary.handleCreateGlossaryTerm}
+      handleToggleGlossaryTerm={glossary.handleToggleGlossaryTerm}
+      handleDeleteGlossaryTerm={glossary.handleDeleteGlossaryTerm}
+      fetchGlossary={glossary.fetchGlossary}
       file={file}
       setFile={setFile}
       setFileDurationSeconds={setFileDurationSeconds}
