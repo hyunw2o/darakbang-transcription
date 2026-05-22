@@ -50,6 +50,11 @@ const TRANSCRIPTION_MESSAGES = {
     saveEmpty: '저장할 기록본 내용이 없습니다.',
     saveFailed: '기록본 저장 실패',
     saveSuccess: '기록본이 별도 저장되었습니다.',
+    correctionLoginRequired: '수정 결과 저장은 로그인 후 이용할 수 있습니다.',
+    correctionEmpty: '저장할 수정 텍스트가 없습니다.',
+    correctionNoChanges: '저장할 변경 사항이 없습니다.',
+    correctionSaveFailed: '수정 결과 저장 실패',
+    correctionSaveSuccess: '수정 결과를 저장했습니다.',
     transcriptTitle: '녹취록',
     transcriptFilename: '녹취록',
     copyFailed: '클립보드 복사에 실패했습니다.',
@@ -92,6 +97,11 @@ const TRANSCRIPTION_MESSAGES = {
     saveEmpty: 'Record content is empty.',
     saveFailed: 'Failed to save record.',
     saveSuccess: 'Record saved separately.',
+    correctionLoginRequired: 'Please log in to save corrections.',
+    correctionEmpty: 'Edited transcript is empty.',
+    correctionNoChanges: 'No transcript changes to save.',
+    correctionSaveFailed: 'Failed to save correction.',
+    correctionSaveSuccess: 'Correction saved.',
     transcriptTitle: 'Transcript',
     transcriptFilename: 'transcript',
     copyFailed: 'Failed to copy to clipboard.',
@@ -136,6 +146,8 @@ export default function useMallogTranscription({
   const [recordDraftSources, setRecordDraftSources] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
   const [savingCategory, setSavingCategory] = useState('')
+  const [transcriptEditText, setTranscriptEditText] = useState('')
+  const [transcriptEditSaving, setTranscriptEditSaving] = useState(false)
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
   const [guestSessionId, setGuestSessionId] = useState('')
   const [guestUsage, setGuestUsage] = useState({
@@ -166,6 +178,27 @@ export default function useMallogTranscription({
     }
     return data || {}
   }, [])
+
+  const transcriptSourceText = useMemo(
+    () => String(result?.corrected_text || result?.raw_text || ''),
+    [result?.corrected_text, result?.raw_text]
+  )
+
+  const compactTranscriptText = useCallback((value) => String(value || '').trim().replace(/\s+/g, ' '), [])
+
+  const transcriptHasUnsavedEdit = useMemo(
+    () => Boolean(result) && compactTranscriptText(transcriptSourceText) !== compactTranscriptText(transcriptEditText),
+    [compactTranscriptText, result, transcriptEditText, transcriptSourceText]
+  )
+
+  const getActiveTranscriptText = useCallback(
+    () => String(transcriptEditText || transcriptSourceText || '').trim(),
+    [transcriptEditText, transcriptSourceText]
+  )
+
+  useEffect(() => {
+    setTranscriptEditText(transcriptSourceText)
+  }, [result?.task_id, transcriptSourceText])
 
   const ensureGuestSessionId = useCallback(() => {
     if (typeof window === 'undefined') return ''
@@ -302,6 +335,9 @@ export default function useMallogTranscription({
     }
     setResult(null)
     setRecordDrafts({})
+    setRecordDraftSources({})
+    setTranscriptEditText('')
+    setTranscriptEditSaving(false)
     return resultEpochRef.current
   }, [])
 
@@ -323,8 +359,11 @@ export default function useMallogTranscription({
     setRecordsLoaded(false)
     setRecordsLoading(false)
     setRecordDrafts({})
+    setRecordDraftSources({})
     setDraftLoadingCategory('')
     setSavingCategory('')
+    setTranscriptEditText('')
+    setTranscriptEditSaving(false)
     setShowHistory(false)
     setShowRecords(false)
   }, [clearPendingDeleteAll, clearPendingDeleteTask, invalidatePollingSession])
@@ -813,21 +852,21 @@ export default function useMallogTranscription({
 
   const exportAsTxt = useCallback(() => {
     if (!result) return
-    const text = (result.corrected_text || result.raw_text || '').trim()
+    const text = getActiveTranscriptText()
     if (!text) return
     const filename = `${sanitizeFileName(`${messages.transcriptFilename}_${new Date().toISOString().slice(0, 10)}`)}.txt`
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     triggerBlobDownload(blob, filename)
-  }, [messages.transcriptFilename, result])
+  }, [getActiveTranscriptText, messages.transcriptFilename, result])
 
   const exportAsDocx = useCallback(() => {
     if (!result) return
-    const text = (result.corrected_text || result.raw_text || '').trim()
+    const text = getActiveTranscriptText()
     if (!text) return
     const filename = `${sanitizeFileName(`${messages.transcriptFilename}_${new Date().toISOString().slice(0, 10)}`)}.docx`
     const blob = buildDocxBlob(messages.transcriptTitle, text)
     triggerBlobDownload(blob, filename)
-  }, [messages.transcriptFilename, messages.transcriptTitle, result])
+  }, [getActiveTranscriptText, messages.transcriptFilename, messages.transcriptTitle, result])
 
   const exportTextByLabel = useCallback((text, label, ext = 'txt') => {
     const safeText = String(text || '').trim()
@@ -843,7 +882,8 @@ export default function useMallogTranscription({
   }, [])
 
   const handleSummarize = useCallback(async () => {
-    if (!result?.corrected_text && !result?.raw_text) return
+    const sourceText = getActiveTranscriptText()
+    if (!sourceText) return
     if (!authToken) {
       setError(messages.summarizeLoginRequired)
       return
@@ -859,7 +899,7 @@ export default function useMallogTranscription({
       const normalizedType = result?.transcription_type || transcriptionType || 'conversation'
       const normalizedStyle = resolveContentStyle(result)
       const formData = new FormData()
-      formData.append('text', result.corrected_text || result.raw_text)
+      formData.append('text', sourceText)
       formData.append('summary_type', 'short')
       formData.append('transcription_type', normalizedType)
       formData.append('content_style', normalizedStyle)
@@ -886,10 +926,11 @@ export default function useMallogTranscription({
     } finally {
       setLoading(false)
     }
-  }, [apiUrl, authToken, getAuthHeaders, language, messages.defaultLanguage, messages.summarizeFailed, messages.summarizeLoginRequired, readResponseData, resolveContentStyle, result, setError, setNotice, transcriptionType])
+  }, [apiUrl, authToken, getActiveTranscriptText, getAuthHeaders, language, messages.defaultLanguage, messages.summarizeFailed, messages.summarizeLoginRequired, readResponseData, resolveContentStyle, result, setError, setNotice, transcriptionType])
 
   const handleGenerateRecordDraft = useCallback(async (category) => {
-    if (!result?.corrected_text && !result?.raw_text) return
+    const sourceText = getActiveTranscriptText()
+    if (!sourceText) return
     if (!authToken) {
       setError(messages.draftLoginRequired)
       return
@@ -902,7 +943,7 @@ export default function useMallogTranscription({
 
     try {
       const formData = new FormData()
-      formData.append('text', result.corrected_text || result.raw_text)
+      formData.append('text', sourceText)
       formData.append('category', category)
       formData.append('language', result?.language || language || messages.defaultLanguage)
 
@@ -919,7 +960,7 @@ export default function useMallogTranscription({
         ...prev,
         [category]: {
           originalText: draftContent,
-          sourceText: result.corrected_text || result.raw_text || '',
+          sourceText,
           taskId: result?.task_id || '',
           language: result?.language || language || messages.defaultLanguage,
           transcriptionType: result?.transcription_type || transcriptionType,
@@ -931,11 +972,75 @@ export default function useMallogTranscription({
     } finally {
       setDraftLoadingCategory('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice, transcriptionType])
+  }, [apiUrl, authToken, getActiveTranscriptText, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice, transcriptionType])
 
   const handleRecordDraftChange = useCallback((category, value) => {
     setRecordDrafts((prev) => ({ ...prev, [category]: value }))
   }, [])
+
+  const handleResetTranscriptEdit = useCallback(() => {
+    setTranscriptEditText(transcriptSourceText)
+  }, [transcriptSourceText])
+
+  const handleSaveTranscriptCorrection = useCallback(async () => {
+    if (!authToken) {
+      setError(messages.correctionLoginRequired)
+      return
+    }
+
+    const originalText = transcriptSourceText.trim()
+    const editedText = String(transcriptEditText || '').trim()
+    if (!originalText || !editedText) {
+      setError(messages.correctionEmpty)
+      return
+    }
+    if (compactTranscriptText(originalText) === compactTranscriptText(editedText)) {
+      setNotice(messages.correctionNoChanges)
+      return
+    }
+
+    setTranscriptEditSaving(true)
+    setError(null)
+    setNotice(null)
+
+    try {
+      const response = await apiFetch(`${apiUrl}/api/corrections`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source_type: 'transcript_edit',
+          category: result?.transcription_type || transcriptionType,
+          language: result?.language || language || messages.defaultLanguage,
+          task_id: result?.task_id || '',
+          original_text: originalText,
+          edited_text: editedText,
+          metadata: {
+            content_style: resolveContentStyle(result),
+            source: 'web_transcript_editor',
+          },
+        }),
+      })
+      const data = await readResponseData(response, messages.correctionSaveFailed)
+      setResult((prev) => {
+        if (!prev) return prev
+        if (result?.task_id && prev.task_id && prev.task_id !== result.task_id) return prev
+        return {
+          ...prev,
+          corrected_text: editedText,
+          characters: editedText.length,
+        }
+      })
+      setTranscriptEditText(editedText)
+      setNotice(data?.stored === false ? messages.correctionNoChanges : messages.correctionSaveSuccess)
+    } catch (error) {
+      setError(error?.message || messages.correctionSaveFailed)
+    } finally {
+      setTranscriptEditSaving(false)
+    }
+  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, language, messages.correctionEmpty, messages.correctionLoginRequired, messages.correctionNoChanges, messages.correctionSaveFailed, messages.correctionSaveSuccess, messages.defaultLanguage, readResponseData, resolveContentStyle, result, setError, setNotice, transcriptEditText, transcriptSourceText, transcriptionType])
 
   const handleSaveRecord = useCallback(async (category) => {
     if (!authToken) {
@@ -1060,6 +1165,10 @@ export default function useMallogTranscription({
     recordDrafts,
     draftLoadingCategory,
     savingCategory,
+    transcriptEditText,
+    setTranscriptEditText,
+    transcriptEditSaving,
+    transcriptHasUnsavedEdit,
     fileDurationSeconds,
     guestUsage,
     guestTranscribeHint: messages.guestTranscribeHint,
@@ -1090,6 +1199,8 @@ export default function useMallogTranscription({
     handleGenerateRecordDraft,
     handleRecordDraftChange,
     handleSaveRecord,
+    handleResetTranscriptEdit,
+    handleSaveTranscriptCorrection,
     copyFailedMessage: messages.copyFailed,
   }
 }

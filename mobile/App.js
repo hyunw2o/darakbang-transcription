@@ -64,6 +64,10 @@ function parseGlossaryListInput(value) {
     .filter(Boolean);
 }
 
+function compactTranscriptText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
 function getMobileLegalDocuments(baseDocs, language) {
   const businessSection = baseDocs?.terms?.sections?.find((section) =>
     String(section?.title || "").includes(language === "en" ? "Business" : "사업자")
@@ -282,6 +286,8 @@ function App() {
   const [recordDraftSources, setRecordDraftSources] = useState({});
   const [draftLoadingCategory, setDraftLoadingCategory] = useState("");
   const [savingCategory, setSavingCategory] = useState("");
+  const [transcriptEditText, setTranscriptEditText] = useState("");
+  const [transcriptEditSaving, setTranscriptEditSaving] = useState(false);
   const [workspaceScrollEnabled, setWorkspaceScrollEnabled] = useState(true);
 
   const [notice, setNotice] = useState("");
@@ -410,6 +416,8 @@ function App() {
     setRecordDraftSources({});
     setDraftLoadingCategory("");
     setSavingCategory("");
+    setTranscriptEditText("");
+    setTranscriptEditSaving(false);
     setTaskStateText("");
     setSubmitting(false);
     if (restoreScroll) {
@@ -1214,6 +1222,20 @@ function App() {
     );
   };
 
+  const transcriptSourceText = useMemo(
+    () => String(result?.corrected_text || result?.raw_text || ""),
+    [result?.corrected_text, result?.raw_text]
+  );
+  const transcriptHasUnsavedEdit = useMemo(
+    () => Boolean(result) && compactTranscriptText(transcriptSourceText) !== compactTranscriptText(transcriptEditText),
+    [result, transcriptEditText, transcriptSourceText]
+  );
+  const activeTranscriptText = result ? (transcriptEditText || transcriptSourceText) : "";
+
+  useEffect(() => {
+    setTranscriptEditText(transcriptSourceText);
+  }, [result?.task_id, transcriptSourceText]);
+
   const resolveHistoryStatusLabel = useCallback((statusValue) => {
     const normalizedStatus = String(statusValue || "").trim().toLowerCase();
     return copy.historyStatusLabels?.[normalizedStatus] || normalizedStatus || "-";
@@ -1228,7 +1250,7 @@ function App() {
       return;
     }
 
-    const sourceText = result?.corrected_text || result?.raw_text || "";
+    const sourceText = activeTranscriptText;
     if (!sourceText.trim()) {
       setError(copy.errors.summaryNoText);
       return;
@@ -1281,7 +1303,7 @@ function App() {
       return;
     }
 
-    const sourceText = result?.corrected_text || result?.raw_text || "";
+    const sourceText = activeTranscriptText;
     if (!sourceText.trim()) {
       setError(copy.errors.draftNoSource);
       return;
@@ -1383,6 +1405,67 @@ function App() {
       setError(e.message || copy.errors.saveFailed);
     } finally {
       setSavingCategory("");
+    }
+  };
+
+  const handleResetTranscriptEdit = () => {
+    setTranscriptEditText(transcriptSourceText);
+  };
+
+  const handleSaveTranscriptCorrection = async () => {
+    clearMessages();
+
+    if (!isLoggedIn) {
+      setError(copy.errors.correctionNeedLogin);
+      return;
+    }
+
+    const originalText = transcriptSourceText.trim();
+    const editedText = String(transcriptEditText || "").trim();
+    if (!originalText || !editedText) {
+      setError(copy.errors.correctionNoText);
+      return;
+    }
+    if (compactTranscriptText(originalText) === compactTranscriptText(editedText)) {
+      setNotice(copy.notices.correctionNoChange);
+      return;
+    }
+
+    setTranscriptEditSaving(true);
+
+    try {
+      await requestApi("/api/corrections", {
+        method: "POST",
+        token: authToken,
+        body: JSON.stringify({
+          source_type: "transcript_edit",
+          category: result?.transcription_type || transcriptionType,
+          language: result?.language || transcriptionLanguage || "ko",
+          task_id: result?.task_id || "",
+          original_text: originalText,
+          edited_text: editedText,
+          metadata: {
+            content_style: resolveContentStyleKey(result),
+            source: "mobile_transcript_editor",
+          },
+        }),
+      });
+
+      setResult((prev) => {
+        if (!prev) return prev;
+        if (result?.task_id && prev.task_id && prev.task_id !== result.task_id) return prev;
+        return {
+          ...prev,
+          corrected_text: editedText,
+          characters: editedText.length,
+        };
+      });
+      setTranscriptEditText(editedText);
+      setNotice(copy.notices.correctionSaved);
+    } catch (e) {
+      setError(e.message || copy.errors.correctionSaveFailed);
+    } finally {
+      setTranscriptEditSaving(false);
     }
   };
 
@@ -2058,45 +2141,74 @@ function App() {
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.charCount}: {result.characters || 0}</Text>
 
                     <Text style={styles.sectionTitle}>{copy.correctedText}</Text>
-                    <ScrollView
-                      nestedScrollEnabled
+                    <TextInput
+                      multiline
+                      scrollEnabled
+                      textAlignVertical="top"
+                      value={transcriptEditText}
+                      onChangeText={setTranscriptEditText}
                       style={[
                         styles.resultBox,
-                        { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, height: resultTextBoxHeight },
+                        styles.resultEditor,
+                        { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary, height: resultTextBoxHeight },
                       ]}
-                      contentContainerStyle={styles.resultScrollContent}
-                      showsVerticalScrollIndicator
                       onTouchStart={lockWorkspaceScroll}
                       onTouchEnd={unlockWorkspaceScroll}
                       onTouchCancel={unlockWorkspaceScroll}
-                      onResponderRelease={unlockWorkspaceScroll}
-                      onResponderTerminate={unlockWorkspaceScroll}
-                      onScrollBeginDrag={lockWorkspaceScroll}
-                      onScrollEndDrag={unlockWorkspaceScroll}
-                      onMomentumScrollBegin={lockWorkspaceScroll}
-                      onMomentumScrollEnd={unlockWorkspaceScroll}
-                    >
-                      <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>
-                        {result.corrected_text || result.raw_text || ""}
+                      onFocus={lockWorkspaceScroll}
+                      onBlur={unlockWorkspaceScroll}
+                    />
+
+                    <View style={styles.transcriptEditHeader}>
+                      <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
+                        {copy.transcriptEditTitle} · {transcriptHasUnsavedEdit ? copy.transcriptEditChanged : copy.transcriptEditSaved}
                       </Text>
-                    </ScrollView>
+                    </View>
+                    <View style={styles.exportActionRow}>
+                      <NmPressable
+                        style={[
+                          styles.tinyButton,
+                          styles.exportTinyButton,
+                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                          (transcriptEditSaving || !transcriptHasUnsavedEdit) ? styles.buttonDisabled : null,
+                        ]}
+                        onPress={handleSaveTranscriptCorrection}
+                        disabled={transcriptEditSaving || !transcriptHasUnsavedEdit}
+                      >
+                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>
+                          {transcriptEditSaving ? copy.transcriptEditSaving : copy.transcriptEditSave}
+                        </Text>
+                      </NmPressable>
+                      <NmPressable
+                        style={[
+                          styles.tinyButton,
+                          styles.exportTinyButton,
+                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                          !transcriptHasUnsavedEdit ? styles.buttonDisabled : null,
+                        ]}
+                        onPress={handleResetTranscriptEdit}
+                        disabled={!transcriptHasUnsavedEdit}
+                      >
+                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.transcriptEditReset}</Text>
+                      </NmPressable>
+                    </View>
 
                     <View style={styles.exportActionRow}>
                       <NmPressable
                         style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                        onPress={() => handleCopyToClipboard(copy.correctedText, result.corrected_text || result.raw_text || "")}
+                        onPress={() => handleCopyToClipboard(copy.correctedText, activeTranscriptText)}
                       >
                         <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
                       </NmPressable>
                       <NmPressable
                         style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                        onPress={() => handleShareExport(copy.correctedText, result.corrected_text || result.raw_text || "", "txt")}
+                        onPress={() => handleShareExport(copy.correctedText, activeTranscriptText, "txt")}
                       >
                         <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
                       </NmPressable>
                       <NmPressable
                         style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                        onPress={() => handleShareExport(copy.correctedText, result.corrected_text || result.raw_text || "", "docx")}
+                        onPress={() => handleShareExport(copy.correctedText, activeTranscriptText, "docx")}
                       >
                         <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
                       </NmPressable>
@@ -3495,6 +3607,16 @@ const styles = StyleSheet.create({
   },
   resultScrollContent: {
     padding: 12,
+  },
+  resultEditor: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+    lineHeight: 19,
+    fontWeight: "500",
+  },
+  transcriptEditHeader: {
+    marginTop: 8,
   },
   summaryBox: {
     marginTop: 8,

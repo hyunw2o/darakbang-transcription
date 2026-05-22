@@ -100,6 +100,10 @@ export default function MallogHomeKoView(props) {
     recordDrafts,
     draftLoadingCategory,
     savingCategory,
+    transcriptEditText,
+    setTranscriptEditText,
+    transcriptEditSaving,
+    transcriptHasUnsavedEdit,
     fileDurationSeconds,
     fileInputRef,
     isGuestMode,
@@ -135,6 +139,8 @@ export default function MallogHomeKoView(props) {
     handleGenerateRecordDraft,
     handleRecordDraftChange,
     handleSaveRecord,
+    handleResetTranscriptEdit,
+    handleSaveTranscriptCorrection,
     triggerFilePicker,
     handleUploadZoneKeyDown,
     handleFileChange,
@@ -165,6 +171,8 @@ export default function MallogHomeKoView(props) {
         { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
       ]
+
+  const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
 
   return (
     <div className="min-h-screen pb-12">
@@ -591,7 +599,7 @@ export default function MallogHomeKoView(props) {
 
                   <div className="nm-concave p-4 sm:p-5 max-h-[60vh] overflow-y-auto">
                     <div className="text-[13px] leading-7 text-nm-text-primary">
-                      {(result.corrected_text || result.raw_text)
+                      {activeTranscriptText
                         .split('\n')
                         .map((line, i) => {
                           const trimmed = line.trim()
@@ -620,10 +628,43 @@ export default function MallogHomeKoView(props) {
                     </div>
                   </div>
 
+                  <div className="mt-4 nm-concave p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-nm-text-primary">수정본 편집</p>
+                      <span className="text-[11px] text-nm-text-secondary">
+                        {transcriptHasUnsavedEdit ? '변경됨' : '저장됨'}
+                      </span>
+                    </div>
+                    <textarea
+                      value={transcriptEditText}
+                      onChange={(e) => setTranscriptEditText(e.target.value)}
+                      rows={8}
+                      className="nm-input w-full text-xs leading-relaxed max-h-64 overflow-y-auto"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveTranscriptCorrection}
+                        disabled={transcriptEditSaving || !transcriptHasUnsavedEdit}
+                        className="action-btn disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {transcriptEditSaving ? '저장 중...' : '수정 저장'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetTranscriptEdit}
+                        disabled={!transcriptHasUnsavedEdit}
+                        className="action-btn disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        되돌리기
+                      </button>
+                    </div>
+                  </div>
+
                   {/* 액션 버튼들 */}
                   <div className="flex flex-wrap gap-2 mt-4">
                     <button
-                      onClick={() => copyToClipboard(result.corrected_text || result.raw_text, 'text')}
+                      onClick={() => copyToClipboard(activeTranscriptText, 'text')}
                       className="action-btn"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

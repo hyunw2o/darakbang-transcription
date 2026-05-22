@@ -195,6 +195,10 @@ export default function MallogHomePageContainer({
     recordDrafts,
     draftLoadingCategory,
     savingCategory,
+    transcriptEditText,
+    setTranscriptEditText,
+    transcriptEditSaving,
+    transcriptHasUnsavedEdit,
     fileDurationSeconds,
     guestUsage,
     guestTranscribeHint,
@@ -217,6 +221,8 @@ export default function MallogHomePageContainer({
     handleGenerateRecordDraft,
     handleRecordDraftChange,
     handleSaveRecord,
+    handleResetTranscriptEdit,
+    handleSaveTranscriptCorrection,
     copyFailedMessage,
     triggerFilePicker: openFilePicker,
     handleUploadZoneKeyDown: handleUploadKeyDownInternal,
@@ -461,6 +467,10 @@ export default function MallogHomePageContainer({
       recordDrafts={recordDrafts}
       draftLoadingCategory={draftLoadingCategory}
       savingCategory={savingCategory}
+      transcriptEditText={transcriptEditText}
+      setTranscriptEditText={setTranscriptEditText}
+      transcriptEditSaving={transcriptEditSaving}
+      transcriptHasUnsavedEdit={transcriptHasUnsavedEdit}
       fileDurationSeconds={fileDurationSeconds}
       fileInputRef={fileInputRef}
       isGuestMode={isGuestMode}
@@ -496,6 +506,8 @@ export default function MallogHomePageContainer({
       handleGenerateRecordDraft={handleGenerateRecordDraft}
       handleRecordDraftChange={handleRecordDraftChange}
       handleSaveRecord={handleSaveRecord}
+      handleResetTranscriptEdit={handleResetTranscriptEdit}
+      handleSaveTranscriptCorrection={handleSaveTranscriptCorrection}
       triggerFilePicker={triggerFilePicker}
       handleUploadZoneKeyDown={handleUploadZoneKeyDown}
       handleFileChange={handleFileChange}
