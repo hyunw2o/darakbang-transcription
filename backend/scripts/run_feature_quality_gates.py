@@ -70,6 +70,20 @@ def run_special_term_sample() -> None:
             "print('sample-term-correction-ok', text)"
         ),
     ])
+    run_command([
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "sys.path.insert(0, 'backend'); "
+            "from main import _build_fine_tuned_correction_messages; "
+            "messages=_build_fine_tuned_correction_messages("
+            "'RBS 흐름', 'sermon', 'ko', ['RVS (Remnant Vision School; misheard as RBS)']"
+            "); "
+            "assert 'User glossary' in messages[1]['content'] and 'RVS' in messages[1]['content']; "
+            "print('fine-tuned-glossary-context-ok')"
+        ),
+    ])
 
 
 def run_script_self_tests() -> None:

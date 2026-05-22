@@ -4790,7 +4790,16 @@ def _build_fine_tuned_correction_messages(
     text: str,
     transcription_type: str,
     language: str,
+    custom_terms: list[str] | None = None,
 ) -> list[dict[str, str]]:
+    normalized_terms = _merge_custom_terms(custom_terms)
+    glossary_hint = ""
+    if normalized_terms:
+        glossary_hint = (
+            "\n\n[User glossary]\n"
+            "Prefer these exact user-provided terms when they fit the transcript context:\n"
+            + "\n".join(f"- {term}" for term in normalized_terms)
+        )
     return [
         {
             "role": "system",
@@ -4805,7 +4814,8 @@ def _build_fine_tuned_correction_messages(
             "role": "user",
             "content": (
                 f"Language: {language}\n"
-                f"Transcription type: {transcription_type}\n\n"
+                f"Transcription type: {transcription_type}"
+                f"{glossary_hint}\n\n"
                 "[Original transcript]\n"
                 f"{text}"
             ),
@@ -4819,6 +4829,7 @@ def _apply_fine_tuned_correction_if_enabled(
     transcription_type: str,
     language: str,
     correction_mode: str,
+    custom_terms: list[str] | None = None,
 ) -> tuple[str, bool]:
     normalized_text = (text or "").strip()
     normalized_mode = (correction_mode or "normal").strip().lower()
@@ -4844,6 +4855,7 @@ def _apply_fine_tuned_correction_if_enabled(
                 normalized_text,
                 transcription_type,
                 language,
+                custom_terms,
             ),
             temperature=0,
             max_completion_tokens=max(1024, min(16000, len(normalized_text) + 1000)),
@@ -5036,6 +5048,7 @@ def _process_transcription_sync(
             transcription_type,
             language,
             correction_mode,
+            runtime_custom_terms,
         )
         if fine_tuned_applied:
             engine = f"{engine}+fine-tuned-correction"
