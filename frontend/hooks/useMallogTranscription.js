@@ -133,6 +133,7 @@ export default function useMallogTranscription({
   const [recordsLoading, setRecordsLoading] = useState(false)
   const [recordsLoaded, setRecordsLoaded] = useState(false)
   const [recordDrafts, setRecordDrafts] = useState({})
+  const [recordDraftSources, setRecordDraftSources] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
   const [savingCategory, setSavingCategory] = useState('')
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
@@ -912,14 +913,25 @@ export default function useMallogTranscription({
       })
       const data = await readResponseData(response, messages.draftFailed)
       if (draftEpoch !== resultEpochRef.current) return
-      setRecordDrafts((prev) => ({ ...prev, [category]: data.content || '' }))
+      const draftContent = data.content || ''
+      setRecordDrafts((prev) => ({ ...prev, [category]: draftContent }))
+      setRecordDraftSources((prev) => ({
+        ...prev,
+        [category]: {
+          originalText: draftContent,
+          sourceText: result.corrected_text || result.raw_text || '',
+          taskId: result?.task_id || '',
+          language: result?.language || language || messages.defaultLanguage,
+          transcriptionType: result?.transcription_type || transcriptionType,
+        },
+      }))
       setNotice(`${data.category_label || messages.recordDefaultLabel} ${messages.draftCreatedSuffix}`)
     } catch (error) {
       setError(error?.message || messages.draftFailedGeneric)
     } finally {
       setDraftLoadingCategory('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice])
+  }, [apiUrl, authToken, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice, transcriptionType])
 
   const handleRecordDraftChange = useCallback((category, value) => {
     setRecordDrafts((prev) => ({ ...prev, [category]: value }))
@@ -956,6 +968,32 @@ export default function useMallogTranscription({
       })
       await readResponseData(response, messages.saveFailed)
 
+      const draftSource = recordDraftSources[category] || {}
+      const originalDraftText = String(draftSource.originalText || '').trim()
+      if (originalDraftText && originalDraftText !== content) {
+        apiFetch(`${apiUrl}/api/corrections`, {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            source_type: 'record_draft',
+            category,
+            language: draftSource.language || result?.language || language || messages.defaultLanguage,
+            task_id: draftSource.taskId || result?.task_id || '',
+            original_text: originalDraftText,
+            edited_text: content,
+            metadata: {
+              transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
+              source_text_preview: String(draftSource.sourceText || '').slice(0, 1000),
+            },
+          }),
+        }).catch((correctionError) => {
+          console.warn('Correction sample save failed:', correctionError?.message || correctionError)
+        })
+      }
+
       setNotice(messages.saveSuccess)
       fetchSavedRecords()
       setShowRecords(true)
@@ -964,7 +1002,7 @@ export default function useMallogTranscription({
     } finally {
       setSavingCategory('')
     }
-  }, [apiUrl, authToken, fetchSavedRecords, getAuthHeaders, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordTypeLabels, result, setError, setNotice])
+  }, [apiUrl, authToken, fetchSavedRecords, getAuthHeaders, language, messages.defaultLanguage, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordDraftSources, recordTypeLabels, result, setError, setNotice, transcriptionType])
 
   const usageState = useMemo(() => {
     return (usage) => {
