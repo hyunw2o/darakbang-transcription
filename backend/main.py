@@ -360,6 +360,18 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     print("Warning: OPENAI_API_KEY is not set. Whisper STT unavailable, falling back to Gemini.")
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+ENABLE_FINE_TUNED_CORRECTION = (
+    os.getenv("ENABLE_FINE_TUNED_CORRECTION", "false").strip().lower() == "true"
+)
+CORRECTION_FINE_TUNED_MODEL = (os.getenv("CORRECTION_FINE_TUNED_MODEL") or "").strip()
+FINE_TUNED_CORRECTION_MAX_CHARS = max(
+    1000,
+    int(os.getenv("FINE_TUNED_CORRECTION_MAX_CHARS", "6000")),
+)
+FINE_TUNED_CORRECTION_TIMEOUT_SECONDS = max(
+    10,
+    int(os.getenv("FINE_TUNED_CORRECTION_TIMEOUT_SECONDS", "120")),
+)
 
 # 시작 시 용어 로딩 확인
 @app.on_event("startup")
@@ -4774,6 +4786,89 @@ def _postprocess_transcript(
     return _normalize_transcript_line_breaks(corrected)
 
 
+def _build_fine_tuned_correction_messages(
+    text: str,
+    transcription_type: str,
+    language: str,
+) -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are mallog24's fine-tuned transcript correction model. "
+                "Correct speech-to-text output without summarizing or adding new claims. "
+                "Preserve meaning, speaker labels, paragraph structure, and useful formatting. "
+                "Return only the corrected transcript."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Language: {language}\n"
+                f"Transcription type: {transcription_type}\n\n"
+                "[Original transcript]\n"
+                f"{text}"
+            ),
+        },
+    ]
+
+
+def _apply_fine_tuned_correction_if_enabled(
+    text: str,
+    task_id: str,
+    transcription_type: str,
+    language: str,
+    correction_mode: str,
+) -> tuple[str, bool]:
+    normalized_text = (text or "").strip()
+    normalized_mode = (correction_mode or "normal").strip().lower()
+    if (
+        not normalized_text
+        or normalized_mode == "raw"
+        or not ENABLE_FINE_TUNED_CORRECTION
+        or not CORRECTION_FINE_TUNED_MODEL
+        or openai_client is None
+    ):
+        return text, False
+    if len(normalized_text) > FINE_TUNED_CORRECTION_MAX_CHARS:
+        print(
+            f"[{task_id}] Skip fine-tuned correction: "
+            f"{len(normalized_text)} chars > {FINE_TUNED_CORRECTION_MAX_CHARS}"
+        )
+        return text, False
+
+    try:
+        response = openai_client.chat.completions.create(
+            model=CORRECTION_FINE_TUNED_MODEL,
+            messages=_build_fine_tuned_correction_messages(
+                normalized_text,
+                transcription_type,
+                language,
+            ),
+            temperature=0,
+            max_completion_tokens=max(1024, min(16000, len(normalized_text) + 1000)),
+            timeout=FINE_TUNED_CORRECTION_TIMEOUT_SECONDS,
+        )
+        corrected = (response.choices[0].message.content or "").strip()
+    except Exception as e:
+        print(f"[{task_id}] Fine-tuned correction failed; keeping Gemini result: {e}")
+        return text, False
+
+    if not corrected:
+        return text, False
+    length_ratio = max(len(corrected), len(normalized_text)) / max(1, min(len(corrected), len(normalized_text)))
+    if length_ratio > 4:
+        print(f"[{task_id}] Fine-tuned correction skipped due to length ratio: {length_ratio:.2f}")
+        return text, False
+    corrected = _postprocess_transcript(
+        corrected,
+        transcription_type,
+        language,
+        correction_mode,
+    )
+    return corrected, corrected != text
+
+
 def _process_transcription_sync(
     task_id: str,
     user_id: str,
@@ -4934,6 +5029,17 @@ def _process_transcription_sync(
                 custom_terms=runtime_custom_terms,
             )
             _log_stage_memory(task_id, "after_postprocess")
+
+        corrected_text, fine_tuned_applied = _apply_fine_tuned_correction_if_enabled(
+            corrected_text,
+            task_id,
+            transcription_type,
+            language,
+            correction_mode,
+        )
+        if fine_tuned_applied:
+            engine = f"{engine}+fine-tuned-correction"
+            _log_stage_memory(task_id, "after_fine_tuned_correction")
 
         # 결과 저장
         created_at = datetime.now().isoformat()
