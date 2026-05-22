@@ -171,6 +171,18 @@ python backend/scripts/manage_correction_finetune.py events ftjob_...
 
 Supabase SQL 적용 여부, 수정 샘플 수, 백엔드 `/health` 상태를 한 번에 확인합니다.
 
+기능 변경 후 push 전 기본 게이트는 아래 스크립트로 한 번에 실행할 수 있습니다.
+
+```bash
+python backend/scripts/run_feature_quality_gates.py
+```
+
+웹 UI를 바꾼 경우에는 프론트엔드 빌드까지 함께 확인합니다.
+
+```bash
+python backend/scripts/run_feature_quality_gates.py --with-frontend-build
+```
+
 ```bash
 python backend/scripts/check_feature_readiness.py \
   --api-url https://api.mallog24.com \
