@@ -17,7 +17,20 @@ function KakaoMark() {
   )
 }
 
+function AppleMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 18 18" className="h-[18px] w-[18px] shrink-0" fill="currentColor">
+      <path d="M13.65 9.55c-.02-1.82 1.5-2.7 1.57-2.74-.86-1.24-2.19-1.41-2.65-1.43-1.11-.12-2.19.66-2.75.66-.57 0-1.43-.64-2.36-.62-1.2.02-2.33.71-2.95 1.79-1.27 2.2-.32 5.43.89 7.2.6.86 1.31 1.82 2.24 1.78.9-.04 1.24-.57 2.34-.57 1.09 0 1.4.57 2.35.55.98-.02 1.59-.86 2.18-1.72.7-.99.98-1.96.99-2.01-.02-.01-1.87-.71-1.9-2.89ZM11.84 4.2c.49-.62.82-1.45.74-2.29-.71.03-1.59.48-2.1 1.09-.45.53-.86 1.4-.75 2.22.79.06 1.6-.4 2.11-1.02Z" />
+    </svg>
+  )
+}
+
 const PROVIDER_CONFIG = {
+  apple: {
+    className:
+      "border border-[#1A1916] bg-[#1A1916] text-white hover:bg-[#2D2B27] focus-visible:outline-[#1A1916]",
+    icon: <AppleMark />,
+  },
   google: {
     className:
       "border border-[#dadce0] bg-white text-[#1f1f1f] hover:bg-[#f8f9fa] focus-visible:outline-[#4285F4]",

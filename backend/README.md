@@ -351,7 +351,7 @@ python backend/scripts/build_feature_sql_bundle.py \
 - `GET /api/history` : 내 변환 기록 조회 (인증 필요)
 - `POST /api/auth/signup` : 회원가입
 - `POST /api/auth/login` : 로그인
-- `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=google|kakao`, `redirect_to` 필요)
+- `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=apple|google|kakao`, `redirect_to` 필요)
 - `GET /api/auth/me` : 현재 사용자 조회
 - `GET /api/usage` : 이번 달 사용량 조회 (무료 한도 10시간)
 - `GET /api/billing/status` : 내 구독 상태 조회

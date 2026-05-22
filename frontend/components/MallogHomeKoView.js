@@ -262,7 +262,7 @@ export default function MallogHomeKoView(props) {
             <>
               <div className="mb-4">
                 <p className="text-base font-bold text-nm-text-primary">로그인 후 바로 파일 업로드를 시작하세요.</p>
-                <p className="mt-1 text-xs text-nm-text-secondary">이메일 또는 Google/Kakao로 1분 안에 시작할 수 있습니다.</p>
+                <p className="mt-1 text-xs text-nm-text-secondary">이메일 또는 Apple/Google/Kakao로 1분 안에 시작할 수 있습니다.</p>
                 <div className="nm-segment-group mt-3">
                   <button
                     type="button"
@@ -321,7 +321,7 @@ export default function MallogHomeKoView(props) {
                 </button>
               </form>
               <div className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {socialProviders.map((provider) => (
                     <SocialProviderButton
                       key={provider.key}

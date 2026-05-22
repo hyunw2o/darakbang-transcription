@@ -328,10 +328,12 @@ export default function MallogHomePageContainer({
       ]
   const socialProviders = isEnglish
     ? [
+        { key: 'apple', label: 'Sign in with Apple' },
         { key: 'google', label: 'Sign in with Google' },
         { key: 'kakao', label: 'Log in with Kakao' },
       ]
     : [
+        { key: 'apple', label: 'Apple로 로그인' },
         { key: 'google', label: 'Google로 로그인' },
         { key: 'kakao', label: '카카오로 로그인' },
       ]

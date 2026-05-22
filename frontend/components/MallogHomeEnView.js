@@ -262,7 +262,7 @@ export default function MallogHomeEnView(props) {
             <>
               <div className="mb-4">
                 <p className="text-base font-bold text-nm-text-primary">Sign in and upload your first file right away.</p>
-                <p className="mt-1 text-xs text-nm-text-secondary">Start in under a minute with email, Google, or Kakao.</p>
+                <p className="mt-1 text-xs text-nm-text-secondary">Start in under a minute with email, Apple, Google, or Kakao.</p>
                 <div className="nm-segment-group mt-3">
                   <button
                     type="button"
@@ -323,7 +323,7 @@ export default function MallogHomeEnView(props) {
                 </button>
               </form>
               <div className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {socialProviders.map((provider) => (
                     <SocialProviderButton
                       key={provider.key}
