@@ -1084,27 +1084,29 @@ export default function useMallogTranscription({
       const draftSource = recordDraftSources[category] || {}
       const originalDraftText = String(draftSource.originalText || '').trim()
       if (originalDraftText && originalDraftText !== content) {
-        apiFetch(`${apiUrl}/api/corrections`, {
-          method: 'POST',
-          headers: {
-            ...getAuthHeaders(),
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            source_type: 'record_draft',
-            category,
-            language: draftSource.language || result?.language || language || messages.defaultLanguage,
-            task_id: draftSource.taskId || result?.task_id || '',
-            original_text: originalDraftText,
-            edited_text: content,
-            metadata: {
-              transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
-              source_text_preview: String(draftSource.sourceText || '').slice(0, 1000),
+        try {
+          await apiFetch(`${apiUrl}/api/corrections`, {
+            method: 'POST',
+            headers: {
+              ...getAuthHeaders(),
+              'Content-Type': 'application/json',
             },
-          }),
-        }).catch((correctionError) => {
+            body: JSON.stringify({
+              source_type: 'record_draft',
+              category,
+              language: draftSource.language || result?.language || language || messages.defaultLanguage,
+              task_id: draftSource.taskId || result?.task_id || '',
+              original_text: originalDraftText,
+              edited_text: content,
+              metadata: {
+                transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
+                source_text_preview: String(draftSource.sourceText || '').slice(0, 1000),
+              },
+            }),
+          })
+        } catch (correctionError) {
           console.warn('Correction sample save failed:', correctionError?.message || correctionError)
-        })
+        }
       }
 
       setNotice(messages.saveSuccess)

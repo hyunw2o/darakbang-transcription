@@ -1384,24 +1384,26 @@ function App() {
       const draftSource = recordDraftSources[category] || {};
       const originalDraftText = String(draftSource.originalText || "").trim();
       if (originalDraftText && originalDraftText !== content) {
-        requestApi("/api/corrections", {
-          method: "POST",
-          token: authToken,
-          body: JSON.stringify({
-            source_type: "record_draft",
-            category,
-            language: draftSource.language || result?.language || transcriptionLanguage || "ko",
-            task_id: draftSource.taskId || result?.task_id || "",
-            original_text: originalDraftText,
-            edited_text: content,
-            metadata: {
-              transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
-              source_text_preview: String(draftSource.sourceText || "").slice(0, 1000),
-            },
-          }),
-        }).catch((correctionError) => {
+        try {
+          await requestApi("/api/corrections", {
+            method: "POST",
+            token: authToken,
+            body: JSON.stringify({
+              source_type: "record_draft",
+              category,
+              language: draftSource.language || result?.language || transcriptionLanguage || "ko",
+              task_id: draftSource.taskId || result?.task_id || "",
+              original_text: originalDraftText,
+              edited_text: content,
+              metadata: {
+                transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
+                source_text_preview: String(draftSource.sourceText || "").slice(0, 1000),
+              },
+            }),
+          });
+        } catch (correctionError) {
           console.warn("Correction sample save failed:", correctionError?.message || correctionError);
-        });
+        }
       }
       setNotice(copy.notices.recordSaved);
       setActiveTab("records");
