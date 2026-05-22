@@ -139,6 +139,14 @@ def run_self_test() -> int:
     assert args.require_saved_record_edit_smoke is True
     args = parse_args_for_self_test(["--exercise-saved-record-create-capture"])
     assert args.exercise_saved_record_create_capture is True
+    missing_token_payload = summarize([
+        skipped_check(
+            "saved-record-create-capture-smoke",
+            "--auth-token or MALLOG24_AUTH_TOKEN is required.",
+            required=False,
+        )
+    ])
+    assert missing_token_payload["ok"] is True
     print("post-deploy-checks-self-test-ok")
     return 0
 
@@ -245,6 +253,12 @@ def main() -> int:
             "--auth-token or MALLOG24_AUTH_TOKEN is required.",
             required=bool(args.require_saved_record_edit_smoke),
         ))
+        if args.exercise_saved_record_create_capture:
+            checks.append(skipped_check(
+                "saved-record-create-capture-smoke",
+                "--auth-token or MALLOG24_AUTH_TOKEN is required.",
+                required=bool(args.require_saved_record_edit_smoke),
+            ))
 
     if args.audio_file:
         platforms = args.client_platform or ["web"]
