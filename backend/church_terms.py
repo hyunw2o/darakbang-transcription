@@ -71,16 +71,16 @@ DARAKBANG_CORE = [
     "성회", "전도대회", "수련회", "전도집회", "집회", "세미나", "기도수첩", "포럼방", "포럼 방", "대학부",
 
     # 선교/교육 약어
-    "HMC",  # Harvester Mission Church
-    "HMIS", # Harvester Mission International School
+    "HMC",  # Harvesters Missions Church
+    "HMIS", # Harvesters Missions International School
     "HMVS", # Harvester Mission Vision School
-    "RVIS", # Remnant Vision International School
-    "RRTS", # Remnant Reformed Theological Seminary
-    "REA",  # Rwanda, East Africa, Africa
+    "RVIS", # Rwanda Vision International School
+    "RRTS", # Rwanda Remnant Theological Seminary
+    "REA",  # Rwanda East-africa Africa
     "RUTC", # Remnant Unity Training Center
     "Remnant Unity Training Center",
     "RTS",  # Remnant Theological Seminary
-    "RSTS", # Remnant Summit Training School
+    "RSTS", # Remnant Summit Training Synagogue
     "RBS",  # Remnant Bible School / context-dependent abbreviation
     "RVS",  # Remnant Vision School
     "Remnant Vision School",
@@ -95,6 +95,275 @@ DARAKBANG_CORE = [
 # ===== 특수 용어 강화 규칙 =====
 # 1차 품질 개선용 중앙 규칙입니다. 새 특수 용어가 생기면 여기부터 추가합니다.
 SPECIAL_TERM_RULES = [
+    {
+        "canonical": "CVDIP",
+        "meaning": "Covenant Vision Dream Image Practice",
+        "aliases": [
+            "CVDIP",
+            "C V D I P",
+            "cvdip",
+            "c v d i p",
+            "씨 브이 디 아이 피",
+            "씨브이디아이피",
+            "시 브이 디 아이 피",
+            "시브이디아이피",
+        ],
+        "full_name_aliases": [
+            "Covenant Vision Dream Image Practice",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "Covenant",
+            "Vision",
+            "Dream",
+            "Image",
+            "Practice",
+            "언약",
+            "비전",
+            "꿈",
+            "이미지",
+            "실천",
+        ],
+    },
+    {
+        "canonical": "HMC",
+        "meaning": "Harvesters Missions Church",
+        "aliases": [
+            "HMC",
+            "H M C",
+            "hmc",
+            "h m c",
+            "에이치 엠 씨",
+            "에이치엠씨",
+        ],
+        "full_name_aliases": [
+            "Harvesters Missions Church",
+            "Harvester Mission Church",
+            "Harvester Missions Church",
+            "Harvesters Mission Church",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "HMC",
+            "Harvesters Missions Church",
+            "하베스터",
+            "선교",
+            "교회",
+        ],
+    },
+    {
+        "canonical": "HMIS",
+        "meaning": "Harvesters Missions International School",
+        "aliases": [
+            "HMIS",
+            "H M I S",
+            "hmis",
+            "h m i s",
+            "에이치 엠 아이 에스",
+            "에이치엠아이에스",
+        ],
+        "full_name_aliases": [
+            "Harvesters Missions International School",
+            "Harvester Mission International School",
+            "Harvester Missions International School",
+            "Harvesters Mission International School",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "HMIS",
+            "Harvesters Missions International School",
+            "하베스터",
+            "국제학교",
+            "International School",
+        ],
+    },
+    {
+        "canonical": "RVIS",
+        "meaning": "Rwanda Vision International School",
+        "aliases": [
+            "RVIS",
+            "R V I S",
+            "rvis",
+            "r v i s",
+            "알 브이 아이 에스",
+            "알브이아이에스",
+        ],
+        "full_name_aliases": [
+            "Rwanda Vision International School",
+            "Remnant Vision International School",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RVIS",
+            "Rwanda Vision International School",
+            "Rwanda",
+            "Vision International School",
+        ],
+    },
+    {
+        "canonical": "RRTS",
+        "meaning": "Rwanda Remnant Theological Seminary",
+        "aliases": [
+            "RRTS",
+            "R R T S",
+            "rrts",
+            "r r t s",
+            "알 알 티 에스",
+            "알알티에스",
+        ],
+        "full_name_aliases": [
+            "Rwanda Remnant Theological Seminary",
+            "Remnant Reformed Theological Seminary",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RRTS",
+            "Rwanda Remnant Theological Seminary",
+            "Rwanda",
+            "Theological Seminary",
+            "신학교",
+        ],
+    },
+    {
+        "canonical": "RTS",
+        "meaning": "Remnant Theological Seminary",
+        "aliases": [
+            "RTS",
+            "R T S",
+            "rts",
+            "r t s",
+            "알 티 에스",
+            "알티에스",
+        ],
+        "full_name_aliases": [
+            "Remnant Theological Seminary",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RTS",
+            "Remnant Theological Seminary",
+            "Theological Seminary",
+            "신학교",
+        ],
+    },
+    {
+        "canonical": "RSTS",
+        "meaning": "Remnant Summit Training Synagogue",
+        "aliases": [
+            "RSTS",
+            "R S T S",
+            "rsts",
+            "r s t s",
+            "알 에스 티 에스",
+            "알에스티에스",
+        ],
+        "full_name_aliases": [
+            "Remnant Summit Training Synagogue",
+            "Remnant Summit Training School",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RSTS",
+            "Remnant Summit Training Synagogue",
+            "Summit Training",
+            "서밋",
+            "훈련",
+        ],
+    },
+    {
+        "canonical": "RPS",
+        "meaning": "Remnant Parents School",
+        "aliases": [
+            "RPS",
+            "R P S",
+            "rps",
+            "r p s",
+            "알 피 에스",
+            "알피에스",
+        ],
+        "full_name_aliases": [
+            "Remnant Parents School",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RPS",
+            "Remnant Parents School",
+            "Parents School",
+            "부모",
+        ],
+    },
+    {
+        "canonical": "RLS",
+        "meaning": "Remnant Leader School",
+        "aliases": [
+            "RLS",
+            "R L S",
+            "rls",
+            "r l s",
+            "알 엘 에스",
+            "알엘에스",
+        ],
+        "full_name_aliases": [
+            "Remnant Leader School",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RLS",
+            "Remnant Leader School",
+            "Leader School",
+            "리더",
+        ],
+    },
+    {
+        "canonical": "RGS",
+        "meaning": "Remnant Global School",
+        "aliases": [
+            "RGS",
+            "R G S",
+            "rgs",
+            "r g s",
+            "알 지 에스",
+            "알지에스",
+        ],
+        "full_name_aliases": [
+            "Remnant Global School",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "RGS",
+            "Remnant Global School",
+            "Global School",
+            "글로벌",
+        ],
+    },
+    {
+        "canonical": "REA",
+        "meaning": "Rwanda East-africa Africa",
+        "aliases": [
+            "REA",
+            "R E A",
+            "rea",
+            "r e a",
+            "알 이 에이",
+            "알이에이",
+        ],
+        "full_name_aliases": [
+            "Rwanda East-africa Africa",
+            "Rwanda East Africa Africa",
+            "Rwanda, East Africa, Africa",
+        ],
+        "context_mistakes": [],
+        "context_terms": [
+            "REA",
+            "Rwanda East-africa Africa",
+            "Rwanda",
+            "East Africa",
+            "Africa",
+            "르완다",
+            "동아프리카",
+            "아프리카",
+        ],
+    },
     {
         "canonical": "RUTC",
         "meaning": "Remnant Unity Training Center",
@@ -788,8 +1057,8 @@ EN_COMMON_CORRECTIONS = {
     "trows church": "Troas Church",
     "trose church": "Troas Church",
     "trous church": "Troas Church",
-    "harvestor mission church": "Harvester Mission Church",
-    "harvister mission church": "Harvester Mission Church",
+    "harvestor mission church": "Harvesters Missions Church",
+    "harvister mission church": "Harvesters Missions Church",
     "missionhome": "Mission Home",
     "prayerjournal": "Prayer Journal",
     "pre natal mission home": "Prenatal Mission Home",
@@ -815,7 +1084,7 @@ EN_MINISTRY_CORRECTIONS = {
     "player jurnal": "Prayer Journal",
     "mission home": "Mission Home",
     "prenatal mission home": "Prenatal Mission Home",
-    "harvester mission church": "Harvester Mission Church",
+    "harvester mission church": "Harvesters Missions Church",
     "troas church": "Troas Church",
     "remnant training unity center": "Remnant Unity Training Center",
     "remnant unity training center": "Remnant Unity Training Center",
@@ -1619,7 +1888,7 @@ Correct and structure this text following the rules below.
 - Use canonical English Bible book names for all 66 books (Genesis ... Revelation). If uncertain or misspelled, normalize to canonical names.
 - If church name appears, normalize "Droa Church" (and similar misspellings) to "Troas Church".
 - Keep ministry terms exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing,
+  Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing,
   HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, REA
 - Medical terminology must be accurately spelled if mentioned:
   Drug names (acetaminophen, metformin, amoxicillin, etc.)
@@ -1690,7 +1959,7 @@ Correct and structure this text following the rules below.
 - Medicine: diagnosis, prescription, dosage, side effects, follow-up
 - Humanities/Education: philosophy, ethics, interpretation, curriculum, assessment
 - Business/Finance: KPI, ROI, P&L, cash flow, operating profit
-- Church/Ministry: Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home,
+- Church/Ministry: Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home,
   Prayer Journal, Blessing, Immanuel, presbytery, sermon note, prayer topic
 - Medical data standards: CDE (Common Data Elements), CRF, eCRF, CDISC
 
@@ -1713,7 +1982,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Proper nouns (names, companies, locations) should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+  Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - Phone numbers, addresses, dates, times, amounts should be recorded accurately.
 - Medical terminology must be accurately spelled:
   Drug names: acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin,
@@ -1783,7 +2052,7 @@ Correct and structure this text following the rules below.
 - Environment/ESG: carbon neutrality, Scope 1/2/3, emissions trading, sustainability
 - Medicine/Healthcare: diagnosis, protocol, adverse event, CT, MRI, follow-up
 - Humanities/Education: philosophy, ethics, literacy, interpretation, curriculum, rubric
-- Church/Ministry: Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home,
+- Church/Ministry: Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home,
   Prayer Journal, Blessing, Immanuel, presbytery, sermon note, prayer topic, fellowship
 - Medical data standards: CDE (Common Data Elements), CRF, eCRF, CDISC
 
@@ -1806,7 +2075,7 @@ Correct and structure this text following the rules below.
 - Correct grammar and spelling while preserving conversational tone.
 - Technical terms, project names, proper nouns should be accurately spelled.
 - Keep these church/school names exact if mentioned:
-  Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
+  Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, Prayer Journal, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 - Numbers, amounts, dates, percentages should use numerals (e.g., "30%", "$5M", "Q3")
 - Medical terminology if applicable: drug names, disease names, procedure names
 - Technical terms if applicable: API, SDK, CI/CD, AWS, GCP, Docker, Kubernetes, etc.
@@ -1865,7 +2134,7 @@ def get_ja_sermon_correction_prompt(custom_terms: list[str] = None):
 - 句読点、改行、語境界を整えて読みやすい日本語にしてください。
 - 固有名詞、聖書用語、教会名、薬剤名、検査名があれば文脈に合わせて正確に補正してください。
 - 以下の語が出たら正確に維持してください:
-  Blessing, Immanuel, Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal,
+  Blessing, Immanuel, Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, Prayer Journal,
   Acts 1:8, Psalm 23:1, Romans 8:28, CDE, Common Data Elements
 
 [フィラー除去]
@@ -1912,7 +2181,7 @@ def get_ja_phonecall_correction_prompt(custom_terms: list[str] = None):
 [本文補正]
 - 語境界、句読点、日付、時間、数量、固有名詞を自然な日本語に整えてください。
 - 以下の語が出たら正確に維持してください:
-  Blessing, Immanuel, Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, Prayer Journal,
+  Blessing, Immanuel, Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, Prayer Journal,
   CDE, Common Data Elements, CT, MRI, EEG
 
 [フィラー除去]
@@ -2661,7 +2930,7 @@ def _normalize_english_contextual_terms(text: str) -> str:
             segment = re.sub(r"\bbless sing\b", "Blessing", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\bmission home\b", "Mission Home", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\bprenatal mission home\b", "Prenatal Mission Home", segment, flags=re.IGNORECASE)
-            segment = re.sub(r"\bharvester mission church\b", "Harvester Mission Church", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bharvester mission church\b", "Harvesters Missions Church", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\btroas church\b", "Troas Church", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\btrose church\b", "Troas Church", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\btrous church\b", "Troas Church", segment, flags=re.IGNORECASE)

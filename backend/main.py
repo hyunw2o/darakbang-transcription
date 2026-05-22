@@ -515,7 +515,7 @@ EN_DOMAIN_CONTEXT_TERMS = (
     "humanities(philosophy, ethics, literacy, narrative, interpretation), "
     "education(curriculum, assessment, learning objective, feedback), "
     "business/finance(KPI, ROI, P&L, cash flow, operating profit), "
-    "church/ministry(Troas Church, Harvester Mission Church, Mission Home, Prenatal Mission Home, "
+    "church/ministry(Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, "
     "Prayer Journal, Blessing, Immanuel, RVS(Remnant Vision School), RUTC(Remnant Unity Training Center), "
     "presbytery, deacon, elder, pastoral staff, sermon, fellowship)"
 )
@@ -4242,7 +4242,7 @@ def whisper_transcribe(
                 "A single speaker may talk very fast for a long stretch; preserve word boundaries and do not drop content. "
                 "Bible, Scripture, Gospel, salvation, grace, faith, prayer, blessing, congregation, "
                 "sermon, worship, fellowship, testimony, discipleship, ministry, mission, "
-                "Troas Church, Harvester Mission Church, HMC, HMIS, HMVS, RRTS, RVIS, RUTC(Remnant Unity Training Center), RTS, RSTS, RBS, RVS(Remnant Vision School), RPS, RLS, RGS, "
+                "Troas Church, Harvesters Missions Church, HMC, HMIS, HMVS, RRTS, RVIS, RUTC(Remnant Unity Training Center), RTS, RSTS, RBS, RVS(Remnant Vision School), RPS, RLS, RGS, "
                 "Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing, "
                 "Acts 1:8, Psalm 23:1, Romans 8:28"
             )
