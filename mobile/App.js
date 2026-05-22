@@ -37,7 +37,6 @@ import {
   RECORD_CATEGORIES,
   STATUS_POLL_INTERVAL_MS,
   TRANSCRIBE_POLL_TIMEOUT_MS,
-  TRANSCRIPTION_TYPES,
   UI_THEME_KEY,
   UI_THEME_MODE_KEY,
 } from "./config";
@@ -56,6 +55,83 @@ const EMPTY_GLOSSARY_FORM = {
   aliases: "",
   contexts: "",
 };
+const TRANSCRIPTION_TYPE_CARD_ORDER = ["sermon", "conversation", "phonecall"];
+const TRANSCRIPTION_TYPE_CARD_META = {
+  sermon: { icon: "S" },
+  conversation: { icon: "M" },
+  phonecall: { icon: "C" },
+};
+const PROCESSING_STEP_KEYS = ["uploaded", "recognized", "structured", "saved"];
+const TASK_PHASE_STEP_INDEX = {
+  uploading: 0,
+  queued: 1,
+  waiting: 1,
+  processing: 2,
+  historyLoading: 3,
+  done: PROCESSING_STEP_KEYS.length,
+};
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function truncateDisplayText(value, maxLength = 160) {
+  const compact = compactTranscriptText(value);
+  if (!compact) return "";
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function firstMeaningfulLine(value) {
+  return String(value || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .find(Boolean) || "";
+}
+
+function findLabeledValue(text, labels) {
+  const lines = String(text || "").split(/\n+/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    for (const label of labels) {
+      const pattern = new RegExp(`^${escapeRegExp(label)}\\s*[:：\\-]\\s*(.+)$`, "i");
+      const match = trimmed.match(pattern);
+      if (match?.[1]) return match[1].trim();
+    }
+  }
+  return "";
+}
+
+function buildResultSections({ text, summary, typeLabel, copy }) {
+  const sourceText = String(text || "");
+  const summaryText = String(summary || "");
+  const fallback = copy.resultEmptyValue || "-";
+  const body =
+    findLabeledValue(sourceText, ["본문", "성경본문", "Scripture", "Passage", "Body"]) ||
+    truncateDisplayText(sourceText, 220) ||
+    fallback;
+  const topic =
+    findLabeledValue(`${summaryText}\n${sourceText}`, ["주제", "제목", "Topic", "Title"]) ||
+    truncateDisplayText(firstMeaningfulLine(summaryText), 120) ||
+    typeLabel ||
+    fallback;
+  const keyPoint =
+    findLabeledValue(`${summaryText}\n${sourceText}`, ["핵심", "핵심 메시지", "Key", "Key Point", "Main Point"]) ||
+    truncateDisplayText(summaryText || sourceText, 160) ||
+    fallback;
+  const summaryValue =
+    findLabeledValue(summaryText, ["요약", "Summary"]) ||
+    truncateDisplayText(summaryText || sourceText, 220) ||
+    fallback;
+
+  return [
+    { key: "body", label: copy.resultSections?.body || "Body", value: body },
+    { key: "topic", label: copy.resultSections?.topic || "Topic", value: topic },
+    { key: "keyPoint", label: copy.resultSections?.keyPoint || "Key", value: keyPoint },
+    { key: "summary", label: copy.resultSections?.summary || "Summary", value: summaryValue },
+  ];
+}
 
 function parseGlossaryListInput(value) {
   return String(value || "")
@@ -261,6 +337,7 @@ function App() {
   });
 
   const [submitting, setSubmitting] = useState(false);
+  const [taskPhase, setTaskPhase] = useState("idle");
   const [taskStateText, setTaskStateText] = useState("");
   const [result, setResult] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -420,6 +497,7 @@ function App() {
     setSavingCategory("");
     setTranscriptEditText("");
     setTranscriptEditSaving(false);
+    setTaskPhase("idle");
     setTaskStateText("");
     setSubmitting(false);
     if (restoreScroll) {
@@ -492,7 +570,7 @@ function App() {
       },
     };
   }, [compactLayout, tinyLayout, modalFontShrinkFactor]);
-  const resultTextBoxHeight = tinyLayout ? 170 : compactLayout ? 210 : 260;
+  const resultEditorHeight = tinyLayout ? 132 : compactLayout ? 150 : 172;
   const recordEditorHeight = tinyLayout ? 118 : compactLayout ? 132 : 150;
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
@@ -507,7 +585,7 @@ function App() {
     [copy.authLanding.badges.beta, copy.authLanding.badges.free, copy.authLanding.badges.pro, isIosAppStoreReviewMode]
   );
   const transcriptionTypeOptions = useMemo(
-    () => TRANSCRIPTION_TYPES.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
+    () => TRANSCRIPTION_TYPE_CARD_ORDER.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
     [copy]
   );
   const recordCategoryOptions = useMemo(
@@ -591,6 +669,7 @@ function App() {
     setGlossaryForm(EMPTY_GLOSSARY_FORM);
     resetResultWorkspace(true);
     setPickedFile(null);
+    setTaskPhase("idle");
     setTaskStateText("");
     setGuestModeStarted(false);
   }, []);
@@ -947,6 +1026,7 @@ function App() {
     const pollToken = pollTokenRef.current;
     activeTaskIdRef.current = taskId;
     pollStartedAtRef.current = Date.now();
+    setTaskPhase("queued");
     setTaskStateText(copy.taskState.waiting);
 
     pollRef.current = setInterval(async () => {
@@ -958,6 +1038,7 @@ function App() {
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
+          setTaskPhase("idle");
           setTaskStateText("");
           setError(copy.errors.transcribeLongRunning);
           setNotice(`${copy.taskId}: ${taskId}`);
@@ -971,11 +1052,13 @@ function App() {
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
 
         if (data.status === "queued") {
+          setTaskPhase("queued");
           setTaskStateText(copy.taskState.queued);
           return;
         }
 
         if (data.status === "processing") {
+          setTaskPhase("processing");
           setTaskStateText(copy.taskState.processing);
           return;
         }
@@ -984,6 +1067,7 @@ function App() {
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
+          setTaskPhase("done");
           setTaskStateText(copy.taskState.done);
           if (expectedResultEpoch !== resultEpochRef.current) return;
           setResult(data);
@@ -1001,6 +1085,7 @@ function App() {
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
+          setTaskPhase("idle");
           setTaskStateText("");
           setError(data.error || copy.errors.transcribeError);
           return;
@@ -1010,6 +1095,7 @@ function App() {
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
+          setTaskPhase("idle");
           setTaskStateText("");
           setError(copy.errors.taskNotFound);
         }
@@ -1018,6 +1104,7 @@ function App() {
         stopPolling();
         activeTaskIdRef.current = "";
         setSubmitting(false);
+        setTaskPhase("idle");
         setTaskStateText("");
         setError(e.message || copy.errors.statusFailed);
       }
@@ -1035,6 +1122,7 @@ function App() {
     invalidatePollingSession();
     const submitEpoch = resetResultWorkspace(true);
     setSubmitting(true);
+    setTaskPhase("uploading");
     setTaskStateText(copy.taskState.uploading);
 
     try {
@@ -1067,6 +1155,7 @@ function App() {
       } else if (data.status === "completed") {
         if (submitEpoch !== resultEpochRef.current) return;
         setSubmitting(false);
+        setTaskPhase("done");
         setTaskStateText(copy.taskState.done);
         if (data.language) {
           setTranscriptionLanguage(String(data.language).toLowerCase());
@@ -1080,11 +1169,13 @@ function App() {
         }
       } else {
         setSubmitting(false);
+        setTaskPhase("idle");
         setTaskStateText("");
         setNotice(data.message || copy.notices.requestAccepted);
       }
     } catch (e) {
       setSubmitting(false);
+      setTaskPhase("idle");
       setTaskStateText("");
       setError(e.message || copy.errors.transcribeFailed);
     }
@@ -1096,6 +1187,7 @@ function App() {
     invalidatePollingSession();
     const loadEpoch = resetResultWorkspace(true);
     setSubmitting(true);
+    setTaskPhase("historyLoading");
     setTaskStateText(copy.taskState.historyLoading);
 
     try {
@@ -1114,6 +1206,7 @@ function App() {
       setError(e.message || copy.errors.historyLoadFailed);
     } finally {
       setSubmitting(false);
+      setTaskPhase("idle");
       setTaskStateText("");
       unlockWorkspaceScroll();
     }
@@ -1235,6 +1328,20 @@ function App() {
     [result, transcriptEditText, transcriptSourceText]
   );
   const activeTranscriptText = result ? (transcriptEditText || transcriptSourceText) : "";
+  const resultSectionValues = useMemo(() => {
+    if (!result) return [];
+    return buildResultSections({
+      text: activeTranscriptText,
+      summary: result.summary || "",
+      typeLabel: resolveTypeLabel(result),
+      copy,
+    });
+  }, [activeTranscriptText, copy, result, transcriptionType]);
+  const processingStepIndex = Math.max(
+    0,
+    Math.min(PROCESSING_STEP_KEYS.length, TASK_PHASE_STEP_INDEX[taskPhase] ?? 0)
+  );
+  const showProcessingSteps = submitting && activeTab === "transcribe";
 
   useEffect(() => {
     setTranscriptEditText(transcriptSourceText);
@@ -1749,6 +1856,108 @@ function App() {
     </View>
   );
 
+  const renderUsageSummaryBar = () => {
+    const hasUsage = Boolean(effectiveUsage);
+    const usedLabel = isFreeUsagePlan
+      ? `${formatSecondsToHourMinute(usedAudioSeconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
+      : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`;
+    const remainingLabel = isFreeUsagePlan
+      ? `${copy.usageRemaining}: ${formatSecondsToHourMinute(remainingAudioSeconds)}`
+      : copy.usageUnlimited;
+    const progressWidth = isFreeUsagePlan ? `${usagePercent}%` : "100%";
+    const ctaLabel = isFreeUsagePlan ? (copy.planLabels?.pro || "Pro") : planLabel;
+
+    return (
+      <FadeInView delay={40} duration={260}>
+        <NmPressable
+          style={[styles.topUsageCard, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+          onPress={() => setActiveTab("settings")}
+        >
+          <View style={styles.topUsageHeader}>
+            <View style={styles.topUsageTextBlock}>
+              <Text style={[styles.topUsageLabel, { color: activeTheme.textSecondary }]}>{copy.usageThisMonth}</Text>
+              <Text style={[styles.topUsageValue, { color: activeTheme.textPrimary }]}>
+                {hasUsage ? usedLabel : copy.usageLoading}
+              </Text>
+            </View>
+            <View style={[styles.topUsagePill, { backgroundColor: activeTheme.noticeBg, borderColor: activeTheme.accent }]}>
+              <Text style={[styles.topUsagePillText, { color: activeTheme.accent }]}>{ctaLabel}</Text>
+            </View>
+          </View>
+          <View style={[styles.topUsageProgressTrack, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+            <View style={[styles.topUsageProgressFill, { backgroundColor: activeTheme.accent, width: hasUsage ? progressWidth : "12%" }]} />
+          </View>
+          <Text style={[styles.topUsageRemaining, { color: activeTheme.textSecondary }]}>
+            {hasUsage ? remainingLabel : copy.usageUnavailable}
+          </Text>
+        </NmPressable>
+      </FadeInView>
+    );
+  };
+
+  const renderProcessingSteps = () => {
+    if (!showProcessingSteps) return null;
+    const progressWidth = taskPhase === "done"
+      ? "100%"
+      : `${Math.min(100, Math.max(12, ((processingStepIndex + 0.45) / PROCESSING_STEP_KEYS.length) * 100))}%`;
+    const activeTypeLabel = copy.transcriptionTypes?.[transcriptionType] || transcriptionType;
+
+    return (
+      <View style={[styles.processingPanel, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+        <View style={styles.processingHeader}>
+          <View style={[styles.processingMark, { backgroundColor: activeTheme.noticeBg, borderColor: activeTheme.accent }]}>
+            <Text style={[styles.processingMarkText, { color: activeTheme.accent }]}>AI</Text>
+          </View>
+          <View style={styles.processingHeaderText}>
+            <Text style={[styles.processingTitle, { color: activeTheme.textPrimary }]}>{copy.processingTitle}</Text>
+            <Text style={[styles.processingSubcopy, { color: activeTheme.textSecondary }]}>
+              {activeTypeLabel} · {taskStateText || copy.processingSubcopy}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.processingStepList}>
+          {PROCESSING_STEP_KEYS.map((stepKey, index) => {
+            const done = taskPhase === "done" || index < processingStepIndex;
+            const active = taskPhase !== "done" && index === processingStepIndex;
+            return (
+              <View key={stepKey} style={styles.processingStepRow}>
+                <View
+                  style={[
+                    styles.processingStepDot,
+                    done ? styles.processingStepDotDone : active ? styles.processingStepDotActive : styles.processingStepDotWait,
+                    { borderColor: done ? "#4ADE80" : active ? activeTheme.accent : activeTheme.inputBorder },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.processingStepDotText,
+                      { color: done ? "#16A34A" : active ? activeTheme.accent : activeTheme.textSecondary },
+                    ]}
+                  >
+                    {done ? "✓" : active ? "•" : ""}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.processingStepText,
+                    { color: active ? activeTheme.textPrimary : activeTheme.textSecondary },
+                    active ? styles.processingStepTextActive : null,
+                  ]}
+                >
+                  {copy.processingSteps?.[stepKey] || stepKey}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+        <View style={[styles.processingProgressTrack, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+          <View style={[styles.processingProgressFill, { backgroundColor: activeTheme.accent, width: progressWidth }]} />
+        </View>
+      </View>
+    );
+  };
+
   if (bootLoading) {
     return (
       <SafeAreaProvider>
@@ -2136,6 +2345,8 @@ function App() {
             </View>
           </FadeInView>
 
+          {renderUsageSummaryBar()}
+
           {activeTab === "transcribe" ? (
             <ScrollView
               contentContainerStyle={styles.scrollContent}
@@ -2179,132 +2390,203 @@ function App() {
                 <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                   <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeSettings}</Text>
 
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.segmentScroll}
-                    contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
-                  >
+                  <View style={styles.typeCardGrid}>
                     {transcriptionTypeOptions.map((item) => (
-                      <SegmentButton
+                      <NmPressable
                         key={item.key}
-                        label={item.label}
-                        active={transcriptionType === item.key}
+                        style={[
+                          styles.typeCard,
+                          {
+                            backgroundColor: transcriptionType === item.key ? activeTheme.noticeBg : activeTheme.inputBg,
+                            borderColor: transcriptionType === item.key ? activeTheme.accent : activeTheme.inputBorder,
+                          },
+                        ]}
                         onPress={() => setTranscriptionType(item.key)}
-                        theme={activeTheme}
-                      />
+                      >
+                        <View
+                          style={[
+                            styles.typeCardIcon,
+                            {
+                              backgroundColor: transcriptionType === item.key ? activeTheme.accent : activeTheme.surface,
+                              borderColor: transcriptionType === item.key ? activeTheme.accent : activeTheme.inputBorder,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.typeCardIconText, { color: transcriptionType === item.key ? "#ffffff" : activeTheme.textSecondary }]}>
+                            {TRANSCRIPTION_TYPE_CARD_META[item.key]?.icon || item.label.slice(0, 1)}
+                          </Text>
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.typeCardLabel,
+                            { color: transcriptionType === item.key ? activeTheme.accent : activeTheme.textSecondary },
+                          ]}
+                        >
+                          {item.label}
+                        </Text>
+                      </NmPressable>
                     ))}
-                  </ScrollView>
-
-                  <NmPressable style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]} onPress={pickAudioFile}>
-                    <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.pickFile}</Text>
-                  </NmPressable>
-
-                  <Text style={[styles.fileInfo, { color: activeTheme.textPrimary }]}>
-                    {pickedFile
-                      ? `${pickedFile.name} (${Math.max(1, Math.round((pickedFile.size || 0) / 1024))} KB · ${pickedFile.mimeType})`
-                      : copy.noFile}
-                  </Text>
+                  </View>
 
                   <NmPressable
                     style={[
-                      styles.primaryButton,
-                      { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
+                      styles.uploadZone,
+                      {
+                        backgroundColor: activeTheme.inputBg,
+                        borderColor: pickedFile ? activeTheme.accent : activeTheme.inputBorder,
+                      },
+                    ]}
+                    onPress={pickAudioFile}
+                  >
+                    <Text style={[styles.uploadZoneIcon, { color: activeTheme.accent }]}>↑</Text>
+                    <Text style={[styles.uploadZoneTitle, { color: activeTheme.textPrimary }]}>
+                      {pickedFile ? `${copy.selectedFileLabel}: ${pickedFile.name}` : copy.uploadZoneTitle}
+                    </Text>
+                    <Text style={[styles.uploadZoneHint, { color: activeTheme.textSecondary }]}>
+                      {pickedFile
+                        ? `${Math.max(1, Math.round((pickedFile.size || 0) / 1024))} KB · ${pickedFile.mimeType}`
+                        : copy.uploadZoneHint}
+                    </Text>
+                  </NmPressable>
+
+                  <NmPressable
+                    style={[
+                      styles.startTranscribeButton,
+                      { backgroundColor: activeTheme.textPrimary, borderColor: activeTheme.textPrimary },
                       submitting ? styles.buttonDisabled : null,
                     ]}
                     onPress={handleTranscribe}
                     disabled={submitting}
                   >
-                    <Text style={styles.primaryButtonText}>{submitting ? copy.transcribing : copy.transcribeStart}</Text>
+                    <Text style={[styles.startTranscribeButtonText, { color: activeTheme.bg }]}>
+                      {submitting ? copy.transcribing : copy.transcribeStart}
+                    </Text>
                   </NmPressable>
 
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{selectedTypeHint}</Text>
                   {isGuestMode ? (
                     <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
                   ) : null}
-                  {taskStateText ? <Text style={[styles.taskStateText, { color: activeTheme.accent }]}>{taskStateText}</Text> : null}
+                  {renderProcessingSteps()}
                 </View>
               </FadeInView>
 
               {result ? (
                 <FadeInView key="transcribe-result" delay={100}>
                   <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                    <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeResult}</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.taskId}: {result.task_id}</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.itemType}: {resolveTypeLabel(result)}</Text>
-                    <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.charCount}: {result.characters || 0}</Text>
-
-                    <Text style={styles.sectionTitle}>{copy.correctedText}</Text>
-                    <TextInput
-                      multiline
-                      scrollEnabled
-                      textAlignVertical="top"
-                      value={transcriptEditText}
-                      onChangeText={setTranscriptEditText}
-                      style={[
-                        styles.resultBox,
-                        styles.resultEditor,
-                        { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary, height: resultTextBoxHeight },
-                      ]}
-                      onTouchStart={lockWorkspaceScroll}
-                      onTouchEnd={unlockWorkspaceScroll}
-                      onTouchCancel={unlockWorkspaceScroll}
-                      onFocus={lockWorkspaceScroll}
-                      onBlur={unlockWorkspaceScroll}
-                    />
-
-                    <View style={styles.transcriptEditHeader}>
-                      <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
-                        {copy.transcriptEditTitle} · {transcriptHasUnsavedEdit ? copy.transcriptEditChanged : copy.transcriptEditSaved}
-                      </Text>
+                    <View style={styles.resultHeaderBlock}>
+                      <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.transcribeResult}</Text>
+                      <View style={styles.resultMetaRow}>
+                        <View style={[styles.resultTag, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.resultTagText, { color: activeTheme.textSecondary }]}>{resolveTypeLabel(result)}</Text>
+                        </View>
+                        <View style={[styles.resultTag, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.resultTagText, { color: activeTheme.textSecondary }]}>
+                            {Number(result.characters || 0).toLocaleString()}{uiLanguage === "en" ? " chars" : "자"}
+                          </Text>
+                        </View>
+                        <View style={[styles.resultTag, { backgroundColor: "rgba(74,222,128,0.12)", borderColor: "rgba(74,222,128,0.38)" }]}>
+                          <Text style={[styles.resultTagText, { color: "#16A34A" }]}>{copy.taskState.done}</Text>
+                        </View>
+                      </View>
+                      <Text numberOfLines={1} style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.taskId}: {result.task_id}</Text>
                     </View>
-                    <View style={styles.exportActionRow}>
-                      <NmPressable
-                        style={[
-                          styles.tinyButton,
-                          styles.exportTinyButton,
-                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                          (transcriptEditSaving || !transcriptHasUnsavedEdit) ? styles.buttonDisabled : null,
-                        ]}
-                        onPress={handleSaveTranscriptCorrection}
-                        disabled={transcriptEditSaving || !transcriptHasUnsavedEdit}
-                      >
-                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>
-                          {transcriptEditSaving ? copy.transcriptEditSaving : copy.transcriptEditSave}
+
+                    <View style={[styles.resultSectionCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                      {resultSectionValues.map((section, index) => (
+                        <View key={section.key}>
+                          <View style={styles.resultSectionRow}>
+                            <Text style={[styles.resultSectionKey, { color: activeTheme.textSecondary }]}>{section.label}</Text>
+                            <Text selectable style={[styles.resultSectionValue, { color: activeTheme.textPrimary }]}>
+                              {section.value}
+                            </Text>
+                          </View>
+                          {index < resultSectionValues.length - 1 ? (
+                            <View style={[styles.resultSectionDivider, { backgroundColor: activeTheme.inputBorder }]} />
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+
+                    <View style={[styles.resultEditPanel, { backgroundColor: activeTheme.surfaceSoft || activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
+                      <View style={styles.transcriptEditHeader}>
+                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
+                          {copy.transcriptEditTitle} · {transcriptHasUnsavedEdit ? copy.transcriptEditChanged : copy.transcriptEditSaved}
                         </Text>
-                      </NmPressable>
-                      <NmPressable
+                      </View>
+                      <TextInput
+                        multiline
+                        scrollEnabled
+                        textAlignVertical="top"
+                        value={transcriptEditText}
+                        onChangeText={setTranscriptEditText}
                         style={[
-                          styles.tinyButton,
-                          styles.exportTinyButton,
-                          { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-                          !transcriptHasUnsavedEdit ? styles.buttonDisabled : null,
+                          styles.resultBox,
+                          styles.resultEditor,
+                          { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary, height: resultEditorHeight },
                         ]}
-                        onPress={handleResetTranscriptEdit}
-                        disabled={!transcriptHasUnsavedEdit}
-                      >
-                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.transcriptEditReset}</Text>
-                      </NmPressable>
+                        onTouchStart={lockWorkspaceScroll}
+                        onTouchEnd={unlockWorkspaceScroll}
+                        onTouchCancel={unlockWorkspaceScroll}
+                        onFocus={lockWorkspaceScroll}
+                        onBlur={unlockWorkspaceScroll}
+                      />
+                      <View style={styles.exportActionRow}>
+                        <NmPressable
+                          style={[
+                            styles.tinyButton,
+                            styles.exportTinyButton,
+                            { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                            (transcriptEditSaving || !transcriptHasUnsavedEdit) ? styles.buttonDisabled : null,
+                          ]}
+                          onPress={handleSaveTranscriptCorrection}
+                          disabled={transcriptEditSaving || !transcriptHasUnsavedEdit}
+                        >
+                          <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>
+                            {transcriptEditSaving ? copy.transcriptEditSaving : copy.transcriptEditSave}
+                          </Text>
+                        </NmPressable>
+                        <NmPressable
+                          style={[
+                            styles.tinyButton,
+                            styles.exportTinyButton,
+                            { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                            !transcriptHasUnsavedEdit ? styles.buttonDisabled : null,
+                          ]}
+                          onPress={handleResetTranscriptEdit}
+                          disabled={!transcriptHasUnsavedEdit}
+                        >
+                          <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.transcriptEditReset}</Text>
+                        </NmPressable>
+                      </View>
                     </View>
 
-                    <View style={styles.exportActionRow}>
+                    <View style={styles.resultExportGrid}>
                       <NmPressable
-                        style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        style={[styles.resultExportButton, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
                         onPress={() => handleCopyToClipboard(copy.correctedText, activeTranscriptText)}
                       >
-                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                        <Text style={[styles.resultExportIcon, { color: activeTheme.textSecondary }]}>C</Text>
+                        <Text numberOfLines={1} style={[styles.resultExportLabel, { color: activeTheme.textSecondary }]}>{copy.exportCopyShort}</Text>
                       </NmPressable>
                       <NmPressable
-                        style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        style={[styles.resultExportButton, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
                         onPress={() => handleShareExport(copy.correctedText, activeTranscriptText, "txt")}
                       >
-                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                        <Text style={[styles.resultExportIcon, { color: activeTheme.textSecondary }]}>T</Text>
+                        <Text numberOfLines={1} style={[styles.resultExportLabel, { color: activeTheme.textSecondary }]}>{copy.exportTxtShort}</Text>
                       </NmPressable>
                       <NmPressable
-                        style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                        style={[
+                          styles.resultExportButton,
+                          styles.resultExportButtonPrimary,
+                          { backgroundColor: activeTheme.noticeBg, borderColor: activeTheme.accent },
+                        ]}
                         onPress={() => handleShareExport(copy.correctedText, activeTranscriptText, "docx")}
                       >
-                        <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                        <Text style={[styles.resultExportIcon, { color: activeTheme.accent }]}>D</Text>
+                        <Text numberOfLines={1} style={[styles.resultExportLabel, styles.resultExportLabelPrimary, { color: activeTheme.accent }]}>{copy.exportDocxShort}</Text>
                       </NmPressable>
                     </View>
 
@@ -2320,12 +2602,6 @@ function App() {
                       <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{summaryLoading ? copy.generatingSummary : summaryButtonLabel}</Text>
                     </NmPressable>
 
-                    {result.summary ? (
-                      <View style={[styles.summaryBox, { backgroundColor: activeTheme.noticeBg }]}>
-                        <Text style={[styles.sectionTitle, { color: activeTheme.textPrimary }]}>{`${resolveTypeLabel(result)} ${copy.summary}`}</Text>
-                        <Text selectable style={[styles.resultText, { color: activeTheme.textPrimary }]}>{result.summary}</Text>
-                      </View>
-                    ) : null}
                   </View>
                 </FadeInView>
               ) : null}
@@ -3538,6 +3814,208 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  topUsageCard: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 7,
+  },
+  topUsageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  topUsageTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  topUsageLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  topUsageValue: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  topUsagePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  topUsagePillText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  topUsageProgressTrack: {
+    height: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  topUsageProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  topUsageRemaining: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  typeCardGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  typeCard: {
+    flex: 1,
+    minHeight: 82,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  typeCardIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  typeCardIconText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  typeCardLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  uploadZone: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    paddingHorizontal: 12,
+    paddingVertical: 18,
+    alignItems: "center",
+    gap: 5,
+  },
+  uploadZoneIcon: {
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  uploadZoneTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  uploadZoneHint: {
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  startTranscribeButton: {
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  startTranscribeButtonText: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  processingPanel: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    gap: 12,
+  },
+  processingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  processingMark: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  processingMarkText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  processingHeaderText: {
+    flex: 1,
+    gap: 3,
+  },
+  processingTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  processingSubcopy: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+  processingStepList: {
+    gap: 8,
+  },
+  processingStepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  processingStepDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  processingStepDotDone: {
+    backgroundColor: "rgba(74,222,128,0.16)",
+  },
+  processingStepDotActive: {
+    backgroundColor: "rgba(91,130,240,0.12)",
+  },
+  processingStepDotWait: {
+    backgroundColor: "rgba(148,163,184,0.08)",
+  },
+  processingStepDotText: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: "900",
+  },
+  processingStepText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+  processingStepTextActive: {
+    fontWeight: "900",
+  },
+  processingProgressTrack: {
+    height: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  processingProgressFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
   usageMetaGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -3714,16 +4192,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 11,
   },
-  fileInfo: {
-    color: NM.textPrimary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  taskStateText: {
-    color: NM.accent,
-    fontWeight: "700",
-    fontSize: 12,
-  },
   metaText: {
     color: NM.textSecondary,
     fontSize: 11,
@@ -3733,6 +4201,59 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontSize: 13,
     fontWeight: "800",
+  },
+  resultHeaderBlock: {
+    gap: 7,
+  },
+  resultMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  resultTag: {
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  resultTagText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  resultSectionCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 0,
+  },
+  resultSectionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 7,
+  },
+  resultSectionKey: {
+    width: 52,
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+  },
+  resultSectionValue: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  resultSectionDivider: {
+    height: StyleSheet.hairlineWidth,
+  },
+  resultEditPanel: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    gap: 8,
   },
   resultBox: {
     borderRadius: NM.radiusSm,
@@ -3754,17 +4275,41 @@ const styles = StyleSheet.create({
   transcriptEditHeader: {
     marginTop: 8,
   },
-  summaryBox: {
-    marginTop: 8,
-    borderRadius: NM.radiusSm,
-    backgroundColor: NM.noticeBg,
-    padding: 12,
-    gap: 6,
+  resultExportGrid: {
+    flexDirection: "row",
+    gap: 7,
   },
-  resultText: {
-    color: NM.textPrimary,
-    fontSize: 12,
-    lineHeight: 19,
+  resultExportButton: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  resultExportButtonPrimary: {
+    shadowColor: "#5B82F0",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  resultExportIcon: {
+    fontSize: 13,
+    lineHeight: 15,
+    fontWeight: "900",
+  },
+  resultExportLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  resultExportLabelPrimary: {
+    fontWeight: "900",
   },
   recordBlock: {
     marginTop: 6,
