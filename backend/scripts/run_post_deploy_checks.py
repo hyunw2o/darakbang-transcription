@@ -104,6 +104,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--auth-token", default=os.getenv("MALLOG24_AUTH_TOKEN", ""), help="Auth token for correction smoke. Defaults to MALLOG24_AUTH_TOKEN.")
     parser.add_argument("--store-correction-sample", action="store_true", help="Insert a smoke correction sample instead of unchanged preflight.")
     parser.add_argument("--require-correction-smoke", action="store_true", help="Fail when no auth token is available for correction smoke.")
+    parser.add_argument("--exercise-saved-record-edit", action="store_true", help="Create, update, capture, and clean up a smoke saved record.")
+    parser.add_argument("--require-saved-record-edit-smoke", action="store_true", help="Fail when no auth token is available for saved-record edit smoke.")
     parser.add_argument("--audio-file", default="", help="Optional short audio file for transcription smoke.")
     parser.add_argument("--expect-corrected-contains", action="append", default=[], help="Expected term in corrected_text. Can be repeated.")
     parser.add_argument("--client-platform", action="append", default=[], help="Client platform to smoke, e.g. web or android. Can be repeated. Default: web.")
@@ -126,6 +128,9 @@ def run_self_test() -> int:
     assert normalize_api_url("api.example.test") == "https://api.example.test"
     args = parse_args_for_self_test(["--client-platform", "web", "--client-platform", "android"])
     assert args.client_platform == ["web", "android"]
+    args = parse_args_for_self_test(["--exercise-saved-record-edit", "--require-saved-record-edit-smoke"])
+    assert args.exercise_saved_record_edit is True
+    assert args.require_saved_record_edit_smoke is True
     print("post-deploy-checks-self-test-ok")
     return 0
 
@@ -179,6 +184,25 @@ def main() -> int:
             "correction-sample-smoke",
             "--auth-token or MALLOG24_AUTH_TOKEN is required.",
             required=bool(args.require_correction_smoke),
+        ))
+
+    if args.auth_token:
+        saved_record_command = [
+            sys.executable,
+            "backend/scripts/smoke_saved_record_edit_api.py",
+            "--api-url",
+            api_url,
+            "--bearer-token",
+            args.auth_token,
+        ]
+        if args.exercise_saved_record_edit:
+            saved_record_command.append("--exercise-write-path")
+        checks.append(run_command("saved-record-edit-smoke", saved_record_command, required=True))
+    else:
+        checks.append(skipped_check(
+            "saved-record-edit-smoke",
+            "--auth-token or MALLOG24_AUTH_TOKEN is required.",
+            required=bool(args.require_saved_record_edit_smoke),
         ))
 
     if args.audio_file:
