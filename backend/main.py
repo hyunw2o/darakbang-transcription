@@ -8146,6 +8146,31 @@ async def update_record(
     }
 
 
+@app.delete("/api/records/{record_id}")
+async def delete_record(
+    record_id: int,
+    authorization: str | None = Header(default=None),
+):
+    """로그인 사용자별 저장 기록본 삭제"""
+    user = await _get_current_user(authorization)
+    await _fetch_saved_record_or_404(record_id, user["id"])
+    try:
+        query = (
+            _get_supabase_client()
+            .table("saved_records")
+            .delete()
+            .eq("id", record_id)
+            .eq("user_id", user["id"])
+        )
+        await asyncio.to_thread(query.execute)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"saved_records 삭제 실패: {str(e)}")
+    return {
+        "success": True,
+        "deleted_id": record_id,
+    }
+
+
 @app.get("/api/records")
 async def get_records(
     category: str = "",
