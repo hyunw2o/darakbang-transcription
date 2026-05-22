@@ -1067,23 +1067,33 @@ export default function useMallogTranscription({
     setSavingCategory(category)
 
     try {
+      const draftSource = recordDraftSources[category] || {}
+      const originalDraftText = String(draftSource.originalText || '').trim()
+      const shouldCaptureCorrection = originalDraftText && originalDraftText !== content
       const formData = new FormData()
       formData.append('category', category)
       formData.append('title', recordTypeLabels[category] || category)
       formData.append('content', content)
       formData.append('task_id', result?.task_id || '')
       formData.append('source_type', result?.transcription_type || '')
+      if (shouldCaptureCorrection) {
+        formData.append('correction_original_text', originalDraftText)
+        formData.append('correction_language', draftSource.language || result?.language || language || messages.defaultLanguage)
+        formData.append('correction_metadata_json', JSON.stringify({
+          transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
+          source_text_preview: String(draftSource.sourceText || '').slice(0, 1000),
+        }))
+      }
 
       const response = await apiFetch(`${apiUrl}/api/records`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
       })
-      await readResponseData(response, messages.saveFailed)
+      const data = await readResponseData(response, messages.saveFailed)
 
-      const draftSource = recordDraftSources[category] || {}
-      const originalDraftText = String(draftSource.originalText || '').trim()
-      if (originalDraftText && originalDraftText !== content) {
+      const correctionSample = data?.correction_sample
+      if (shouldCaptureCorrection && (!correctionSample || correctionSample.success === false)) {
         try {
           await apiFetch(`${apiUrl}/api/corrections`, {
             method: 'POST',

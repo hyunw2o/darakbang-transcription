@@ -1367,23 +1367,33 @@ function App() {
     setSavingCategory(category);
 
     try {
+      const draftSource = recordDraftSources[category] || {};
+      const originalDraftText = String(draftSource.originalText || "").trim();
+      const shouldCaptureCorrection = Boolean(originalDraftText && originalDraftText !== content);
       const body = new FormData();
       body.append("category", category);
       body.append("title", copy.recordCategories[category] || category);
       body.append("content", content);
       body.append("task_id", result?.task_id || "");
       body.append("source_type", result?.transcription_type || transcriptionType);
+      if (shouldCaptureCorrection) {
+        body.append("correction_original_text", originalDraftText);
+        body.append("correction_language", draftSource.language || result?.language || transcriptionLanguage || "ko");
+        body.append("correction_metadata_json", JSON.stringify({
+          transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
+          source_text_preview: String(draftSource.sourceText || "").slice(0, 1000),
+        }));
+      }
 
-      await requestApi("/api/records", {
+      const data = await requestApi("/api/records", {
         method: "POST",
         token: authToken,
         body,
       });
 
       await fetchRecords(authToken);
-      const draftSource = recordDraftSources[category] || {};
-      const originalDraftText = String(draftSource.originalText || "").trim();
-      if (originalDraftText && originalDraftText !== content) {
+      const correctionSample = data?.correction_sample;
+      if (shouldCaptureCorrection && (!correctionSample || correctionSample.success === false)) {
         try {
           await requestApi("/api/corrections", {
             method: "POST",

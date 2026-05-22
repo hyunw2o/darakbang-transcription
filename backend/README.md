@@ -268,6 +268,14 @@ MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
   --exercise-saved-record-edit
 ```
 
+기록본 초안 저장 요청 안에서 수정 샘플까지 함께 캡처되는 경로를 확인하려면 아래 옵션을 사용합니다.
+
+```bash
+MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
+  --api-url https://api.mallog24.com \
+  --exercise-saved-record-create-capture
+```
+
 배포 직후 짧은 파일로 실제 변환 경로를 확인하려면 아래처럼 실행합니다.
 
 ```bash

@@ -107,6 +107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--store-correction-sample", action="store_true", help="Insert a smoke correction sample instead of unchanged preflight.")
     parser.add_argument("--require-correction-smoke", action="store_true", help="Fail when no auth token is available for correction smoke.")
     parser.add_argument("--exercise-saved-record-edit", action="store_true", help="Create, update, capture, and clean up a smoke saved record.")
+    parser.add_argument("--exercise-saved-record-create-capture", action="store_true", help="Create a saved record and capture a record-draft correction in the same request.")
     parser.add_argument("--require-saved-record-edit-smoke", action="store_true", help="Fail when no auth token is available for saved-record edit smoke.")
     parser.add_argument("--audio-file", default="", help="Optional short audio file for transcription smoke.")
     parser.add_argument("--expect-corrected-contains", action="append", default=[], help="Expected term in corrected_text. Can be repeated.")
@@ -136,6 +137,8 @@ def run_self_test() -> int:
     args = parse_args_for_self_test(["--exercise-saved-record-edit", "--require-saved-record-edit-smoke"])
     assert args.exercise_saved_record_edit is True
     assert args.require_saved_record_edit_smoke is True
+    args = parse_args_for_self_test(["--exercise-saved-record-create-capture"])
+    assert args.exercise_saved_record_create_capture is True
     print("post-deploy-checks-self-test-ok")
     return 0
 
@@ -222,6 +225,20 @@ def main() -> int:
         if args.exercise_saved_record_edit:
             saved_record_command.append("--exercise-write-path")
         checks.append(run_command("saved-record-edit-smoke", saved_record_command, required=True))
+        if args.exercise_saved_record_create_capture:
+            checks.append(run_command(
+                "saved-record-create-capture-smoke",
+                [
+                    sys.executable,
+                    "backend/scripts/smoke_saved_record_edit_api.py",
+                    "--api-url",
+                    api_url,
+                    "--bearer-token",
+                    args.auth_token,
+                    "--exercise-create-capture",
+                ],
+                required=True,
+            ))
     else:
         checks.append(skipped_check(
             "saved-record-edit-smoke",

@@ -198,11 +198,76 @@ def run_write_path(args: argparse.Namespace) -> dict[str, Any]:
     return result_payload
 
 
+def run_create_capture_path(args: argparse.Namespace) -> dict[str, Any]:
+    base_url = normalize_api_url(args.api_url)
+    task_id = args.task_id or f"saved-record-create-capture-smoke-{uuid.uuid4().hex}"
+    record_id: int | None = None
+    deleted_record_id: int | None = None
+    correction_sample_id: Any = None
+    correction_sample_stored = False
+    result_payload: dict[str, Any] = {}
+
+    try:
+        created = request_api(
+            f"{base_url}/api/records",
+            method="POST",
+            token=args.bearer_token,
+            timeout=args.timeout,
+            form_body={
+                "category": args.category,
+                "title": args.title,
+                "content": args.edited_text,
+                "task_id": task_id,
+                "source_type": args.source_type,
+                "correction_original_text": args.original_text,
+                "correction_language": args.language,
+                "correction_metadata_json": json.dumps({
+                    "smoke_test": True,
+                    "source": "smoke_saved_record_create_capture_api",
+                }),
+            },
+        )
+        validate_success(created, "record create")
+        created_record = created.get("record") if isinstance(created.get("record"), dict) else {}
+        record_id = int(created_record.get("id") or 0)
+        if record_id <= 0:
+            raise RuntimeError(f"Record create response did not include id: {created}")
+
+        correction = created.get("correction_sample") if isinstance(created.get("correction_sample"), dict) else {}
+        validate_success(correction, "create correction capture")
+        correction_sample_stored = bool(correction.get("stored"))
+        sample = correction.get("sample") if isinstance(correction.get("sample"), dict) else {}
+        correction_sample_id = sample.get("id")
+        if not correction_sample_stored:
+            raise RuntimeError(f"Create correction capture did not store a sample: {correction}")
+
+        result_payload = {
+            "success": True,
+            "mode": "create-capture-path",
+            "created_record_id": record_id,
+            "correction_sample_stored": correction_sample_stored,
+            "correction_sample_id": correction_sample_id,
+        }
+    finally:
+        if record_id and not args.keep_record:
+            deleted = request_api(
+                f"{base_url}/api/records/{record_id}",
+                method="DELETE",
+                token=args.bearer_token,
+                timeout=args.timeout,
+            )
+            validate_success(deleted, "record cleanup")
+            deleted_record_id = deleted.get("deleted_id")
+    result_payload["deleted_record_id"] = deleted_record_id
+    return result_payload
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-url", default=DEFAULT_API_URL, help=f"Backend API URL. Default: {DEFAULT_API_URL}")
     parser.add_argument("--bearer-token", default=os.getenv("MALLOG24_AUTH_TOKEN", ""), help="Auth token. Defaults to MALLOG24_AUTH_TOKEN.")
     parser.add_argument("--exercise-write-path", action="store_true", help="Create, update, capture a smoke correction, then delete a saved record.")
+    parser.add_argument("--exercise-create-capture", action="store_true", help="Create a saved record and capture a record-draft correction in the same request.")
     parser.add_argument("--keep-record", action="store_true", help="Do not delete the smoke saved record after --exercise-write-path.")
     parser.add_argument("--missing-record-id", type=int, default=DEFAULT_MISSING_RECORD_ID, help="Record id used for non-mutating preflight.")
     parser.add_argument("--category", default="sermon_core_summary", help="Saved record category.")
@@ -225,7 +290,7 @@ def run_self_test() -> int:
     except RuntimeError:
         payload = sanitize_result({
             "success": True,
-            "mode": "write-path",
+            "mode": "create-capture-path",
             "created_record_id": 10,
             "deleted_record_id": 10,
             "correction_sample_stored": True,
@@ -233,6 +298,7 @@ def run_self_test() -> int:
         })
         assert payload["success"] is True
         assert payload["correction_sample_stored"] is True
+        assert payload["mode"] == "create-capture-path"
         print("saved-record-edit-smoke-self-test-ok")
         return 0
     raise AssertionError("Expected missing-record validation to fail on non-404.")
@@ -245,7 +311,9 @@ def main() -> int:
     if not args.bearer_token:
         raise SystemExit("--bearer-token or MALLOG24_AUTH_TOKEN is required.")
 
-    if args.exercise_write_path:
+    if args.exercise_create_capture:
+        payload = run_create_capture_path(args)
+    elif args.exercise_write_path:
         payload = run_write_path(args)
     else:
         payload = run_missing_record_preflight(args)

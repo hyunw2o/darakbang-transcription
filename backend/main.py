@@ -5734,6 +5734,17 @@ async def _read_optional_json_payload(request: Request) -> dict:
     return payload
 
 
+def _parse_optional_json_object(value: str, field_label: str) -> dict:
+    raw = str(value or "").strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception as exc:
+        raise ValueError(f"{field_label} JSON 형식이 올바르지 않습니다.") from exc
+    return payload if isinstance(payload, dict) else {}
+
+
 def _normalize_glossary_scalar(value, max_chars: int, field_label: str, *, required: bool = False) -> str:
     normalized = re.sub(r"\s+", " ", str(value or "")).strip()
     if required and not normalized:
@@ -8069,6 +8080,9 @@ async def save_record(
     title: str = Form(""),
     task_id: str = Form(""),
     source_type: str = Form(""),
+    correction_original_text: str = Form(""),
+    correction_language: str = Form("ko"),
+    correction_metadata_json: str = Form(""),
     authorization: str | None = Header(default=None),
 ):
     """로그인 사용자별 기록본 저장"""
@@ -8099,9 +8113,44 @@ async def save_record(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"saved_records 저장 실패: {str(e)}")
 
+    saved_record = response.data[0] if response.data else insert_row
+    correction_sample = {"success": True, "stored": False, "reason": "not_requested"}
+    original_content = str(correction_original_text or "").strip()
+    if original_content:
+        try:
+            correction_metadata = _parse_optional_json_object(
+                correction_metadata_json,
+                "correction_metadata_json",
+            )
+            correction_sample = await _store_user_correction_sample(
+                user["id"],
+                {
+                    "source_type": "record_draft",
+                    "category": normalized_category,
+                    "language": str(correction_language or "ko").strip().lower() or "ko",
+                    "task_id": task_id.strip() or "",
+                    "original_text": original_content,
+                    "edited_text": normalized_content,
+                    "metadata": {
+                        **correction_metadata,
+                        "record_id": saved_record.get("id"),
+                        "record_title": saved_record.get("title") or insert_row["title"],
+                        "source_type": source_type.strip() or "",
+                        "captured_by": "save_record",
+                    },
+                },
+            )
+        except Exception as e:
+            correction_sample = {
+                "success": False,
+                "stored": False,
+                "error": str(e),
+            }
+
     return {
         "success": True,
-        "record": response.data[0] if response.data else insert_row,
+        "record": saved_record,
+        "correction_sample": correction_sample,
     }
 
 
