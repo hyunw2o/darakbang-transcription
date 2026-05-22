@@ -179,7 +179,8 @@ python backend/scripts/check_feature_readiness.py \
 
 `missing_sql`에 항목이 있으면 표시된 SQL 파일을 Supabase SQL Editor에서 실행한 뒤
 `NOTIFY pgrst, 'reload schema';` 를 실행하세요.
-`fine_tuned_correction.ready_to_train`이 `true`가 되면 교정 샘플이 충분히 쌓인 상태입니다.
+`fine_tuned_correction.ready_to_train`이 `true`가 되면 export 필터를 통과한 교정 샘플이 충분히 쌓인 상태입니다.
+원본 row 수는 `sample_count`, 실제 학습에 남는 수는 `kept_examples`와 `dataset_stats.kept`로 확인합니다.
 그 전에는 4차 파인튜닝을 시작하지 않고 샘플 수집을 계속합니다.
 
 배포 직후 짧은 파일로 실제 변환 경로를 확인하려면 아래처럼 실행합니다.

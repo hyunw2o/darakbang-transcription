@@ -13,6 +13,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from export_correction_finetune_dataset import DEFAULT_SELECT, DEFAULT_SYSTEM_PROMPT, build_dataset
+
 
 REQUIRED_TABLES = {
     "user_glossary_terms": "backend/sql/user_glossary_terms.sql",
@@ -45,6 +47,9 @@ class FineTuneReadiness:
     sample_count: int | None
     min_examples: int
     enough_samples: bool
+    kept_examples: int | None
+    enough_kept_examples: bool
+    dataset_stats: dict[str, int] | None
     ready_to_train: bool
     ready_to_run: bool
 
@@ -117,14 +122,68 @@ def check_table(client: Any, table_name: str) -> TableReadiness:
         )
 
 
-def build_fine_tune_readiness(correction_sample_count: int | None, min_examples: int) -> FineTuneReadiness:
+def fetch_correction_samples(client: Any, batch_size: int = 500) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    offset = 0
+    batch_size = max(1, batch_size)
+
+    while True:
+        end_index = offset + batch_size - 1
+        response = (
+            client.table("user_correction_samples")
+            .select(DEFAULT_SELECT)
+            .order("created_at", desc=False)
+            .range(offset, end_index)
+            .execute()
+        )
+        rows = response.data or []
+        samples.extend(row for row in rows if isinstance(row, dict))
+        if len(rows) < batch_size:
+            break
+        offset = end_index + 1
+    return samples
+
+
+def build_export_stats(client: Any, batch_size: int = 500) -> dict[str, int]:
+    parser_args = argparse.Namespace(
+        min_chars=20,
+        max_chars=120000,
+        max_length_ratio=5.0,
+        system_prompt=DEFAULT_SYSTEM_PROMPT,
+    )
+    _examples, stats = build_dataset(fetch_correction_samples(client, batch_size=batch_size), parser_args)
+    return asdict(stats)
+
+
+def empty_export_stats() -> dict[str, int]:
+    return {
+        "total": 0,
+        "kept": 0,
+        "skipped_unchanged": 0,
+        "skipped_short": 0,
+        "skipped_too_long": 0,
+        "skipped_ratio": 0,
+        "skipped_duplicate": 0,
+        "skipped_invalid": 0,
+    }
+
+
+def build_fine_tune_readiness(
+    correction_sample_count: int | None,
+    min_examples: int,
+    dataset_stats: dict[str, int] | None = None,
+) -> FineTuneReadiness:
     enabled = os.getenv("ENABLE_FINE_TUNED_CORRECTION", "false").strip().lower() == "true"
     model_configured = bool((os.getenv("CORRECTION_FINE_TUNED_MODEL") or "").strip())
     try:
         max_chars = int(os.getenv("FINE_TUNED_CORRECTION_MAX_CHARS", "6000"))
     except ValueError:
         max_chars = 0
+    if dataset_stats is None and correction_sample_count == 0:
+        dataset_stats = empty_export_stats()
     enough_samples = correction_sample_count is not None and correction_sample_count >= min_examples
+    kept_examples = dataset_stats.get("kept") if dataset_stats else None
+    enough_kept_examples = kept_examples is not None and kept_examples >= min_examples
     return FineTuneReadiness(
         enabled=enabled,
         model_configured=model_configured,
@@ -132,7 +191,10 @@ def build_fine_tune_readiness(correction_sample_count: int | None, min_examples:
         sample_count=correction_sample_count,
         min_examples=min_examples,
         enough_samples=enough_samples,
-        ready_to_train=enough_samples,
+        kept_examples=kept_examples,
+        enough_kept_examples=enough_kept_examples,
+        dataset_stats=dataset_stats,
+        ready_to_train=enough_kept_examples,
         ready_to_run=enabled and model_configured and max_chars >= 1000,
     )
 
@@ -164,6 +226,12 @@ def parse_args() -> argparse.Namespace:
         default=50,
         help="Minimum correction samples before recommending a fine-tuning dataset export.",
     )
+    parser.add_argument(
+        "--skip-finetune-export-stats",
+        action="store_true",
+        help="Skip export-style kept sample counting.",
+    )
+    parser.add_argument("--export-batch-size", type=int, default=500, help="Supabase batch size for export-style stats.")
     parser.add_argument("--warn-only", action="store_true", help="Always exit 0 after printing readiness JSON.")
     parser.add_argument("--self-test", action="store_true", help="Run deterministic local summary test without network.")
     return parser.parse_args()
@@ -182,6 +250,23 @@ def run_self_test() -> int:
     assert payload["ok"] is False
     assert payload["missing_sql"][0]["table"] == "user_correction_samples"
     assert payload["fine_tuned_correction"]["ready_to_train"] is False
+    assert payload["fine_tuned_correction"]["kept_examples"] is None
+    empty_readiness = build_fine_tune_readiness(correction_sample_count=0, min_examples=50)
+    assert empty_readiness.kept_examples == 0
+    assert empty_readiness.dataset_stats and empty_readiness.dataset_stats["kept"] == 0
+    not_enough_kept = build_fine_tune_readiness(
+        correction_sample_count=100,
+        min_examples=50,
+        dataset_stats={"total": 100, "kept": 49},
+    )
+    assert not_enough_kept.enough_samples is True
+    assert not_enough_kept.ready_to_train is False
+    enough_kept = build_fine_tune_readiness(
+        correction_sample_count=100,
+        min_examples=50,
+        dataset_stats={"total": 100, "kept": 50},
+    )
+    assert enough_kept.ready_to_train is True
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 
@@ -201,10 +286,13 @@ def main() -> int:
 
     api = check_api_health(args.api_url, args.timeout)
     correction_count = next((item.count for item in tables if item.table == "user_correction_samples"), None)
+    dataset_stats = None
+    if not args.skip_finetune_export_stats and correction_count:
+        dataset_stats = build_export_stats(client, batch_size=args.export_batch_size)
     payload = summarize_result(
         tables,
         api,
-        build_fine_tune_readiness(correction_count, args.min_finetune_examples),
+        build_fine_tune_readiness(correction_count, args.min_finetune_examples, dataset_stats),
     )
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     if args.warn_only:
