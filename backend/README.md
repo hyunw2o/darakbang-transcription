@@ -198,6 +198,15 @@ python backend/scripts/run_feature_quality_gates.py
 python backend/scripts/run_feature_quality_gates.py --with-frontend-build
 ```
 
+배포 직전에는 직전 안정 커밋 기준의 비파괴 롤백 계획을 출력해 둡니다.
+출력되는 명령은 실행되지 않으며, 문제가 생겼을 때 `git revert` 기반으로 되돌리기 위한 참고용입니다.
+
+```bash
+python backend/scripts/print_rollback_plan.py \
+  --stable-ref HEAD~1 \
+  --deploy-ref HEAD
+```
+
 ```bash
 python backend/scripts/check_feature_readiness.py \
   --api-url https://api.mallog24.com \
