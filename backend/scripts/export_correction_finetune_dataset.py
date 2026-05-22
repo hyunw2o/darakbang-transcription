@@ -46,6 +46,8 @@ SELF_TEST_SAMPLES = [
 class ExportStats:
     total: int = 0
     kept: int = 0
+    training_kept: int = 0
+    validation_kept: int = 0
     skipped_smoke_test: int = 0
     skipped_unchanged: int = 0
     skipped_short: int = 0
@@ -233,6 +235,7 @@ def build_dataset(samples: list[dict[str, Any]], args: argparse.Namespace) -> tu
             stats.skipped_invalid += 1
 
     stats.kept = len(examples)
+    stats.training_kept = stats.kept
     return examples, stats
 
 
@@ -250,6 +253,36 @@ def write_stats(stats: ExportStats, stats_path: str) -> None:
     path.write_text(json.dumps(asdict(stats), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def resolve_validation_count(total_examples: int, args: argparse.Namespace) -> int:
+    if not args.validation_output:
+        return 0
+    min_training = max(1, args.min_training_after_split)
+    if total_examples <= min_training:
+        raise ValueError(
+            f"Need more than {min_training} kept example(s) to write a validation split."
+        )
+    if args.validation_count > 0:
+        count = args.validation_count
+    else:
+        ratio = max(0.0, min(0.95, args.validation_ratio))
+        count = round(total_examples * ratio)
+        if ratio > 0 and count == 0:
+            count = 1
+    if count <= 0:
+        return 0
+    return min(count, total_examples - min_training)
+
+
+def split_train_validation(
+    examples: list[dict[str, Any]],
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    validation_count = resolve_validation_count(len(examples), args)
+    if validation_count <= 0:
+        return examples, []
+    return examples[:-validation_count], examples[-validation_count:]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     source_group = parser.add_mutually_exclusive_group(required=True)
@@ -257,6 +290,7 @@ def parse_args() -> argparse.Namespace:
     source_group.add_argument("--input-json", help="Read samples from a local JSON file or '-' for stdin.")
     source_group.add_argument("--self-test", action="store_true", help="Run against built-in sample rows.")
     parser.add_argument("--output", help="Output JSONL path. Required unless --dry-run is used.")
+    parser.add_argument("--validation-output", help="Optional validation JSONL path. Uses the newest kept examples after filtering.")
     parser.add_argument("--stats-output", help="Optional JSON stats output path.")
     parser.add_argument("--dry-run", action="store_true", help="Build and validate examples without writing JSONL.")
     parser.add_argument("--table", default=DEFAULT_TABLE, help=f"Supabase table name. Default: {DEFAULT_TABLE}.")
@@ -269,6 +303,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-chars", type=int, default=120000, help="Skip examples with either side longer than this.")
     parser.add_argument("--max-length-ratio", type=float, default=5.0, help="Skip pairs where one side is much longer.")
     parser.add_argument("--min-kept", type=int, default=0, help="Fail if fewer than this many examples remain after filtering.")
+    parser.add_argument("--validation-ratio", type=float, default=0.1, help="Validation split ratio when --validation-output is set.")
+    parser.add_argument("--validation-count", type=int, default=0, help="Explicit validation example count. Overrides --validation-ratio when > 0.")
+    parser.add_argument("--min-training-after-split", type=int, default=1, help="Minimum training rows to keep when writing validation split.")
     parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="System prompt to embed in each JSONL row.")
     return parser.parse_args()
 
@@ -312,6 +349,21 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+        split_args = argparse.Namespace(
+            validation_output="validation.jsonl",
+            validation_ratio=0.34,
+            validation_count=0,
+            min_training_after_split=1,
+        )
+        train_split, validation_split = split_train_validation([{"id": 1}, {"id": 2}, {"id": 3}], split_args)
+        if len(train_split) != 2 or len(validation_split) != 1:
+            print("Self-test failed: validation ratio split is incorrect.", file=sys.stderr)
+            return 1
+        split_args.validation_count = 2
+        train_split, validation_split = split_train_validation([{"id": 1}, {"id": 2}, {"id": 3}], split_args)
+        if len(train_split) != 1 or len(validation_split) != 2:
+            print("Self-test failed: validation count split is incorrect.", file=sys.stderr)
+            return 1
     if args.min_kept and stats.kept < args.min_kept:
         print(json.dumps(asdict(stats), ensure_ascii=False, sort_keys=True))
         print(
@@ -319,8 +371,18 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    try:
+        training_examples, validation_examples = split_train_validation(examples, args)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    stats.training_kept = len(training_examples)
+    stats.validation_kept = len(validation_examples)
+
     if not args.dry_run and args.output:
-        write_jsonl(examples, args.output)
+        write_jsonl(training_examples, args.output)
+    if not args.dry_run and args.validation_output:
+        write_jsonl(validation_examples, args.validation_output)
     if args.stats_output:
         write_stats(stats, args.stats_output)
 

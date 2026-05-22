@@ -91,6 +91,15 @@ def run_script_self_tests() -> None:
                 {"role": "assistant", "content": "RVS and RUTC"},
             ]
         }, ensure_ascii=False) + "\n")
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".jsonl", delete=False) as handle:
+        validation_file = handle.name
+        handle.write(json.dumps({
+            "messages": [
+                {"role": "system", "content": "Correct transcript text."},
+                {"role": "user", "content": "H M C"},
+                {"role": "assistant", "content": "HMC"},
+            ]
+        }, ensure_ascii=False) + "\n")
     try:
         run_command([
             sys.executable,
@@ -98,12 +107,15 @@ def run_script_self_tests() -> None:
             "create",
             "--training-file",
             training_file,
+            "--validation-file",
+            validation_file,
             "--dry-run",
             "--min-examples",
             "1",
         ])
     finally:
         Path(training_file).unlink(missing_ok=True)
+        Path(validation_file).unlink(missing_ok=True)
 
 
 def run_frontend_build() -> None:

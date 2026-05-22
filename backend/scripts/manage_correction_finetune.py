@@ -132,6 +132,15 @@ def create_job(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    validation_stats = None
+    if args.validation_file:
+        validation_stats = validate_jsonl(args.validation_file)
+        if validation_stats.invalid_rows:
+            print(json.dumps(asdict(validation_stats), ensure_ascii=False, sort_keys=True), file=sys.stderr)
+            return 1
+        if validation_stats.rows <= 0:
+            print("Validation dataset has no valid rows.", file=sys.stderr)
+            return 1
 
     base_model = args.model or os.getenv("CORRECTION_FINE_TUNE_BASE_MODEL", DEFAULT_BASE_MODEL)
     suffix = args.suffix or os.getenv("CORRECTION_FINE_TUNE_SUFFIX", DEFAULT_SUFFIX)
@@ -143,6 +152,8 @@ def create_job(args: argparse.Namespace) -> int:
             "suffix": suffix,
             "training_file": args.training_file,
             "stats": asdict(stats),
+            "validation_file": args.validation_file or None,
+            "validation_stats": asdict(validation_stats) if validation_stats else None,
         }, ensure_ascii=False, sort_keys=True))
         return 0
 
@@ -153,22 +164,37 @@ def create_job(args: argparse.Namespace) -> int:
     training_file_id = uploaded_file_payload.get("id")
     if not training_file_id:
         raise RuntimeError("OpenAI did not return a training file id.")
+    uploaded_validation_file_payload = None
+    validation_file_id = None
+    if args.validation_file:
+        with Path(args.validation_file).open("rb") as validation_handle:
+            uploaded_validation_file = client.files.create(file=validation_handle, purpose="fine-tune")
+        uploaded_validation_file_payload = object_to_dict(uploaded_validation_file)
+        validation_file_id = uploaded_validation_file_payload.get("id")
+        if not validation_file_id:
+            raise RuntimeError("OpenAI did not return a validation file id.")
 
-    job = client.fine_tuning.jobs.create(
-        model=base_model,
-        training_file=training_file_id,
-        suffix=suffix,
-        metadata={
+    job_payload = {
+        "model": base_model,
+        "training_file": training_file_id,
+        "suffix": suffix,
+        "metadata": {
             "app": "mallog24",
             "dataset_rows": str(stats.rows),
             "source": "user_correction_samples",
         },
-    )
+    }
+    if validation_file_id:
+        job_payload["validation_file"] = validation_file_id
+
+    job = client.fine_tuning.jobs.create(**job_payload)
     job_payload = object_to_dict(job)
     result = {
         "training_file": uploaded_file_payload,
+        "validation_file": uploaded_validation_file_payload,
         "fine_tuning_job": job_payload,
         "stats": asdict(stats),
+        "validation_stats": asdict(validation_stats) if validation_stats else None,
     }
     if args.output:
         write_json(args.output, result)
@@ -204,6 +230,7 @@ def parse_args() -> argparse.Namespace:
 
     create_parser = subparsers.add_parser("create", help="Upload JSONL and create a fine-tuning job.")
     create_parser.add_argument("--training-file", required=True, help="Chat fine-tuning JSONL path.")
+    create_parser.add_argument("--validation-file", help="Optional validation JSONL path.")
     create_parser.add_argument("--model", help=f"Base model. Default: env CORRECTION_FINE_TUNE_BASE_MODEL or {DEFAULT_BASE_MODEL}.")
     create_parser.add_argument("--suffix", help=f"Fine-tuned model suffix. Default: env CORRECTION_FINE_TUNE_SUFFIX or {DEFAULT_SUFFIX}.")
     create_parser.add_argument("--min-examples", type=int, default=50, help="Minimum valid JSONL examples required.")
