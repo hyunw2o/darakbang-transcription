@@ -7996,7 +7996,11 @@ async def save_user_correction_sample(
     _ensure_user_correction_samples_scope_ready()
     user = await _get_current_user(authorization)
     payload = await _read_optional_json_payload(request)
+    return await _store_user_correction_sample(user["id"], payload)
 
+
+async def _store_user_correction_sample(user_id: str, payload: dict) -> dict:
+    _ensure_user_correction_samples_scope_ready()
     original_text = _normalize_correction_sample_text(payload.get("original_text"), "원본 결과")
     edited_text = _normalize_correction_sample_text(payload.get("edited_text"), "수정 결과")
     if original_text == edited_text:
@@ -8017,7 +8021,7 @@ async def save_user_correction_sample(
 
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     insert_row = {
-        "user_id": user["id"],
+        "user_id": user_id,
         "task_id": str(payload.get("task_id") or "").strip() or None,
         "source_type": str(payload.get("source_type") or "record_draft").strip()[:80] or "record_draft",
         "category": normalized_category or None,
@@ -8140,9 +8144,41 @@ async def update_record(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"saved_records 수정 실패: {str(e)}")
 
+    updated_record = response.data[0] if response.data else {**existing_record, **update_row}
+    correction_sample = {"success": True, "stored": False, "reason": "unchanged"}
+    original_content = str(existing_record.get("content") or "").strip()
+    if original_content and original_content != normalized_content:
+        correction_metadata = payload.get("correction_metadata") if isinstance(payload.get("correction_metadata"), dict) else {}
+        try:
+            correction_sample = await _store_user_correction_sample(
+                user["id"],
+                {
+                    "source_type": "saved_record_edit",
+                    "category": existing_record.get("category") or existing_record.get("source_type") or "",
+                    "language": str(payload.get("language") or "ko").strip().lower() or "ko",
+                    "task_id": existing_record.get("task_id") or "",
+                    "original_text": original_content,
+                    "edited_text": normalized_content,
+                    "metadata": {
+                        **correction_metadata,
+                        "record_id": record_id,
+                        "record_title": existing_record.get("title") or "",
+                        "source_type": existing_record.get("source_type") or "",
+                        "captured_by": "update_record",
+                    },
+                },
+            )
+        except Exception as e:
+            correction_sample = {
+                "success": False,
+                "stored": False,
+                "error": str(e),
+            }
+
     return {
         "success": True,
-        "record": response.data[0] if response.data else {**existing_record, **update_row},
+        "record": updated_record,
+        "correction_sample": correction_sample,
     }
 
 

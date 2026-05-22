@@ -154,32 +154,22 @@ def run_write_path(args: argparse.Namespace) -> dict[str, Any]:
             method="PUT",
             token=args.bearer_token,
             timeout=args.timeout,
-            json_body={"title": args.title, "content": args.edited_text},
+            json_body={
+                "title": args.title,
+                "content": args.edited_text,
+                "language": args.language,
+                "correction_metadata": {
+                    "smoke_test": True,
+                    "source": "smoke_saved_record_edit_api",
+                },
+            },
         )
         validate_success(updated, "record update")
         updated_record = updated.get("record") if isinstance(updated.get("record"), dict) else {}
         if str(updated_record.get("content") or "") != args.edited_text:
             raise RuntimeError("Record update response did not include edited content.")
 
-        correction = request_api(
-            f"{base_url}/api/corrections",
-            method="POST",
-            token=args.bearer_token,
-            timeout=args.timeout,
-            json_body={
-                "source_type": "saved_record_edit",
-                "category": args.category,
-                "language": args.language,
-                "task_id": task_id,
-                "original_text": args.original_text,
-                "edited_text": args.edited_text,
-                "metadata": {
-                    "smoke_test": True,
-                    "source": "smoke_saved_record_edit_api",
-                    "record_id": record_id,
-                },
-            },
-        )
+        correction = updated.get("correction_sample") if isinstance(updated.get("correction_sample"), dict) else {}
         validate_success(correction, "correction capture")
         correction_sample_stored = bool(correction.get("stored"))
         sample = correction.get("sample") if isinstance(correction.get("sample"), dict) else {}
