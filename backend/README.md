@@ -181,6 +181,17 @@ python backend/scripts/check_feature_readiness.py \
 `NOTIFY pgrst, 'reload schema';` 를 실행하세요.
 `fine_tuned_correction.ready_to_train`이 `true`가 되면 교정 샘플이 충분히 쌓인 상태입니다.
 그 전에는 4차 파인튜닝을 시작하지 않고 샘플 수집을 계속합니다.
+
+배포 직후 짧은 파일로 실제 변환 경로를 확인하려면 아래처럼 실행합니다.
+
+```bash
+python backend/scripts/smoke_transcription_api.py \
+  --api-url https://api.mallog24.com \
+  --audio-file /path/to/short-sample.mp3 \
+  --expect-corrected-contains RVS \
+  --expect-corrected-contains RUTC
+```
+
 용어집/수정 샘플 테이블을 한 번에 적용할 SQL 파일이 필요하면 아래 명령으로 번들을 만들 수 있습니다.
 
 ```bash
