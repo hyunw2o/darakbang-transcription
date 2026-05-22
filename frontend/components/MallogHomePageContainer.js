@@ -192,6 +192,8 @@ export default function MallogHomePageContainer({
     savedRecords,
     recordsLoading,
     recordsLoaded,
+    savedRecordEditDrafts,
+    savedRecordSavingId,
     recordDrafts,
     draftLoadingCategory,
     savingCategory,
@@ -221,6 +223,10 @@ export default function MallogHomePageContainer({
     handleGenerateRecordDraft,
     handleRecordDraftChange,
     handleSaveRecord,
+    handleStartSavedRecordEdit,
+    handleSavedRecordEditChange,
+    handleCancelSavedRecordEdit,
+    handleUpdateSavedRecord,
     handleResetTranscriptEdit,
     handleSaveTranscriptCorrection,
     copyFailedMessage,
@@ -464,6 +470,8 @@ export default function MallogHomePageContainer({
       savedRecords={savedRecords}
       recordsLoading={recordsLoading}
       recordsLoaded={recordsLoaded}
+      savedRecordEditDrafts={savedRecordEditDrafts}
+      savedRecordSavingId={savedRecordSavingId}
       recordDrafts={recordDrafts}
       draftLoadingCategory={draftLoadingCategory}
       savingCategory={savingCategory}
@@ -506,6 +514,10 @@ export default function MallogHomePageContainer({
       handleGenerateRecordDraft={handleGenerateRecordDraft}
       handleRecordDraftChange={handleRecordDraftChange}
       handleSaveRecord={handleSaveRecord}
+      handleStartSavedRecordEdit={handleStartSavedRecordEdit}
+      handleSavedRecordEditChange={handleSavedRecordEditChange}
+      handleCancelSavedRecordEdit={handleCancelSavedRecordEdit}
+      handleUpdateSavedRecord={handleUpdateSavedRecord}
       handleResetTranscriptEdit={handleResetTranscriptEdit}
       handleSaveTranscriptCorrection={handleSaveTranscriptCorrection}
       triggerFilePicker={triggerFilePicker}

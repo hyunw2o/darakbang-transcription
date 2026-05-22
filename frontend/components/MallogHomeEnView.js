@@ -97,6 +97,8 @@ export default function MallogHomeEnView(props) {
     savedRecords,
     recordsLoading,
     recordsLoaded,
+    savedRecordEditDrafts,
+    savedRecordSavingId,
     recordDrafts,
     draftLoadingCategory,
     savingCategory,
@@ -139,6 +141,10 @@ export default function MallogHomeEnView(props) {
     handleGenerateRecordDraft,
     handleRecordDraftChange,
     handleSaveRecord,
+    handleStartSavedRecordEdit,
+    handleSavedRecordEditChange,
+    handleCancelSavedRecordEdit,
+    handleUpdateSavedRecord,
     handleResetTranscriptEdit,
     handleSaveTranscriptCorrection,
     triggerFilePicker,
@@ -976,48 +982,91 @@ export default function MallogHomeEnView(props) {
                       <p className="text-sm text-nm-text-secondary p-4">No saved records yet.</p>
                     ) : (
                       <ul className="divide-y divide-nm-text-secondary/10">
-                        {savedRecords.map((item) => (
-                          <li key={item.id} className="p-4">
-                            <div className="flex items-center justify-between gap-3 mb-1.5">
-                              <p className="text-sm font-semibold text-nm-text-primary">
-                                {recordTypeLabels[item.category] || item.title || item.category}
-                              </p>
-                              <span className="text-[11px] text-nm-text-secondary">
-                                {item.created_at
-                                  ? new Date(item.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                                  : ''}
-                              </span>
-                            </div>
-                            <div className="max-h-48 overflow-y-auto">
-                              <p className="text-xs text-nm-text-secondary whitespace-pre-wrap leading-relaxed">
-                                {item.content}
-                              </p>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(item.content, `saved-record-${item.id}`)}
-                                className="action-btn"
-                              >
-                                {copied === `saved-record-${item.id}` ? 'Copied' : 'Copy'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => exportTextByLabel(item.content, item.title || item.category || 'Record', 'txt')}
-                                className="action-btn"
-                              >
-                                TXT
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => exportTextByLabel(item.content, item.title || item.category || 'Record', 'docx')}
-                                className="action-btn"
-                              >
-                                DOCX
-                              </button>
-                            </div>
-                          </li>
-                        ))}
+                        {savedRecords.map((item) => {
+                          const recordId = String(item.id || '')
+                          const isEditing = Boolean(recordId && Object.prototype.hasOwnProperty.call(savedRecordEditDrafts, recordId))
+                          const draftText = isEditing ? savedRecordEditDrafts[recordId] : String(item.content || '')
+                          return (
+                            <li key={item.id} className="p-4">
+                              <div className="flex items-center justify-between gap-3 mb-1.5">
+                                <p className="text-sm font-semibold text-nm-text-primary">
+                                  {recordTypeLabels[item.category] || item.title || item.category}
+                                </p>
+                                <span className="text-[11px] text-nm-text-secondary">
+                                  {item.created_at
+                                    ? new Date(item.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                    : ''}
+                                </span>
+                              </div>
+                              <div className="max-h-48 overflow-y-auto">
+                                {isEditing ? (
+                                  <textarea
+                                    value={draftText}
+                                    onChange={(event) => handleSavedRecordEditChange(recordId, event.target.value)}
+                                    className="w-full min-h-[160px] resize-y rounded-lg border border-nm-dark/15 bg-white/80 px-3 py-2 text-xs leading-relaxed text-nm-text-primary focus:outline-none focus:ring-2 focus:ring-nm-accent/25 dark:bg-nm-dark/20"
+                                  />
+                                ) : (
+                                  <p className="text-xs text-nm-text-secondary whitespace-pre-wrap leading-relaxed">
+                                    {item.content}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {isEditing ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateSavedRecord(item)}
+                                      disabled={savedRecordSavingId === recordId}
+                                      className="action-btn"
+                                    >
+                                      {savedRecordSavingId === recordId ? 'Saving...' : 'Save Edit'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCancelSavedRecordEdit(recordId)}
+                                      disabled={savedRecordSavingId === recordId}
+                                      className="action-btn"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartSavedRecordEdit(item)}
+                                      className="action-btn"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyToClipboard(item.content, `saved-record-${item.id}`)}
+                                      className="action-btn"
+                                    >
+                                      {copied === `saved-record-${item.id}` ? 'Copied' : 'Copy'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => exportTextByLabel(item.content, item.title || item.category || 'Record', 'txt')}
+                                      className="action-btn"
+                                    >
+                                      TXT
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => exportTextByLabel(item.content, item.title || item.category || 'Record', 'docx')}
+                                      className="action-btn"
+                                    >
+                                      DOCX
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
                       </ul>
                     )}
                   </div>

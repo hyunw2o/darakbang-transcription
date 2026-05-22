@@ -276,6 +276,8 @@ function App() {
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsLoaded, setRecordsLoaded] = useState(false);
+  const [recordEditDrafts, setRecordEditDrafts] = useState({});
+  const [recordSavingId, setRecordSavingId] = useState("");
   const [glossaryTerms, setGlossaryTerms] = useState([]);
   const [glossaryLoaded, setGlossaryLoaded] = useState(false);
   const [glossaryLoading, setGlossaryLoading] = useState(false);
@@ -580,6 +582,8 @@ function App() {
     setHistoryBulkDeleting(false);
     setRecords([]);
     setRecordsLoaded(false);
+    setRecordEditDrafts({});
+    setRecordSavingId("");
     setGlossaryTerms([]);
     setGlossaryLoaded(false);
     setGlossaryLoading(false);
@@ -1407,6 +1411,103 @@ function App() {
       setSavingCategory("");
     }
   };
+
+  const handleStartRecordEdit = useCallback((record) => {
+    const recordId = String(record?.id || "");
+    if (!recordId) return;
+    setRecordEditDrafts((prev) => ({
+      ...prev,
+      [recordId]: String(record?.content || ""),
+    }));
+  }, []);
+
+  const handleRecordEditChange = useCallback((recordId, value) => {
+    const normalizedRecordId = String(recordId || "");
+    if (!normalizedRecordId) return;
+    setRecordEditDrafts((prev) => ({
+      ...prev,
+      [normalizedRecordId]: value,
+    }));
+  }, []);
+
+  const handleCancelRecordEdit = useCallback((recordId) => {
+    const normalizedRecordId = String(recordId || "");
+    if (!normalizedRecordId) return;
+    setRecordEditDrafts((prev) => {
+      const next = { ...prev };
+      delete next[normalizedRecordId];
+      return next;
+    });
+  }, []);
+
+  const handleUpdateRecord = useCallback(async (record) => {
+    clearMessages();
+
+    if (!isLoggedIn) {
+      setError(copy.errors.saveNeedLogin);
+      return;
+    }
+
+    const recordId = String(record?.id || "");
+    if (!recordId) {
+      setError(copy.errors.recordUpdateFailed);
+      return;
+    }
+
+    const editedText = String(recordEditDrafts[recordId] || "").trim();
+    if (!editedText) {
+      setError(copy.errors.saveNoContent);
+      return;
+    }
+
+    const originalText = String(record?.content || "").trim();
+    if (compactTranscriptText(originalText) === compactTranscriptText(editedText)) {
+      handleCancelRecordEdit(recordId);
+      setNotice(copy.notices.correctionNoChange);
+      return;
+    }
+
+    setRecordSavingId(recordId);
+    try {
+      const data = await requestApi(`/api/records/${encodeURIComponent(recordId)}`, {
+        method: "PUT",
+        token: authToken,
+        body: JSON.stringify({
+          title: record?.title || record?.category || copy.recordsTitle,
+          content: editedText,
+        }),
+      });
+      const updatedRecord = data?.record || { ...record, content: editedText };
+      setRecords((prev) => prev.map((item) => (String(item.id || "") === recordId ? updatedRecord : item)));
+      handleCancelRecordEdit(recordId);
+
+      requestApi("/api/corrections", {
+        method: "POST",
+        token: authToken,
+        body: JSON.stringify({
+          source_type: "saved_record_edit",
+          category: record?.category || record?.source_type || result?.transcription_type || transcriptionType,
+          language: result?.language || transcriptionLanguage || "ko",
+          task_id: record?.task_id || result?.task_id || "",
+          original_text: originalText,
+          edited_text: editedText,
+          metadata: {
+            record_id: recordId,
+            record_title: record?.title || "",
+            source_type: record?.source_type || "",
+          },
+        }),
+      }).catch((correctionError) => {
+        console.warn("Saved record correction sample save failed:", correctionError?.message || correctionError);
+      });
+
+      setNotice(copy.notices.recordUpdated);
+    } catch (e) {
+      setError(e.message || copy.errors.recordUpdateFailed);
+    } finally {
+      setRecordSavingId("");
+    }
+  }, [authToken, clearMessages, copy.errors.recordUpdateFailed, copy.errors.saveNeedLogin, copy.errors.saveNoContent, copy.notices.correctionNoChange, copy.notices.recordUpdated, copy.recordsTitle, handleCancelRecordEdit, isLoggedIn, recordEditDrafts, result?.language, result?.task_id, result?.transcription_type, transcriptionLanguage, transcriptionType]);
 
   const handleResetTranscriptEdit = () => {
     setTranscriptEditText(transcriptSourceText);
@@ -2438,33 +2539,75 @@ function App() {
                   {records.length === 0 ? (
                     <Text style={[styles.emptyText, { color: activeTheme.textSecondary }]}>{copy.noRecords}</Text>
                   ) : (
-                    records.map((item) => (
-                      <View key={item.id || `${item.category}-${item.created_at}`} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
-                        <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.title || item.category}</Text>
-                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
-                        <Text selectable style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.content || ""}</Text>
-                        <View style={styles.exportActionRow}>
-                          <NmPressable
-                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                            onPress={() => handleCopyToClipboard(item.title || item.category || copy.recordsTitle, item.content || "")}
-                          >
-                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
-                          </NmPressable>
-                          <NmPressable
-                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                            onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "txt")}
-                          >
-                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
-                          </NmPressable>
-                          <NmPressable
-                            style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                            onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "docx")}
-                          >
-                            <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
-                          </NmPressable>
+                    records.map((item) => {
+                      const recordId = String(item.id || "");
+                      const isEditing = Boolean(recordId && Object.prototype.hasOwnProperty.call(recordEditDrafts, recordId));
+                      const draftText = isEditing ? recordEditDrafts[recordId] : String(item.content || "");
+                      const busy = recordSavingId === recordId;
+                      return (
+                        <View key={item.id || `${item.category}-${item.created_at}`} style={[styles.listItem, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
+                          <Text style={[styles.listTitle, { color: activeTheme.textPrimary }]}>{item.title || item.category}</Text>
+                          <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{formatDate(item.created_at)}</Text>
+                          {isEditing ? (
+                            <TextInput
+                              style={[styles.recordEditor, { minHeight: 140, backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                              value={draftText}
+                              onChangeText={(value) => handleRecordEditChange(recordId, value)}
+                              multiline
+                            />
+                          ) : (
+                            <Text selectable style={[styles.previewText, { color: activeTheme.textPrimary }]}>{item.content || ""}</Text>
+                          )}
+                          <View style={styles.exportActionRow}>
+                            {isEditing ? (
+                              <>
+                                <NmPressable
+                                  style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, busy ? styles.buttonDisabled : null]}
+                                  onPress={() => handleUpdateRecord(item)}
+                                  disabled={busy}
+                                >
+                                  <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{busy ? copy.saving : copy.recordUpdateSave}</Text>
+                                </NmPressable>
+                                <NmPressable
+                                  style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, busy ? styles.buttonDisabled : null]}
+                                  onPress={() => handleCancelRecordEdit(recordId)}
+                                  disabled={busy}
+                                >
+                                  <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.cancelAction}</Text>
+                                </NmPressable>
+                              </>
+                            ) : (
+                              <>
+                                <NmPressable
+                                  style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                                  onPress={() => handleStartRecordEdit(item)}
+                                >
+                                  <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.edit}</Text>
+                                </NmPressable>
+                                <NmPressable
+                                  style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                                  onPress={() => handleCopyToClipboard(item.title || item.category || copy.recordsTitle, item.content || "")}
+                                >
+                                  <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.clipboardCopy}</Text>
+                                </NmPressable>
+                                <NmPressable
+                                  style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                                  onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "txt")}
+                                >
+                                  <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportTxt}</Text>
+                                </NmPressable>
+                                <NmPressable
+                                  style={[styles.tinyButton, styles.exportTinyButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
+                                  onPress={() => handleShareExport(item.title || item.category || copy.recordsTitle, item.content || "", "docx")}
+                                >
+                                  <Text numberOfLines={1} style={[styles.tinyButtonText, styles.exportTinyButtonText, { color: activeTheme.textPrimary }]}>{copy.exportDocx}</Text>
+                                </NmPressable>
+                              </>
+                            )}
+                          </View>
                         </View>
-                      </View>
-                    ))
+                      );
+                    })
                   )}
                 </View>
               </FadeInView>
@@ -3676,7 +3819,7 @@ const styles = StyleSheet.create({
   },
   exportActionRow: {
     flexDirection: "row",
-    flexWrap: "nowrap",
+    flexWrap: "wrap",
     gap: 6,
     marginTop: 2,
   },

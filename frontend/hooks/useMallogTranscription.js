@@ -50,6 +50,8 @@ const TRANSCRIPTION_MESSAGES = {
     saveEmpty: '저장할 기록본 내용이 없습니다.',
     saveFailed: '기록본 저장 실패',
     saveSuccess: '기록본이 별도 저장되었습니다.',
+    recordUpdateFailed: '기록본 수정 실패',
+    recordUpdateSuccess: '기록본을 수정했습니다.',
     correctionLoginRequired: '수정 결과 저장은 로그인 후 이용할 수 있습니다.',
     correctionEmpty: '저장할 수정 텍스트가 없습니다.',
     correctionNoChanges: '저장할 변경 사항이 없습니다.',
@@ -97,6 +99,8 @@ const TRANSCRIPTION_MESSAGES = {
     saveEmpty: 'Record content is empty.',
     saveFailed: 'Failed to save record.',
     saveSuccess: 'Record saved separately.',
+    recordUpdateFailed: 'Failed to update record.',
+    recordUpdateSuccess: 'Record updated.',
     correctionLoginRequired: 'Please log in to save corrections.',
     correctionEmpty: 'Edited transcript is empty.',
     correctionNoChanges: 'No transcript changes to save.',
@@ -142,6 +146,8 @@ export default function useMallogTranscription({
   const [savedRecords, setSavedRecords] = useState([])
   const [recordsLoading, setRecordsLoading] = useState(false)
   const [recordsLoaded, setRecordsLoaded] = useState(false)
+  const [savedRecordEditDrafts, setSavedRecordEditDrafts] = useState({})
+  const [savedRecordSavingId, setSavedRecordSavingId] = useState('')
   const [recordDrafts, setRecordDrafts] = useState({})
   const [recordDraftSources, setRecordDraftSources] = useState({})
   const [draftLoadingCategory, setDraftLoadingCategory] = useState('')
@@ -355,10 +361,12 @@ export default function useMallogTranscription({
     setHistoryLoading(false)
     setHistoryDeletingTaskId('')
     setHistoryBulkDeleting(false)
-    setSavedRecords([])
-    setRecordsLoaded(false)
-    setRecordsLoading(false)
-    setRecordDrafts({})
+      setSavedRecords([])
+      setRecordsLoaded(false)
+      setRecordsLoading(false)
+      setSavedRecordEditDrafts({})
+      setSavedRecordSavingId('')
+      setRecordDrafts({})
     setRecordDraftSources({})
     setDraftLoadingCategory('')
     setSavingCategory('')
@@ -1109,6 +1117,111 @@ export default function useMallogTranscription({
     }
   }, [apiUrl, authToken, fetchSavedRecords, getAuthHeaders, language, messages.defaultLanguage, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordDraftSources, recordTypeLabels, result, setError, setNotice, transcriptionType])
 
+  const handleStartSavedRecordEdit = useCallback((record) => {
+    const recordId = String(record?.id || '')
+    if (!recordId) return
+    setSavedRecordEditDrafts((prev) => ({
+      ...prev,
+      [recordId]: String(record?.content || ''),
+    }))
+  }, [])
+
+  const handleSavedRecordEditChange = useCallback((recordId, value) => {
+    const normalizedRecordId = String(recordId || '')
+    if (!normalizedRecordId) return
+    setSavedRecordEditDrafts((prev) => ({
+      ...prev,
+      [normalizedRecordId]: value,
+    }))
+  }, [])
+
+  const handleCancelSavedRecordEdit = useCallback((recordId) => {
+    const normalizedRecordId = String(recordId || '')
+    if (!normalizedRecordId) return
+    setSavedRecordEditDrafts((prev) => {
+      const next = { ...prev }
+      delete next[normalizedRecordId]
+      return next
+    })
+  }, [])
+
+  const handleUpdateSavedRecord = useCallback(async (record) => {
+    if (!authToken) {
+      setError(messages.saveLoginRequired)
+      return
+    }
+
+    const recordId = String(record?.id || '')
+    if (!recordId) {
+      setError(messages.recordUpdateFailed)
+      return
+    }
+
+    const content = String(savedRecordEditDrafts[recordId] || '').trim()
+    if (!content) {
+      setError(messages.saveEmpty)
+      return
+    }
+
+    const originalText = String(record?.content || '').trim()
+    if (compactTranscriptText(originalText) === compactTranscriptText(content)) {
+      handleCancelSavedRecordEdit(recordId)
+      setNotice(messages.correctionNoChanges)
+      return
+    }
+
+    setSavedRecordSavingId(recordId)
+    setError(null)
+    setNotice(null)
+
+    try {
+      const response = await apiFetch(`${apiUrl}/api/records/${encodeURIComponent(recordId)}`, {
+        method: 'PUT',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: record?.title || recordTypeLabels[record?.category] || record?.category || messages.recordDefaultLabel,
+          content,
+        }),
+      })
+      const data = await readResponseData(response, messages.recordUpdateFailed)
+      const updatedRecord = data?.record || { ...record, content }
+      setSavedRecords((prev) => prev.map((item) => (String(item.id || '') === recordId ? updatedRecord : item)))
+      handleCancelSavedRecordEdit(recordId)
+
+      apiFetch(`${apiUrl}/api/corrections`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source_type: 'saved_record_edit',
+          category: record?.category || record?.source_type || result?.transcription_type || transcriptionType,
+          language: result?.language || language || messages.defaultLanguage,
+          task_id: record?.task_id || result?.task_id || '',
+          original_text: originalText,
+          edited_text: content,
+          metadata: {
+            record_id: recordId,
+            record_title: record?.title || '',
+            source_type: record?.source_type || '',
+          },
+        }),
+      }).catch((correctionError) => {
+        console.warn('Saved record correction sample save failed:', correctionError?.message || correctionError)
+      })
+
+      setNotice(messages.recordUpdateSuccess)
+    } catch (error) {
+      setError(error?.message || messages.recordUpdateFailed)
+    } finally {
+      setSavedRecordSavingId('')
+    }
+  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, result?.task_id, result?.transcription_type, savedRecordEditDrafts, setError, setNotice, transcriptionType])
+
   const usageState = useMemo(() => {
     return (usage) => {
       const currentUsage = usage || null
@@ -1162,6 +1275,8 @@ export default function useMallogTranscription({
     savedRecords,
     recordsLoading,
     recordsLoaded,
+    savedRecordEditDrafts,
+    savedRecordSavingId,
     recordDrafts,
     draftLoadingCategory,
     savingCategory,
@@ -1199,6 +1314,10 @@ export default function useMallogTranscription({
     handleGenerateRecordDraft,
     handleRecordDraftChange,
     handleSaveRecord,
+    handleStartSavedRecordEdit,
+    handleSavedRecordEditChange,
+    handleCancelSavedRecordEdit,
+    handleUpdateSavedRecord,
     handleResetTranscriptEdit,
     handleSaveTranscriptCorrection,
     copyFailedMessage: messages.copyFailed,
