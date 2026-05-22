@@ -159,6 +159,7 @@ def empty_export_stats() -> dict[str, int]:
     return {
         "total": 0,
         "kept": 0,
+        "skipped_smoke_test": 0,
         "skipped_unchanged": 0,
         "skipped_short": 0,
         "skipped_too_long": 0,

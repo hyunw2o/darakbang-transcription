@@ -113,7 +113,7 @@ python worker.py
 
 ## 교정 파인튜닝 데이터셋 준비
 
-사용자가 기록본 초안을 직접 수정한 뒤 저장하면 `user_correction_samples`에 원본 초안과 수정본이 누적됩니다.
+사용자가 변환 결과 또는 기록본 초안을 직접 수정한 뒤 저장하면 `user_correction_samples`에 원본과 수정본이 누적됩니다.
 실제 파인튜닝을 시작하기 전에 아래 스크립트로 JSONL 데이터셋을 만들고 필터링 통계를 확인하세요.
 
 먼저 누적 샘플의 분포와 주요 교정 패턴을 확인합니다. 기본 출력에는 원문/수정문 전문을 넣지 않습니다.
@@ -148,6 +148,7 @@ python backend/scripts/export_correction_finetune_dataset.py \
 
 - 출력 파일은 OpenAI chat fine-tuning JSONL 형식의 `messages` 배열만 포함합니다.
 - 동일/너무 짧은/길이 비율이 과한 샘플은 자동 제외합니다.
+- `metadata.smoke_test=true`인 운영 점검 샘플은 자동 제외합니다.
 - `--min-kept`보다 적은 샘플만 남으면 JSONL을 쓰지 않고 실패하므로, 샘플을 더 모은 뒤 다시 실행합니다.
 - 생성된 `backend/finetune_datasets/`는 로컬 산출물이므로 Git에 포함하지 않습니다.
 - 실제 모델 업로드 전에는 개인정보/민감정보 포함 여부와 샘플 품질을 반드시 검토하세요.
@@ -217,6 +218,23 @@ python backend/scripts/smoke_transcription_api.py \
   --audio-file /path/to/short-sample.mp3 \
   --expect-corrected-contains RVS \
   --expect-corrected-contains RUTC
+```
+
+수정 샘플 저장 API의 인증/스키마 경로만 확인하려면 기본 preflight 모드로 실행합니다.
+기본 모드는 원문과 수정문을 동일하게 보내므로 DB row를 추가하지 않습니다.
+
+```bash
+MALLOG24_AUTH_TOKEN=... python backend/scripts/smoke_correction_sample_api.py \
+  --api-url https://api.mallog24.com
+```
+
+실제 insert까지 확인해야 할 때만 `--store-sample`을 붙입니다.
+이때 생성되는 샘플은 `metadata.smoke_test=true`로 표시되어 파인튜닝 export와 품질 리포트에서 제외됩니다.
+
+```bash
+MALLOG24_AUTH_TOKEN=... python backend/scripts/smoke_correction_sample_api.py \
+  --api-url https://api.mallog24.com \
+  --store-sample
 ```
 
 용어집/수정 샘플 테이블을 한 번에 적용할 SQL 파일이 필요하면 아래 명령으로 번들을 만들 수 있습니다.

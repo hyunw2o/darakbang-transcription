@@ -23,6 +23,7 @@ from export_correction_finetune_dataset import (
     build_dataset,
     compact_for_compare,
     fetch_supabase_samples,
+    is_smoke_test_sample,
     load_json_samples,
 )
 
@@ -113,10 +114,12 @@ def build_asr_escalation_candidates(
 
 def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
     _examples, export_stats = build_dataset(samples, args)
+    smoke_test_samples = [sample for sample in samples if is_smoke_test_sample(sample)]
+    report_samples = [sample for sample in samples if not is_smoke_test_sample(sample)]
     replacement_counter: Counter[tuple[str, str]] = Counter()
     preview_examples = []
 
-    for sample in samples:
+    for sample in report_samples:
         original = str(sample.get("original_text") or "")
         edited = str(sample.get("edited_text") or "")
         if compact_for_compare(original) == compact_for_compare(edited):
@@ -144,14 +147,16 @@ def build_report(samples: list[dict[str, Any]], args: argparse.Namespace) -> dic
     kept = export_stats.kept
     return {
         "total_samples": len(samples),
+        "reportable_samples": len(report_samples),
+        "smoke_test_samples": len(smoke_test_samples),
         "min_kept": args.min_kept,
         "ready_to_train": kept >= args.min_kept,
         "asr_escalation_threshold": args.asr_threshold,
         "ready_for_asr_fine_tune": bool(asr_candidates),
         "export_stats": asdict(export_stats),
-        "by_language": count_field(samples, "language"),
-        "by_category": count_field(samples, "category"),
-        "by_source_type": count_field(samples, "source_type"),
+        "by_language": count_field(report_samples, "language"),
+        "by_category": count_field(report_samples, "category"),
+        "by_source_type": count_field(report_samples, "source_type"),
         "top_replacements": top_replacements,
         "asr_escalation_candidates": asr_candidates,
         "examples": preview_examples,
@@ -216,6 +221,27 @@ def main() -> int:
             limit=5,
         )
         assert low_threshold_candidates[0]["canonical"] == "RVS"
+        smoke_report = build_report(
+            [
+                *SELF_TEST_SAMPLES,
+                {
+                    "id": 3,
+                    "category": "sermon",
+                    "language": "ko",
+                    "original_text": "RBS smoke sample",
+                    "edited_text": "RVS smoke sample",
+                    "metadata": {"smoke_test": True},
+                },
+            ],
+            args,
+        )
+        assert smoke_report["smoke_test_samples"] == 1
+        assert smoke_report["export_stats"]["skipped_smoke_test"] == 1
+        rbs_items = [
+            item for item in smoke_report["top_replacements"]
+            if item["from"] == "RBS" and item["to"] == "RVS"
+        ]
+        assert rbs_items and rbs_items[0]["count"] == 1
     if args.output:
         write_json(args.output, report)
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))

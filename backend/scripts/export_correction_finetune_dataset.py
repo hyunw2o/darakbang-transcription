@@ -46,6 +46,7 @@ SELF_TEST_SAMPLES = [
 class ExportStats:
     total: int = 0
     kept: int = 0
+    skipped_smoke_test: int = 0
     skipped_unchanged: int = 0
     skipped_short: int = 0
     skipped_too_long: int = 0
@@ -60,6 +61,23 @@ def normalize_text(value: Any) -> str:
 
 def compact_for_compare(value: str) -> str:
     return " ".join(normalize_text(value).split())
+
+
+def normalize_metadata(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def is_smoke_test_sample(sample: dict[str, Any]) -> bool:
+    metadata = normalize_metadata(sample.get("metadata"))
+    return bool(metadata.get("smoke_test") or metadata.get("source") == "smoke_correction_sample_api")
 
 
 def load_json_samples(path: str) -> list[dict[str, Any]]:
@@ -178,6 +196,9 @@ def build_dataset(samples: list[dict[str, Any]], args: argparse.Namespace) -> tu
 
     for sample in samples:
         try:
+            if is_smoke_test_sample(sample):
+                stats.skipped_smoke_test += 1
+                continue
             original = normalize_text(sample.get("original_text"))
             edited = normalize_text(sample.get("edited_text"))
             original_compact = compact_for_compare(original)
@@ -272,6 +293,25 @@ def main() -> int:
     if args.self_test and stats.kept != 1:
         print(f"Self-test failed: expected 1 kept example, got {stats.kept}", file=sys.stderr)
         return 1
+    if args.self_test:
+        smoke_samples = [
+            *SELF_TEST_SAMPLES,
+            {
+                "id": 3,
+                "category": "sermon",
+                "language": "ko",
+                "original_text": "RBS smoke sample",
+                "edited_text": "RVS smoke sample",
+                "metadata": {"smoke_test": True},
+            },
+        ]
+        _smoke_examples, smoke_stats = build_dataset(smoke_samples, args)
+        if smoke_stats.skipped_smoke_test != 1 or smoke_stats.kept != 1:
+            print(
+                "Self-test failed: smoke samples must be skipped before export.",
+                file=sys.stderr,
+            )
+            return 1
     if args.min_kept and stats.kept < args.min_kept:
         print(json.dumps(asdict(stats), ensure_ascii=False, sort_keys=True))
         print(
