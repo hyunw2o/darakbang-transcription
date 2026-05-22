@@ -109,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--exercise-saved-record-edit", action="store_true", help="Create, update, capture, and clean up a smoke saved record.")
     parser.add_argument("--exercise-saved-record-create-capture", action="store_true", help="Create a saved record and capture a record-draft correction in the same request.")
     parser.add_argument("--require-saved-record-edit-smoke", action="store_true", help="Fail when no auth token is available for saved-record edit smoke.")
+    parser.add_argument("--require-saved-record-create-capture-smoke", action="store_true", help="Fail unless saved-record create-capture smoke can run successfully.")
     parser.add_argument("--audio-file", default="", help="Optional short audio file for transcription smoke.")
     parser.add_argument("--expect-corrected-contains", action="append", default=[], help="Expected term in corrected_text. Can be repeated.")
     parser.add_argument("--client-platform", action="append", default=[], help="Client platform to smoke, e.g. web or android. Can be repeated. Default: web.")
@@ -139,6 +140,8 @@ def run_self_test() -> int:
     assert args.require_saved_record_edit_smoke is True
     args = parse_args_for_self_test(["--exercise-saved-record-create-capture"])
     assert args.exercise_saved_record_create_capture is True
+    args = parse_args_for_self_test(["--require-saved-record-create-capture-smoke"])
+    assert args.require_saved_record_create_capture_smoke is True
     missing_token_payload = summarize([
         skipped_check(
             "saved-record-create-capture-smoke",
@@ -233,7 +236,7 @@ def main() -> int:
         if args.exercise_saved_record_edit:
             saved_record_command.append("--exercise-write-path")
         checks.append(run_command("saved-record-edit-smoke", saved_record_command, required=True))
-        if args.exercise_saved_record_create_capture:
+        if args.exercise_saved_record_create_capture or args.require_saved_record_create_capture_smoke:
             checks.append(run_command(
                 "saved-record-create-capture-smoke",
                 [
@@ -253,11 +256,11 @@ def main() -> int:
             "--auth-token or MALLOG24_AUTH_TOKEN is required.",
             required=bool(args.require_saved_record_edit_smoke),
         ))
-        if args.exercise_saved_record_create_capture:
+        if args.exercise_saved_record_create_capture or args.require_saved_record_create_capture_smoke:
             checks.append(skipped_check(
                 "saved-record-create-capture-smoke",
                 "--auth-token or MALLOG24_AUTH_TOKEN is required.",
-                required=bool(args.require_saved_record_edit_smoke),
+                required=bool(args.require_saved_record_create_capture_smoke),
             ))
 
     if args.audio_file:

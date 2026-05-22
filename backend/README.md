@@ -238,7 +238,8 @@ python backend/scripts/check_feature_readiness.py \
 
 배포 직후에는 아래 러너로 health/readiness, 사용자 용어집 preflight, 수정 샘플 API preflight, 저장 기록본 수정 preflight,
 선택적 실제 변환 스모크를 한 번에 확인할 수 있습니다. 토큰이나 오디오 파일이 없으면 해당 단계는 건너뛰며,
-필수로 강제하려면 `--require-glossary-smoke`, `--require-correction-smoke`, `--require-saved-record-edit-smoke`, `--require-transcription-smoke`를 붙입니다.
+필수로 강제하려면 `--require-glossary-smoke`, `--require-correction-smoke`, `--require-saved-record-edit-smoke`,
+`--require-saved-record-create-capture-smoke`, `--require-transcription-smoke`를 붙입니다.
 
 ```bash
 MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
@@ -273,7 +274,7 @@ MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
 ```bash
 MALLOG24_AUTH_TOKEN=... python backend/scripts/run_post_deploy_checks.py \
   --api-url https://api.mallog24.com \
-  --exercise-saved-record-create-capture
+  --require-saved-record-create-capture-smoke
 ```
 
 배포 직후 짧은 파일로 실제 변환 경로를 확인하려면 아래처럼 실행합니다.
