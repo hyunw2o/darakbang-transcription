@@ -54,6 +54,7 @@ uvicorn main:app --reload
    - `backend/sql/transcription_storage_bucket.sql` (대기열용 원본 파일 공유 버킷)
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
    - `backend/sql/user_glossary_terms.sql` (사용자 용어집 테이블 + RLS 정책)
+   - `backend/sql/user_correction_samples.sql` (사용자 수정 결과 학습 데이터 + RLS 정책)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
    - `backend/sql/billing_subscriptions.sql` (구독 결제 상태 저장 + RLS 정책)
@@ -143,6 +144,7 @@ python worker.py
 - `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
 - `POST /api/records` : 기록본 저장 (인증 필요)
 - `GET /api/records` : 내 기록본 목록 조회 (인증 필요)
+- `POST /api/corrections` : 사용자가 수정한 결과 저장 (인증 필요)
 - `POST /api/summarize` : 설교 요약 (인증 필요)
 
 ## 보안 설정 체크리스트

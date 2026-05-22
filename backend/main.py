@@ -202,11 +202,13 @@ GUEST_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
 TRANSCRIPTION_JOBS_TABLE_NAME = "transcription_jobs"
 USAGE_TABLE_NAME = "user_usage_quotas"
 USER_GLOSSARY_TABLE_NAME = "user_glossary_terms"
+USER_CORRECTION_SAMPLES_TABLE_NAME = "user_correction_samples"
 MAX_USER_GLOSSARY_TERMS = max(1, int(os.getenv("MAX_USER_GLOSSARY_TERMS", "100")))
 MAX_USER_GLOSSARY_TERM_CHARS = max(10, int(os.getenv("MAX_USER_GLOSSARY_TERM_CHARS", "80")))
 MAX_USER_GLOSSARY_MEANING_CHARS = max(20, int(os.getenv("MAX_USER_GLOSSARY_MEANING_CHARS", "240")))
 MAX_USER_GLOSSARY_ALIAS_COUNT = max(0, int(os.getenv("MAX_USER_GLOSSARY_ALIAS_COUNT", "20")))
 MAX_USER_GLOSSARY_CONTEXT_COUNT = max(0, int(os.getenv("MAX_USER_GLOSSARY_CONTEXT_COUNT", "20")))
+MAX_CORRECTION_SAMPLE_TEXT_CHARS = max(1000, int(os.getenv("MAX_CORRECTION_SAMPLE_TEXT_CHARS", "120000")))
 USAGE_FREE_PLAN = "free"
 USAGE_GUEST_PLAN = "guest"
 USAGE_ADMIN_PLAN = "admin"
@@ -467,6 +469,7 @@ USAGE_SCOPE_VALIDATED = False
 BILLING_SCOPE_VALIDATED = False
 BILLING_REFUND_SCOPE_VALIDATED = False
 USER_GLOSSARY_SCOPE_VALIDATED = False
+USER_CORRECTION_SAMPLES_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -2459,6 +2462,35 @@ def _ensure_user_glossary_scope_ready() -> None:
             raise HTTPException(
                 status_code=500,
                 detail="Supabase 설정 필요: backend/sql/user_glossary_terms.sql 을 실행한 뒤 API 서버를 다시 시작하세요.",
+            )
+        raise
+
+
+def _ensure_user_correction_samples_scope_ready() -> None:
+    global USER_CORRECTION_SAMPLES_SCOPE_VALIDATED
+    if USER_CORRECTION_SAMPLES_SCOPE_VALIDATED:
+        return
+
+    try:
+        (
+            _get_supabase_client()
+            .table(USER_CORRECTION_SAMPLES_TABLE_NAME)
+            .select("id,user_id,task_id,source_type,category,language,original_text,edited_text,metadata,created_at")
+            .limit(1)
+            .execute()
+        )
+        USER_CORRECTION_SAMPLES_SCOPE_VALIDATED = True
+    except Exception as e:
+        error_text = str(e).lower()
+        if (
+            USER_CORRECTION_SAMPLES_TABLE_NAME in error_text
+            or "schema cache" in error_text
+            or "could not find" in error_text
+            or "does not exist" in error_text
+        ):
+            raise HTTPException(
+                status_code=500,
+                detail="Supabase 설정 필요: backend/sql/user_correction_samples.sql 을 실행한 뒤 API 서버를 다시 시작하세요.",
             )
         raise
 
@@ -7678,6 +7710,7 @@ def _delete_user_app_data(user_id: str) -> None:
     if not user_id:
         return
     cleanup_targets = [
+        (USER_CORRECTION_SAMPLES_TABLE_NAME, "user_id"),
         (USER_GLOSSARY_TABLE_NAME, "user_id"),
         ("saved_records", "user_id"),
         ("transcriptions", "user_id"),
@@ -7833,6 +7866,76 @@ async def generate_record_draft(
         "category_label": _get_record_category_label(normalized_category, normalized_language),
         "title": _get_record_category_label(normalized_category, normalized_language),
         "content": response.text if response else "",
+    }
+
+
+def _normalize_correction_sample_text(value, field_label: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail=f"{field_label}이 비어 있습니다.")
+    if len(text) > MAX_CORRECTION_SAMPLE_TEXT_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_label}은 {MAX_CORRECTION_SAMPLE_TEXT_CHARS}자 이하여야 합니다.",
+        )
+    return text
+
+
+@app.post("/api/corrections")
+async def save_user_correction_sample(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """사용자가 수정한 결과를 향후 품질 개선 데이터로 저장"""
+    _ensure_user_correction_samples_scope_ready()
+    user = await _get_current_user(authorization)
+    payload = await _read_optional_json_payload(request)
+
+    original_text = _normalize_correction_sample_text(payload.get("original_text"), "원본 결과")
+    edited_text = _normalize_correction_sample_text(payload.get("edited_text"), "수정 결과")
+    if original_text == edited_text:
+        return {
+            "success": True,
+            "stored": False,
+            "reason": "unchanged",
+        }
+
+    normalized_language = str(payload.get("language") or "ko").strip().lower()
+    if normalized_language not in ALLOWED_LANGUAGES:
+        normalized_language = "ko"
+
+    normalized_category = str(payload.get("category") or "").strip()
+    allowed_categories = set(ALLOWED_RECORD_CATEGORIES) | ALLOWED_TRANSCRIPTION_TYPES | ALLOWED_CONTENT_STYLES
+    if normalized_category and normalized_category not in allowed_categories:
+        normalized_category = "custom"
+
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    insert_row = {
+        "user_id": user["id"],
+        "task_id": str(payload.get("task_id") or "").strip() or None,
+        "source_type": str(payload.get("source_type") or "record_draft").strip()[:80] or "record_draft",
+        "category": normalized_category or None,
+        "language": normalized_language,
+        "original_text": original_text,
+        "edited_text": edited_text,
+        "metadata": metadata,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    try:
+        response = await asyncio.to_thread(
+            _get_supabase_client()
+            .table(USER_CORRECTION_SAMPLES_TABLE_NAME)
+            .insert(insert_row)
+            .execute
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"수정 데이터 저장 실패: {str(e)}")
+
+    return {
+        "success": True,
+        "stored": True,
+        "sample": response.data[0] if response.data else insert_row,
     }
 
 
