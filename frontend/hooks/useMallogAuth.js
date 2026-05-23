@@ -91,12 +91,13 @@ const mapUsageSnapshot = (usage) => {
 export default function useMallogAuth({
   apiUrl,
   locale = 'ko',
+  initialAuthMode = 'login',
   setError,
   setNotice,
   onResetState,
 }) {
   const messages = AUTH_MESSAGES[locale] || AUTH_MESSAGES.ko
-  const [authMode, setAuthMode] = useState('login')
+  const [authMode, setAuthMode] = useState(initialAuthMode)
   const [authName, setAuthName] = useState('')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -336,7 +337,7 @@ export default function useMallogAuth({
         }
         const formData = new FormData()
         formData.append('email', authEmail.trim())
-        formData.append('redirect_to', `${window.location.origin}${messages.oauthRedirectPath || window.location.pathname}`)
+        formData.append('redirect_to', `${window.location.origin}${window.location.pathname || messages.oauthRedirectPath || '/'}`)
         const response = await apiFetch(`${apiUrl}/api/auth/password-reset/request`, {
           method: 'POST',
           body: formData,

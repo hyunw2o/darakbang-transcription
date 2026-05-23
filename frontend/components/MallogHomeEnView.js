@@ -59,6 +59,9 @@ export default function MallogHomeEnView(props) {
     IOS_APP_STORE_URL,
     LANGUAGE_SELECT_ID,
     TYPE_SELECT_ID,
+    authPageMode,
+    homeHref,
+    recoveryHref,
     authMode,
     setAuthMode,
     authName,
@@ -201,6 +204,7 @@ export default function MallogHomeEnView(props) {
   ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
+  const isAuthPage = authPageMode === 'recover'
   const isRecoverMode = authMode === 'recover'
   const isResetPasswordMode = authMode === 'reset_password'
   const shouldShowAuthForm = !authToken || isResetPasswordMode
@@ -278,7 +282,7 @@ export default function MallogHomeEnView(props) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
-        {!authToken && (
+        {!authToken && !isAuthPage && (
           <MallogLandingSections
             locale="en"
             content={EN_MALLOG_LANDING_CONTENT}
@@ -292,7 +296,7 @@ export default function MallogHomeEnView(props) {
         )}
 
         {/* Auth Card */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''}`}>
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isAuthPage ? 'mt-8 sm:mt-14' : ''}`}>
           {shouldShowAuthForm ? (
             <>
               <div className="mb-4">
@@ -380,14 +384,20 @@ export default function MallogHomeEnView(props) {
               </form>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs font-semibold text-nm-text-secondary">
                 {authMode === 'login' && (
-                  <button type="button" onClick={() => setAuthMode('recover')} className="text-nm-accent">
+                  <Link href={recoveryHref || '/en/recover'} className="text-nm-accent">
                     Find account / reset password
-                  </button>
+                  </Link>
                 )}
                 {(isRecoverMode || isResetPasswordMode) && (
-                  <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
-                    Back to login
-                  </button>
+                  isAuthPage ? (
+                    <Link href={homeHref || '/en'} className="text-nm-accent">
+                      Back to login
+                    </Link>
+                  ) : (
+                    <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
+                      Back to login
+                    </button>
+                  )
                 )}
               </div>
               {!isRecoverMode && !isResetPasswordMode && (
@@ -435,11 +445,19 @@ export default function MallogHomeEnView(props) {
               >
                 Logout
               </button>
+              {isAuthPage && (
+                <Link
+                  href={homeHref || '/en'}
+                  className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
+                >
+                  Start mallog24
+                </Link>
+              )}
             </div>
           )}
         </div>
 
-        {(authToken || isGuestMode) && (
+        {!isAuthPage && (authToken || isGuestMode) && (
           <>
             {usage && (
               <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">

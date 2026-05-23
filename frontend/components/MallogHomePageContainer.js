@@ -11,6 +11,7 @@ const QUOTA_TOAST_MS = 2600
 
 export default function MallogHomePageContainer({
   locale = 'ko',
+  authPageMode = '',
   darkMode,
   setDarkMode,
   uiTheme,
@@ -19,6 +20,7 @@ export default function MallogHomePageContainer({
   setUiThemeMode,
 }) {
   const isEnglish = locale === 'en'
+  const isAuthPage = authPageMode === 'recover'
   const [copied, setCopied] = useState(null)
   const [landingStats, setLandingStats] = useState(null)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
@@ -72,6 +74,8 @@ export default function MallogHomePageContainer({
   const CANONICAL_URL = isEnglish ? `${SITE_URL}/en` : SITE_URL
   const ALTERNATE_URL = isEnglish ? SITE_URL : `${SITE_URL}/en`
   const UPGRADE_CONTACT_URL = isEnglish ? '/pricing-en' : '/pricing'
+  const HOME_HREF = isEnglish ? '/en' : '/'
+  const RECOVERY_HREF = isEnglish ? '/en/recover' : '/recover'
   const LANGUAGE_SELECT_ID = isEnglish ? 'mallog24-language-en' : 'mallog24-language'
   const TYPE_SELECT_ID = isEnglish ? 'mallog24-type-en' : 'mallog24-type'
   const recordTypeLabels = isEnglish
@@ -90,6 +94,7 @@ export default function MallogHomePageContainer({
   const auth = useMallogAuth({
     apiUrl: API_URL,
     locale,
+    initialAuthMode: isAuthPage ? 'recover' : 'login',
     setError,
     setNotice,
   })
@@ -421,6 +426,9 @@ export default function MallogHomePageContainer({
       IOS_APP_STORE_URL={IOS_APP_STORE_URL}
       LANGUAGE_SELECT_ID={LANGUAGE_SELECT_ID}
       TYPE_SELECT_ID={TYPE_SELECT_ID}
+      authPageMode={authPageMode}
+      homeHref={HOME_HREF}
+      recoveryHref={RECOVERY_HREF}
       authMode={authMode}
       setAuthMode={setAuthMode}
       authName={authName}

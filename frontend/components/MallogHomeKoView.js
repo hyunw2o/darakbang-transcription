@@ -59,6 +59,9 @@ export default function MallogHomeKoView(props) {
     IOS_APP_STORE_URL,
     LANGUAGE_SELECT_ID,
     TYPE_SELECT_ID,
+    authPageMode,
+    homeHref,
+    recoveryHref,
     authMode,
     setAuthMode,
     authName,
@@ -201,6 +204,7 @@ export default function MallogHomeKoView(props) {
   ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
+  const isAuthPage = authPageMode === 'recover'
   const isRecoverMode = authMode === 'recover'
   const isResetPasswordMode = authMode === 'reset_password'
   const shouldShowAuthForm = !authToken || isResetPasswordMode
@@ -278,7 +282,7 @@ export default function MallogHomeKoView(props) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
-        {!authToken && (
+        {!authToken && !isAuthPage && (
           <MallogLandingSections
             locale="kr"
             content={KO_MALLOG_LANDING_CONTENT}
@@ -292,7 +296,7 @@ export default function MallogHomeKoView(props) {
         )}
 
         {/* 인증 카드 */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''}`}>
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isAuthPage ? 'mt-8 sm:mt-14' : ''}`}>
           {shouldShowAuthForm ? (
             <>
               <div className="mb-4">
@@ -378,14 +382,20 @@ export default function MallogHomeKoView(props) {
               </form>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs font-semibold text-nm-text-secondary">
                 {authMode === 'login' && (
-                  <button type="button" onClick={() => setAuthMode('recover')} className="text-nm-accent">
+                  <Link href={recoveryHref || '/recover'} className="text-nm-accent">
                     아이디/비밀번호 찾기
-                  </button>
+                  </Link>
                 )}
                 {(isRecoverMode || isResetPasswordMode) && (
-                  <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
+                  isAuthPage ? (
+                    <Link href={homeHref || '/'} className="text-nm-accent">
+                      로그인으로 돌아가기
+                    </Link>
+                  ) : (
+                    <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
                     로그인으로 돌아가기
-                  </button>
+                    </button>
+                  )
                 )}
               </div>
               {!isRecoverMode && !isResetPasswordMode && (
@@ -433,11 +443,19 @@ export default function MallogHomeKoView(props) {
               >
                 로그아웃
               </button>
+              {isAuthPage && (
+                <Link
+                  href={homeHref || '/'}
+                  className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
+                >
+                  mallog24 시작하기
+                </Link>
+              )}
             </div>
           )}
         </div>
 
-        {(authToken || isGuestMode) && (
+        {!isAuthPage && (authToken || isGuestMode) && (
           <>
             {usage && (
               <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
