@@ -21,7 +21,7 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
 EXPO_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
 EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS=120000
-EXPO_PUBLIC_LEGAL_DOC_VERSION=v2026.02.21
+EXPO_PUBLIC_LEGAL_DOC_VERSION=v2026.05.23
 ```
 
 기본값은 `https://api.mallog24.com` 입니다.

@@ -842,18 +842,19 @@ const LEGAL_DOCUMENTS = {
     privacy: {
       title: "개인정보처리방침",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 2월 21일",
+      updatedAt: "최종 업데이트: 2026년 5월 23일",
       sections: [
         {
           title: "1. 처리 항목",
           body: [
-            "회원정보(이메일/UID), 소셜로그인 정보, 업로드 음성, 변환 텍스트, 기록본, 접속/오류 로그를 처리할 수 있습니다.",
+            "회원정보(이메일/UID), 소셜로그인(Google/Kakao/Apple ID) 정보, 업로드 음성, 변환 텍스트, 기록본, 접속/오류 로그를 처리할 수 있습니다.",
+            "구독 기능 제공을 위해 결제 상태, 상품 ID, 구독 기간, Apple/결제사 거래 식별자를 처리할 수 있으며 카드번호 등 결제수단 원문은 저장하지 않습니다.",
           ],
         },
         {
           title: "2. 처리 목적",
           body: [
-            "로그인/계정보호, 전사·교정·요약·기록본 기능 제공, 서비스 보안 및 고객지원 목적입니다.",
+            "로그인/계정보호, 전사·교정·요약·기록본 기능 제공, 무료/유료 사용량 관리, iOS App Store 인앱구독 확인, 서비스 보안 및 고객지원 목적입니다.",
           ],
         },
         {
@@ -866,7 +867,7 @@ const LEGAL_DOCUMENTS = {
         {
           title: "4. 위탁 및 국외 처리",
           body: [
-            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini)를 이용하며 API 처리 과정에서 국외 서버 처리가 발생할 수 있습니다.",
+            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini), Apple(Sign in with Apple/App Store 구독)을 이용하며 API 처리 과정에서 국외 서버 처리가 발생할 수 있습니다.",
           ],
         },
         {
@@ -885,12 +886,12 @@ const LEGAL_DOCUMENTS = {
     terms: {
       title: "이용약관",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "시행일: 2026년 2월 23일",
+      updatedAt: "시행일: 2026년 5월 23일",
       sections: [
         {
           title: "1. 서비스 범위",
           body: [
-            "mallog24는 음성 전사/교정/요약/기록본 저장 기능을 제공합니다.",
+            "mallog24는 웹, Android 앱, iOS 앱에서 음성 전사/교정/요약/기록본 저장 기능을 제공합니다.",
             "외부 API 연동 특성상 처리시간과 결과 품질은 환경에 따라 달라질 수 있습니다.",
           ],
         },
@@ -899,6 +900,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "계정·세션 관리 책임은 이용자에게 있으며, 월간 사용량 한도가 적용됩니다.",
             "남은 사용 시간은 설정 화면에서 확인할 수 있습니다.",
+            "iOS 앱에서는 Apple App Store 인앱구독으로 Pro를 이용할 수 있으며, 가격·해지·환불은 Apple 결제창과 App Store 정책을 따릅니다.",
           ],
         },
         {
@@ -950,19 +952,21 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "회사 정책",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 2월 23일",
+      updatedAt: "최종 업데이트: 2026년 5월 23일",
       sections: [
         {
           title: "1. 운영 원칙",
           body: [
             "정확도·보안·안정성을 우선으로 제품을 개선합니다.",
             "사용자가 빠르게 기록을 재활용할 수 있는 단순한 흐름을 유지합니다.",
+            "웹, Android 앱, iOS 앱에서 일관된 핵심 기능과 정책 고지를 유지합니다.",
           ],
         },
         {
           title: "2. 데이터/보안 정책",
           body: [
             "최소 데이터 처리, 권한 분리, HTTPS, 토큰 검증, 요청 제한을 기본 통제로 적용합니다.",
+            "Apple ID 로그인과 App Store 구독 정보는 인증·구독 확인 목적에 필요한 범위로만 처리합니다.",
           ],
         },
         {
@@ -983,6 +987,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "기능 또는 정책 변경 시 문서 버전·적용일을 포함해 공지합니다.",
             "주요 변경은 앱 내 문서 또는 웹 공지로 안내합니다.",
+            "iOS 인앱구독은 Apple 심사, 샌드박스 테스트, 영수증/거래 검증 흐름을 별도 점검합니다.",
           ],
         },
         {
@@ -1004,7 +1009,7 @@ const LEGAL_DOCUMENTS = {
     notice: {
       title: "공지사항",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 2월 21일",
+      updatedAt: "최종 업데이트: 2026년 5월 23일",
       sections: [
         {
           title: "1. 서비스 안정화 안내",
@@ -1031,7 +1036,7 @@ const LEGAL_DOCUMENTS = {
     faq: {
       title: "자주 묻는 질문 (FAQ)",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 2월 21일",
+      updatedAt: "최종 업데이트: 2026년 5월 23일",
       sections: [
         {
           title: "Q1. 로그인은 되는데 처리 시작이 느립니다.",
@@ -1061,18 +1066,19 @@ const LEGAL_DOCUMENTS = {
     privacy: {
       title: "Privacy Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: February 21, 2026",
+      updatedAt: "Last updated: May 23, 2026",
       sections: [
         {
           title: "1. Data We Process",
           body: [
-            "We may process account data (email/UID), social-login data, uploaded audio, transcript text, saved records, and access/error logs.",
+            "We may process account data (email/UID), social-login data (Google/Kakao/Apple ID), uploaded audio, transcript text, saved records, and access/error logs.",
+            "For subscriptions, we may process payment status, product ID, subscription period, and Apple/payment-provider transaction identifiers. We do not store raw card numbers or full payment credentials.",
           ],
         },
         {
           title: "2. Purpose",
           body: [
-            "Used for authentication, account security, transcription/correction/summarization, records, support, and service protection.",
+            "Used for authentication, account security, transcription/correction/summarization, records, free/paid quota management, iOS App Store in-app subscription verification, support, and service protection.",
           ],
         },
         {
@@ -1085,7 +1091,7 @@ const LEGAL_DOCUMENTS = {
         {
           title: "4. Processors and Overseas Processing",
           body: [
-            "We use Supabase (auth/DB), OpenAI (Whisper), and Google (Gemini). API processing may involve overseas infrastructure.",
+            "We use Supabase (auth/DB), OpenAI (Whisper), Google (Gemini), and Apple (Sign in with Apple/App Store subscriptions). API processing may involve overseas infrastructure.",
           ],
         },
         {
@@ -1103,12 +1109,12 @@ const LEGAL_DOCUMENTS = {
     terms: {
       title: "Terms of Service",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Effective date: February 23, 2026",
+      updatedAt: "Effective date: May 23, 2026",
       sections: [
         {
           title: "1. Service Scope",
           body: [
-            "mallog24 provides speech transcription, correction, summarization, and structured record features.",
+            "mallog24 provides speech transcription, correction, summarization, and structured record features across web, Android, and iOS apps.",
             "Processing time and output quality may vary due to external API dependencies.",
           ],
         },
@@ -1117,6 +1123,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "Users are responsible for account/session security. Monthly usage quotas apply.",
             "Remaining time can be checked in Settings.",
+            "On iOS, Pro may be purchased through Apple App Store in-app subscriptions. Pricing, cancellation, and refunds follow Apple checkout and App Store policies.",
           ],
         },
         {
@@ -1168,18 +1175,20 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "Company Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: February 23, 2026",
+      updatedAt: "Last updated: May 23, 2026",
       sections: [
         {
           title: "1. Operating Principles",
           body: [
             "We prioritize transcript quality, security, and reliability while keeping workflows simple and practical.",
+            "We maintain consistent core features and policy disclosures across web, Android, and iOS apps.",
           ],
         },
         {
           title: "2. Data and Security Standards",
           body: [
             "We apply data minimization, role separation, HTTPS, token validation, and request throttling as baseline controls.",
+            "Apple ID sign-in and App Store subscription data are processed only as needed for authentication and subscription verification.",
           ],
         },
         {
@@ -1200,6 +1209,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "Policy and feature changes are announced with document version and effective date when needed.",
             "Major changes are shared through web or in-app notices.",
+            "iOS in-app subscriptions are managed with a separate checklist for Apple review, sandbox testing, and receipt/transaction verification.",
           ],
         },
         {
@@ -1221,7 +1231,7 @@ const LEGAL_DOCUMENTS = {
     notice: {
       title: "Notices",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: February 21, 2026",
+      updatedAt: "Last updated: May 23, 2026",
       sections: [
         {
           title: "1. Service Stability Notice",
@@ -1248,7 +1258,7 @@ const LEGAL_DOCUMENTS = {
     faq: {
       title: "Frequently Asked Questions (FAQ)",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: February 21, 2026",
+      updatedAt: "Last updated: May 23, 2026",
       sections: [
         {
           title: "Q1. Login works, but processing starts slowly.",
