@@ -408,12 +408,17 @@ export default function MallogHomeEnView(props) {
                         Remaining: {formatSecondsToHourMinute(remainingQuotaSeconds, 'en')}
                       </p>
                     )}
+                    {usage.trial_active && usage.access_source === 'welcome_trial' && (
+                      <p className="text-[11px] text-nm-accent mt-1">
+                        {usage.trial_days_remaining || 1} day(s) left in Pro trial
+                      </p>
+                    )}
                   </div>
                   <a
                     href={isGuestMode ? '#auth-card' : UPGRADE_CONTACT_URL}
                     className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
                   >
-                    {isGuestMode ? 'Sign in for 10 free hours/month' : 'Upgrade Subscription'}
+                    {isGuestMode ? 'Sign in for 10 free hours/month' : usage.trial_active ? 'Pro trial active' : 'Upgrade Subscription'}
                   </a>
                 </div>
                 {isFreeTier && (

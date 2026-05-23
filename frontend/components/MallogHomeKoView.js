@@ -406,12 +406,17 @@ export default function MallogHomeKoView(props) {
                         남은 시간: {formatSecondsToHourMinute(remainingQuotaSeconds)}
                       </p>
                     )}
+                    {usage.trial_active && usage.access_source === 'welcome_trial' && (
+                      <p className="text-[11px] text-nm-accent mt-1">
+                        신규 가입 Pro 체험 {usage.trial_days_remaining || 1}일 남음
+                      </p>
+                    )}
                   </div>
                   <a
                     href={isGuestMode ? '#auth-card' : UPGRADE_CONTACT_URL}
                     className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
                   >
-                    {isGuestMode ? '로그인하고 월 10시간 사용하기' : '구독 업그레이드하기'}
+                    {isGuestMode ? '로그인하고 월 10시간 사용하기' : usage.trial_active ? 'Pro 체험 중' : '구독 업그레이드하기'}
                   </a>
                 </div>
                 {isFreeTier && (

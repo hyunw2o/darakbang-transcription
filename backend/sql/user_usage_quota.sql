@@ -6,12 +6,26 @@ create table if not exists public.user_usage_quotas (
   plan_tier text not null default 'free' check (plan_tier in ('free', 'pro', 'enterprise')),
   used_audio_seconds integer not null default 0 check (used_audio_seconds >= 0),
   usage_month date not null default (date_trunc('month', now())::date),
+  trial_started_at timestamptz,
+  trial_ends_at timestamptz,
+  trial_source text,
+  trial_consumed boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+alter table if exists public.user_usage_quotas
+  add column if not exists trial_started_at timestamptz,
+  add column if not exists trial_ends_at timestamptz,
+  add column if not exists trial_source text,
+  add column if not exists trial_consumed boolean not null default false;
+
 create index if not exists idx_user_usage_plan_tier_month
   on public.user_usage_quotas (plan_tier, usage_month);
+
+create index if not exists idx_user_usage_trial_ends_at
+  on public.user_usage_quotas (trial_ends_at)
+  where trial_ends_at is not null;
 
 create or replace function public.reset_monthly_free_usage(target_month date default date_trunc('month', now())::date)
 returns integer

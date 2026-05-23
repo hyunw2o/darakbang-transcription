@@ -751,6 +751,10 @@ function App() {
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
   const displayUsagePlan = usagePlan;
+  const isWelcomeTrial = Boolean(effectiveUsage?.trial_active && effectiveUsage?.access_source === "welcome_trial");
+  const trialDaysRemaining = Math.max(0, Number(effectiveUsage?.trial_days_remaining) || 0);
+  const trialRemainingLabel = (copy.usageWelcomeTrialRemaining || "")
+    .replace("{days}", String(trialDaysRemaining || 1));
   const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
   const monthlyLimitSeconds = Math.max(
@@ -763,7 +767,9 @@ function App() {
   const usagePercent = isFreeUsagePlan
     ? Math.max(0, Math.min(100, Number(effectiveUsage?.usage_percent) || 0))
     : 0;
-  const planLabel = copy.planLabels?.[displayUsagePlan] || displayUsagePlan;
+  const planLabel = isWelcomeTrial
+    ? (copy.usageWelcomeTrial || copy.planLabels?.pro || "Pro")
+    : (copy.planLabels?.[displayUsagePlan] || displayUsagePlan);
   const usageSettingsTitle = copy.settingsUsageTitle;
   const usageSettingsHint = copy.settingsUsageHint;
 
@@ -1889,7 +1895,7 @@ function App() {
       : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`;
     const remainingLabel = isFreeUsagePlan
       ? `${copy.usageRemaining}: ${formatSecondsToHourMinute(remainingAudioSeconds)}`
-      : copy.usageUnlimited;
+      : (isWelcomeTrial ? trialRemainingLabel : copy.usageUnlimited);
     const progressWidth = isFreeUsagePlan ? `${usagePercent}%` : "100%";
     const ctaLabel = isFreeUsagePlan ? (copy.planLabels?.pro || "Pro") : planLabel;
 
@@ -2943,6 +2949,11 @@ function App() {
                       {isFreeUsagePlan ? (
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
                           {copy.usageRemaining}: {formatSecondsToHourMinute(remainingAudioSeconds)}
+                        </Text>
+                      ) : null}
+                      {isWelcomeTrial ? (
+                        <Text style={[styles.metaText, { color: activeTheme.accent }]}>
+                          {trialRemainingLabel}
                         </Text>
                       ) : null}
                       {isFreeUsagePlan ? (

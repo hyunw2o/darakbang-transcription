@@ -56,10 +56,21 @@ const mapUsageSnapshot = (usage) => {
   if (!usage) return null
   return {
     plan_tier: usage.plan_tier || 'free',
+    access_source: usage.access_source || '',
     used_audio_seconds: Number(usage.used_audio_seconds) || 0,
-    monthly_limit_seconds: Number(usage.monthly_limit_seconds) || 0,
-    remaining_seconds: Number(usage.remaining_seconds) || 0,
+    monthly_limit_seconds:
+      usage.monthly_limit_seconds === null || usage.monthly_limit_seconds === undefined
+        ? null
+        : Number(usage.monthly_limit_seconds) || 0,
+    remaining_seconds:
+      usage.remaining_seconds === null || usage.remaining_seconds === undefined
+        ? null
+        : Number(usage.remaining_seconds) || 0,
     usage_percent: Number(usage.usage_percent) || 0,
+    trial_active: Boolean(usage.trial_active),
+    trial_ends_at: usage.trial_ends_at || null,
+    trial_days_remaining: Number(usage.trial_days_remaining) || 0,
+    trial_source: usage.trial_source || '',
   }
 }
 

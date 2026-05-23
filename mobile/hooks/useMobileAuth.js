@@ -107,13 +107,21 @@ export default function useMobileAuth({
       const data = await requestApi("/api/usage", { token });
       const normalized = {
         plan_tier: String(data?.plan_tier || "free"),
+        access_source: String(data?.access_source || ""),
         used_audio_seconds: Math.max(0, Number(data?.used_audio_seconds) || 0),
-        monthly_limit_seconds: Number(data?.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+        monthly_limit_seconds:
+          data?.monthly_limit_seconds === null || data?.monthly_limit_seconds === undefined
+            ? null
+            : Number(data?.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
         remaining_seconds:
           data?.remaining_seconds === null || data?.remaining_seconds === undefined
             ? null
             : Math.max(0, Number(data?.remaining_seconds) || 0),
         usage_percent: Math.max(0, Math.min(100, Number(data?.usage_percent) || 0)),
+        trial_active: Boolean(data?.trial_active),
+        trial_ends_at: data?.trial_ends_at || null,
+        trial_days_remaining: Math.max(0, Number(data?.trial_days_remaining) || 0),
+        trial_source: String(data?.trial_source || ""),
       };
       setUsage(normalized);
       return normalized;

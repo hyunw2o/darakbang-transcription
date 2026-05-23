@@ -277,7 +277,7 @@ export default function PricingPage() {
         <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
           <section className="rounded-lg border-[0.5px] border-black/[0.1] bg-white p-6 dark:border-white/10 dark:bg-[#1A1916]">
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">Current plan</p>
-            <h2 className="mt-3 text-[28px] font-semibold text-[#1A1916] dark:text-[#F0EDE8]">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
+            <h2 className="mt-3 text-[28px] font-semibold text-[#1A1916] dark:text-[#F0EDE8]">{(status?.usage?.plan_tier || status?.plan_tier) === 'pro' ? 'Pro' : 'Free'}</h2>
             <p className="mt-3 text-base leading-7 text-[#64748B] dark:text-white/72 mallog-keep">무료 플랜은 월 10시간까지 사용 가능합니다.</p>
             <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B] dark:text-white/72">
               {PLAN_SUMMARY.free.map((item) => (
@@ -289,6 +289,9 @@ export default function PricingPage() {
             ) : status ? (
               <div className="mt-6 rounded-lg bg-[#F4F3EF] p-4 text-sm text-[#6B6860] dark:bg-white/[0.04] dark:text-white/72">
                 <p>상태: <span className="font-semibold text-[#0F172A] dark:text-white">{status.status || 'inactive'}</span></p>
+                {status.usage?.trial_active && (
+                  <p className="mt-2 font-semibold text-[#2563EB]">신규 가입 Pro 체험 {status.usage.trial_days_remaining || 1}일 남음</p>
+                )}
                 <p className="mt-2">갱신 예정일: <span className="font-semibold text-[#0F172A] dark:text-white">{status.current_period_end ? new Date(status.current_period_end).toLocaleString('ko-KR') : '없음'}</span></p>
                 <p className="mt-2">취소 예약: <span className="font-semibold text-[#0F172A] dark:text-white">{status.cancel_at_period_end ? '예' : '아니오'}</span></p>
               </div>

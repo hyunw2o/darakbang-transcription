@@ -260,6 +260,15 @@ BILLING_SUCCESS_URL = (os.getenv("BILLING_SUCCESS_URL") or "").strip()
 BILLING_CANCEL_URL = (os.getenv("BILLING_CANCEL_URL") or "").strip()
 BILLING_PORTAL_RETURN_URL = (os.getenv("BILLING_PORTAL_RETURN_URL") or "").strip()
 PAID_PLAN_TIER = (os.getenv("PAID_PLAN_TIER") or "pro").strip().lower() or "pro"
+WELCOME_TRIAL_ENABLED = os.getenv("WELCOME_TRIAL_ENABLED", "true").strip().lower() == "true"
+WELCOME_TRIAL_DAYS = max(0, int(os.getenv("WELCOME_TRIAL_DAYS", "30")))
+WELCOME_TRIAL_SOURCE = (os.getenv("WELCOME_TRIAL_SOURCE") or "welcome_signup_30d").strip()
+WELCOME_TRIAL_NEW_USER_CUTOFF_ISO = (
+    os.getenv("WELCOME_TRIAL_NEW_USER_CUTOFF_ISO") or "2026-05-24T00:00:00+09:00"
+).strip()
+WELCOME_TRIAL_GRANT_EXISTING_USERS = (
+    os.getenv("WELCOME_TRIAL_GRANT_EXISTING_USERS", "false").strip().lower() == "true"
+)
 STRIPE_ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
 BILLING_REFUND_WINDOW_DAYS = min(
     30,
@@ -478,6 +487,7 @@ APP_REVIEW_DEMO_EMAILS = {
 TRANSCRIPTION_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
 USAGE_SCOPE_VALIDATED = False
+USAGE_TRIAL_COLUMNS_AVAILABLE = True
 BILLING_SCOPE_VALIDATED = False
 BILLING_REFUND_SCOPE_VALIDATED = False
 USER_GLOSSARY_SCOPE_VALIDATED = False
@@ -1029,7 +1039,7 @@ def _clear_auth_cookie(response: JSONResponse, request: Request | None = None) -
 
 
 def _build_auth_payload(token: str, user: dict) -> dict:
-    row = _get_or_create_usage_row(user["id"])
+    row = _get_or_create_usage_row(user["id"], user=user)
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
@@ -2598,6 +2608,78 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
         return None
 
 
+def _format_iso_datetime(value: datetime | None) -> str | None:
+    if not value:
+        return None
+    if value.tzinfo:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.replace(microsecond=0).isoformat()
+
+
+def _resolve_user_created_at(user: dict | None) -> datetime | None:
+    if not isinstance(user, dict):
+        return None
+    for key in ("created_at", "createdAt", "confirmed_at", "confirmedAt"):
+        parsed = _parse_iso_datetime(user.get(key))
+        if parsed:
+            return parsed
+    return None
+
+
+def _resolve_welcome_trial_cutoff() -> datetime | None:
+    return _parse_iso_datetime(WELCOME_TRIAL_NEW_USER_CUTOFF_ISO)
+
+
+def _build_welcome_trial_payload(user: dict | None) -> dict | None:
+    if not WELCOME_TRIAL_ENABLED or WELCOME_TRIAL_DAYS <= 0:
+        return None
+
+    now = datetime.utcnow()
+    user_created_at = _resolve_user_created_at(user)
+    if not user_created_at:
+        if not WELCOME_TRIAL_GRANT_EXISTING_USERS:
+            return None
+        user_created_at = now
+
+    cutoff = _resolve_welcome_trial_cutoff()
+    if cutoff and user_created_at < cutoff and not WELCOME_TRIAL_GRANT_EXISTING_USERS:
+        return None
+
+    trial_started_at = min(user_created_at, now)
+    trial_ends_at = trial_started_at + timedelta(days=WELCOME_TRIAL_DAYS)
+    if trial_ends_at <= now:
+        return None
+
+    return {
+        "trial_started_at": _format_iso_datetime(trial_started_at),
+        "trial_ends_at": _format_iso_datetime(trial_ends_at),
+        "trial_source": WELCOME_TRIAL_SOURCE or "welcome_signup_30d",
+        "trial_consumed": True,
+        "updated_at": now.isoformat(),
+    }
+
+
+def _resolve_welcome_trial_state(row: dict | None) -> dict:
+    row_data = row or {}
+    trial_started_at = row_data.get("trial_started_at")
+    trial_ends_at = row_data.get("trial_ends_at")
+    trial_source = str(row_data.get("trial_source") or "").strip()
+    ends_at = _parse_iso_datetime(trial_ends_at)
+    now = datetime.utcnow()
+    is_active = bool(WELCOME_TRIAL_ENABLED and ends_at and ends_at > now)
+    days_remaining = 0
+    if is_active and ends_at:
+        remaining_seconds = max(0, (ends_at - now).total_seconds())
+        days_remaining = max(1, int(math.ceil(remaining_seconds / 86400)))
+    return {
+        "trial_active": is_active,
+        "trial_started_at": trial_started_at,
+        "trial_ends_at": trial_ends_at,
+        "trial_source": trial_source,
+        "trial_days_remaining": days_remaining,
+    }
+
+
 def _resolve_billing_reference_datetime(row: dict | None) -> datetime | None:
     row_data = row or {}
     return (
@@ -3092,7 +3174,7 @@ def _build_billing_status_payload(user: dict) -> dict:
     checkout_supported = checkout_mode != "disabled"
     portal_supported = provider == "stripe" and checkout_mode == "live"
 
-    usage_row = _get_or_create_usage_row(user_id)
+    usage_row = _get_or_create_usage_row(user_id, user=user)
     usage_snapshot = _build_usage_snapshot(
         usage_row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
@@ -3121,44 +3203,124 @@ def _normalize_usage_row(row: dict, user_id: str) -> dict:
         "plan_tier": plan_tier,
         "used_audio_seconds": used_seconds,
         "usage_month": usage_month,
+        "trial_started_at": row.get("trial_started_at"),
+        "trial_ends_at": row.get("trial_ends_at"),
+        "trial_source": row.get("trial_source"),
+        "trial_consumed": bool(row.get("trial_consumed") or False),
     }
 
 
-def _fetch_usage_row(user_id: str) -> dict | None:
-    response = (
-        _get_supabase_client().table(USAGE_TABLE_NAME)
-        .select("user_id, plan_tier, used_audio_seconds, usage_month")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
+def _is_missing_usage_trial_column_error(exc: Exception) -> bool:
+    error_text = str(exc).lower()
+    trial_column_names = ("trial_started_at", "trial_ends_at", "trial_source", "trial_consumed")
+    return any(column in error_text for column in trial_column_names) and (
+        "schema cache" in error_text
+        or "could not find" in error_text
+        or "does not exist" in error_text
+        or "column" in error_text
+        or "pgrst204" in error_text
     )
+
+
+def _usage_select_columns(include_trial_columns: bool = True) -> str:
+    base_columns = "user_id, plan_tier, used_audio_seconds, usage_month"
+    if not include_trial_columns:
+        return base_columns
+    return f"{base_columns}, trial_started_at, trial_ends_at, trial_source, trial_consumed"
+
+
+def _fetch_usage_row(user_id: str) -> dict | None:
+    global USAGE_TRIAL_COLUMNS_AVAILABLE
+    try:
+        response = (
+            _get_supabase_client().table(USAGE_TABLE_NAME)
+            .select(_usage_select_columns(USAGE_TRIAL_COLUMNS_AVAILABLE))
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if not (USAGE_TRIAL_COLUMNS_AVAILABLE and _is_missing_usage_trial_column_error(exc)):
+            raise
+        USAGE_TRIAL_COLUMNS_AVAILABLE = False
+        response = (
+            _get_supabase_client().table(USAGE_TABLE_NAME)
+            .select(_usage_select_columns(False))
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
     if response.data:
         return response.data[0]
     return None
 
 
-def _create_usage_row(user_id: str) -> None:
+def _create_usage_row(user_id: str, user: dict | None = None) -> None:
+    global USAGE_TRIAL_COLUMNS_AVAILABLE
     current_month = _current_usage_month_start()
+    payload = {
+        "user_id": user_id,
+        "plan_tier": USAGE_FREE_PLAN,
+        "used_audio_seconds": 0,
+        "usage_month": current_month,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    if USAGE_TRIAL_COLUMNS_AVAILABLE:
+        trial_payload = _build_welcome_trial_payload(user)
+        if trial_payload:
+            payload.update(trial_payload)
+
     try:
-        _get_supabase_client().table(USAGE_TABLE_NAME).insert({
-            "user_id": user_id,
-            "plan_tier": USAGE_FREE_PLAN,
-            "used_audio_seconds": 0,
-            "usage_month": current_month,
-            "updated_at": datetime.utcnow().isoformat(),
-        }).execute()
+        _get_supabase_client().table(USAGE_TABLE_NAME).insert(payload).execute()
     except Exception as e:
+        if USAGE_TRIAL_COLUMNS_AVAILABLE and _is_missing_usage_trial_column_error(e):
+            USAGE_TRIAL_COLUMNS_AVAILABLE = False
+            fallback_payload = {
+                key: value
+                for key, value in payload.items()
+                if key not in {"trial_started_at", "trial_ends_at", "trial_source", "trial_consumed"}
+            }
+            _get_supabase_client().table(USAGE_TABLE_NAME).insert(fallback_payload).execute()
+            return
         # Concurrent inserts may race. Read-after-write resolves this safely.
         if "duplicate key" not in str(e).lower():
             raise
 
 
-def _get_or_create_usage_row(user_id: str) -> dict:
+def _grant_welcome_trial_if_eligible(row: dict, user: dict | None = None) -> dict:
+    global USAGE_TRIAL_COLUMNS_AVAILABLE
+    if not USAGE_TRIAL_COLUMNS_AVAILABLE:
+        return row
+    if row.get("trial_started_at") or row.get("trial_consumed"):
+        return row
+
+    trial_payload = _build_welcome_trial_payload(user)
+    if not trial_payload:
+        return row
+
+    try:
+        response = (
+            _get_supabase_client()
+            .table(USAGE_TABLE_NAME)
+            .update(trial_payload)
+            .eq("user_id", row["user_id"])
+            .execute()
+        )
+        updated = response.data[0] if response.data else {**row, **trial_payload}
+        return _normalize_usage_row(updated, row["user_id"])
+    except Exception as exc:
+        if USAGE_TRIAL_COLUMNS_AVAILABLE and _is_missing_usage_trial_column_error(exc):
+            USAGE_TRIAL_COLUMNS_AVAILABLE = False
+            return row
+        raise
+
+
+def _get_or_create_usage_row(user_id: str, user: dict | None = None) -> dict:
     _ensure_user_usage_scope_ready()
 
     row = _fetch_usage_row(user_id)
     if not row:
-        _create_usage_row(user_id)
+        _create_usage_row(user_id, user=user)
         row = _fetch_usage_row(user_id)
         if not row:
             raise HTTPException(status_code=500, detail="사용량 정보를 생성하지 못했습니다.")
@@ -3184,7 +3346,7 @@ def _get_or_create_usage_row(user_id: str) -> dict:
         }
         normalized = _normalize_usage_row(updated, user_id)
 
-    return normalized
+    return _grant_welcome_trial_if_eligible(normalized, user=user)
 
 
 def _is_ios_client_request(request: Request | None = None, platform_header: str | None = None) -> bool:
@@ -3219,6 +3381,17 @@ def _has_active_apple_iap_subscription(user_id: str) -> bool:
         return False
 
 
+def _has_active_welcome_trial(user_id: str) -> bool:
+    if not WELCOME_TRIAL_ENABLED:
+        return False
+    try:
+        row = _fetch_usage_row(user_id)
+        return bool(row and _resolve_welcome_trial_state(_normalize_usage_row(row, user_id))["trial_active"])
+    except Exception as exc:
+        print(f"Welcome trial lookup failed for {user_id}: {exc}")
+        return False
+
+
 def _should_force_ios_free_plan(
     user_id: str,
     request: Request | None = None,
@@ -3226,7 +3399,10 @@ def _should_force_ios_free_plan(
 ) -> bool:
     if not _is_ios_client_request(request, platform_header):
         return False
+    if _has_active_welcome_trial(user_id):
+        return False
     # App Store 심사 정책상 iOS에서는 Apple IAP로 확인된 구독만 Pro 권한으로 인정한다.
+    # 단, 결제가 수반되지 않는 신규 가입 웰컴 혜택은 서버 프로모션 권한으로 허용한다.
     return not _has_active_apple_iap_subscription(user_id)
 
 
@@ -3359,12 +3535,15 @@ def _extract_apple_subscription_from_jws(purchase_token: str) -> dict:
 
 
 def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_plan: bool = False) -> dict:
-    plan_tier = USAGE_FREE_PLAN if force_free_plan else row["plan_tier"]
+    trial_state = _resolve_welcome_trial_state(row)
+    trial_active = bool(trial_state["trial_active"] and not force_free_plan)
+    plan_tier = USAGE_FREE_PLAN if force_free_plan else (PAID_PLAN_TIER if trial_active else row["plan_tier"])
     used_seconds = int(row["used_audio_seconds"])
 
     if is_admin_bypass and not force_free_plan:
         return {
             "plan_tier": USAGE_ADMIN_PLAN,
+            "access_source": "admin",
             "used_audio_seconds": used_seconds,
             "monthly_limit_seconds": None,
             "remaining_seconds": None,
@@ -3372,6 +3551,7 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_p
             "usage_month": row["usage_month"],
             "can_upload": True,
             "is_admin_bypass": True,
+            **trial_state,
         }
 
     if plan_tier == USAGE_FREE_PLAN:
@@ -3380,6 +3560,7 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_p
         usage_percent = min(100.0, round((used_seconds / limit_seconds) * 100, 2))
         return {
             "plan_tier": plan_tier,
+            "access_source": "free",
             "used_audio_seconds": used_seconds,
             "monthly_limit_seconds": limit_seconds,
             "remaining_seconds": remaining_seconds,
@@ -3387,10 +3568,12 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_p
             "usage_month": row["usage_month"],
             "can_upload": remaining_seconds > 0,
             "is_admin_bypass": False,
+            **trial_state,
         }
 
     return {
         "plan_tier": plan_tier,
+        "access_source": "welcome_trial" if trial_active else "subscription",
         "used_audio_seconds": used_seconds,
         "monthly_limit_seconds": None,
         "remaining_seconds": None,
@@ -3398,6 +3581,7 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_p
         "usage_month": row["usage_month"],
         "can_upload": True,
         "is_admin_bypass": False,
+        **trial_state,
     }
 
 
@@ -3406,7 +3590,7 @@ def _enforce_upload_quota_or_raise(user: dict, upload_audio_seconds: int, force_
         raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없습니다.")
 
     user_id = user["id"]
-    row = _get_or_create_usage_row(user_id)
+    row = _get_or_create_usage_row(user_id, user=user)
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
@@ -5338,7 +5522,7 @@ async def transcribe_audio(
                     _build_guest_usage_snapshot(user_id)
                     if is_guest
                     else _build_usage_snapshot(
-                        _get_or_create_usage_row(user["id"]),
+                        _get_or_create_usage_row(user["id"], user=user),
                         is_admin_bypass=_is_admin_bypass_user(user=user),
                         force_free_plan=force_ios_free_plan,
                     )
@@ -5694,7 +5878,7 @@ async def get_usage(
 ):
     """로그인 사용자 월간 음성 사용량 조회"""
     user = await _get_current_user(authorization)
-    row = _get_or_create_usage_row(user["id"])
+    row = _get_or_create_usage_row(user["id"], user=user)
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
@@ -6117,11 +6301,11 @@ async def verify_apple_iap_subscription(
     elif not existing_billing_row or existing_provider == "apple":
         _set_user_plan_tier(user_id, USAGE_FREE_PLAN)
 
-    usage_row = _get_or_create_usage_row(user_id)
+    usage_row = _get_or_create_usage_row(user_id, user=user)
     usage = _build_usage_snapshot(
         usage_row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
-        force_free_plan=not is_active,
+        force_free_plan=_should_force_ios_free_plan(user_id, request),
     )
     return {
         "success": True,
@@ -6148,10 +6332,14 @@ async def get_billing_status(
     _ensure_billing_scope_ready()
     user = await _get_current_user(authorization)
     if _is_ios_client_request(request, x_mallog24_client_platform):
-        row = _get_or_create_usage_row(user["id"])
+        row = _get_or_create_usage_row(user["id"], user=user)
         billing_row = _fetch_billing_row_by_user_id(user["id"])
         normalized_billing = _normalize_billing_row(billing_row or {}, user_id=user["id"])
-        apple_active = _is_active_apple_billing_row(billing_row)
+        usage = _build_usage_snapshot(
+            row,
+            is_admin_bypass=_is_admin_bypass_user(user=user),
+            force_free_plan=_should_force_ios_free_plan(user["id"], request, x_mallog24_client_platform),
+        )
         return {
             "success": True,
             "provider": "apple",
@@ -6162,14 +6350,10 @@ async def get_billing_status(
             "can_cancel": False,
             "can_request_refund": False,
             "status": normalized_billing["status"] if normalized_billing["provider"] == "apple" else "inactive",
-            "plan_tier": PAID_PLAN_TIER if apple_active else USAGE_FREE_PLAN,
+            "plan_tier": usage["plan_tier"],
             "current_period_end": normalized_billing.get("current_period_end"),
             "price_id": APPLE_IAP_PRODUCT_ID_PRO,
-            "usage": _build_usage_snapshot(
-                row,
-                is_admin_bypass=_is_admin_bypass_user(user=user),
-                force_free_plan=not apple_active,
-            ),
+            "usage": usage,
         }
     status = _build_billing_status_payload(user)
     return {
@@ -6194,7 +6378,7 @@ async def create_checkout_session(
     billing_provider = _get_billing_provider_or_raise()
     checkout_mode = _get_checkout_mode(billing_provider)
 
-    usage_row = _get_or_create_usage_row(user["id"])
+    usage_row = _get_or_create_usage_row(user["id"], user=user)
     billing_row = _fetch_billing_row_by_user_id(user["id"])
     billing_status = str((billing_row or {}).get("status") or "").strip().lower()
     if billing_status in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES:

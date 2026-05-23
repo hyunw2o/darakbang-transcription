@@ -276,7 +276,7 @@ export default function PricingEnPage() {
         <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
           <section className="rounded-lg border-[0.5px] border-black/[0.1] bg-white p-6 dark:border-white/10 dark:bg-[#1A1916]">
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#64748B] dark:text-white/55">Current plan</p>
-            <h2 className="mt-3 text-[28px] font-semibold text-[#1A1916] dark:text-[#F0EDE8]">{status?.plan_tier === 'pro' ? 'Pro' : 'Free'}</h2>
+            <h2 className="mt-3 text-[28px] font-semibold text-[#1A1916] dark:text-[#F0EDE8]">{(status?.usage?.plan_tier || status?.plan_tier) === 'pro' ? 'Pro' : 'Free'}</h2>
             <p className="mt-3 text-base leading-7 text-[#64748B] dark:text-white/72">The free tier includes up to 10 hours per month.</p>
             <ul className="mt-5 space-y-3 text-[15px] leading-7 text-[#64748B] dark:text-white/72">
               {PLAN_SUMMARY.free.map((item) => (
@@ -288,6 +288,9 @@ export default function PricingEnPage() {
             ) : status ? (
               <div className="mt-6 rounded-lg bg-[#F4F3EF] p-4 text-sm text-[#6B6860] dark:bg-white/[0.04] dark:text-white/72">
                 <p>Status: <span className="font-semibold text-[#0F172A] dark:text-white">{status.status || 'inactive'}</span></p>
+                {status.usage?.trial_active && (
+                  <p className="mt-2 font-semibold text-[#2563EB]">{status.usage.trial_days_remaining || 1} day(s) left in Pro trial</p>
+                )}
                 <p className="mt-2">Renews on: <span className="font-semibold text-[#0F172A] dark:text-white">{status.current_period_end ? new Date(status.current_period_end).toLocaleString('en-US') : 'N/A'}</span></p>
                 <p className="mt-2">Cancel scheduled: <span className="font-semibold text-[#0F172A] dark:text-white">{status.cancel_at_period_end ? 'Yes' : 'No'}</span></p>
               </div>
