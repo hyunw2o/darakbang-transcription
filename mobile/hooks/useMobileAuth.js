@@ -340,7 +340,7 @@ export default function useMobileAuth({
     try {
       const body = new FormData();
       body.append("email", email);
-      body.append("redirect_to", language === "en" ? `${SITE_URL}/en` : SITE_URL);
+      body.append("redirect_to", language === "en" ? `${SITE_URL}/en/recover` : `${SITE_URL}/recover`);
       const data = await requestApiWithTimeoutRetry("/api/auth/password-reset/request", {
         method: "POST",
         body,
