@@ -1,13 +1,13 @@
 export const KO_MALLOG_LANDING_CONTENT = {
   hero: {
-    badge: '✦ 오픈 베타 · 무료 10시간 제공',
+    badge: '✦ 첫 가입 30일 Pro 체험 · 무료 10시간 제공',
     titleLead: '녹음만 올리세요.',
     titleAccent: '구조화 문서가 나옵니다.',
     description:
       '설교, 통화, 회의 음성을 업로드하면 AI가 듣고 정리하고 바로 쓰는 문서로 바꿉니다. TXT, DOCX, 기록본 저장, 설교용 주보 초안까지 한 흐름으로 이어집니다.',
     primaryCtaLabel: '무료로 시작하기',
     secondaryCtaLabel: '요금제 보기',
-    trustLine: '신용카드 불필요 · 월 10시간 무료 · 언제든 해지',
+    trustLine: '첫 가입 30일 Pro 체험 · 신용카드 불필요 · 자동 결제 전환 없음',
   },
   features: {
     eyebrow: '핵심 기능',
@@ -156,9 +156,10 @@ export const KO_MALLOG_LANDING_CONTENT = {
   },
   comparison: {
     title: '요금제 비교',
-    description: '가입 전에 무료 체험 범위와 Pro 기준을 한 번에 볼 수 있도록 핵심 항목만 정리했습니다.',
+    description: '첫 가입자에게 제공되는 30일 Pro 체험과 무료/유료 전환 기준을 한 번에 확인할 수 있습니다.',
     columns: { feature: '항목', free: 'Free', pro: 'Pro' },
     rows: [
+      { feature: '신규 가입 혜택', free: '30일 Pro 체험 제공', pro: '체험 종료 후 선택 가능' },
       { feature: '월 사용량', free: '월 10시간', pro: '무제한' },
       { feature: '결제', free: '무료', pro: '월 8,800원 (VAT 포함)' },
       { feature: '출력 포맷', free: 'TXT / DOCX / 클립보드', pro: 'TXT / DOCX / 클립보드' },
@@ -184,11 +185,15 @@ export const KO_MALLOG_LANDING_CONTENT = {
         question: '주보용 요약도 만들 수 있나요?',
         answer: '설교형 기록에서는 본문, 핵심 메시지, 적용 포인트와 함께 주보용 요약 초안을 이어서 생성할 수 있습니다.',
       },
+      {
+        question: '첫 가입 30일 Pro 체험은 어떻게 적용되나요?',
+        answer: '신규 가입 계정에는 결제 정보 입력 없이 30일 동안 Pro 권한이 제공됩니다. 체험 종료 후 자동 결제되지 않으며, Free 월 10시간 또는 Pro 구독 중 직접 선택할 수 있습니다.',
+      },
     ],
   },
   ctaBanner: {
-    title: '무료 10시간으로 먼저 검증하고, 필요할 때만 Pro로 전환하세요',
-    body: '비로그인 상태에서도 흐름과 결과 예시는 모두 확인할 수 있고, 로그인 후 바로 업로드 테스트를 시작할 수 있습니다.',
+    title: '첫 가입 30일 Pro 체험으로 먼저 충분히 검증하세요',
+    body: '신규 가입자는 결제 없이 Pro 권한을 30일 동안 사용할 수 있고, 체험 종료 후 Free 월 10시간 또는 Pro 구독을 직접 선택할 수 있습니다.',
     primaryLabel: '지금 무료로 시작',
     secondaryLabel: '요금제 자세히 보기',
   },
@@ -196,14 +201,14 @@ export const KO_MALLOG_LANDING_CONTENT = {
 
 export const EN_MALLOG_LANDING_CONTENT = {
   hero: {
-    badge: '✦ Open beta · Free 10 hours included',
+    badge: '✦ 30-day Pro trial for new signups · Free 10 hours included',
     titleLead: 'Upload audio once.',
     titleAccent: 'Structured documents come out ready to use.',
     description:
       'For sermons, calls, and meetings, mallog24 turns spoken content into structured output you can ship immediately. TXT, DOCX, saved records, and bulletin-ready sermon notes stay in one flow.',
     primaryCtaLabel: 'Start Free',
     secondaryCtaLabel: 'View Pricing',
-    trustLine: 'No credit card required · Free 10h / month · Cancel anytime',
+    trustLine: '30-day Pro trial for new signups · No credit card required · No automatic paid conversion',
   },
   features: {
     eyebrow: 'Core capabilities',
@@ -352,9 +357,10 @@ export const EN_MALLOG_LANDING_CONTENT = {
   },
   comparison: {
     title: 'Plan comparison',
-    description: 'The key decision-making items are shown here so visitors can compare the free tier and Pro before signup.',
+    description: 'Compare the 30-day welcome Pro trial, the free tier, and the paid Pro plan before signup.',
     columns: { feature: 'Feature', free: 'Free', pro: 'Pro' },
     rows: [
+      { feature: 'New signup benefit', free: '30-day Pro trial included', pro: 'Optional after the trial' },
       { feature: 'Monthly usage', free: '10 hours / month', pro: 'Unlimited' },
       { feature: 'Billing', free: 'Free', pro: 'KRW 8,800 / month (VAT included)' },
       { feature: 'Exports', free: 'TXT / DOCX / Clipboard', pro: 'TXT / DOCX / Clipboard' },
@@ -380,11 +386,15 @@ export const EN_MALLOG_LANDING_CONTENT = {
         question: 'Can it create bulletin-ready sermon summaries?',
         answer: 'Sermon-type output can extend from scripture and core message into application points and bulletin-ready sermon note drafts.',
       },
+      {
+        question: 'How does the 30-day Pro trial for new signups work?',
+        answer: 'New accounts receive Pro access for 30 days without entering payment information. The trial does not convert into a paid subscription automatically; after it ends, users can choose the free 10-hour monthly tier or subscribe to Pro.',
+      },
     ],
   },
   ctaBanner: {
-    title: 'Validate with the free 10-hour plan first, then move to Pro only when it makes sense',
-    body: 'Visitors can inspect the workflow and output examples before login, then continue straight into uploads after signup.',
+    title: 'Start with a 30-day Pro trial for new signups',
+    body: 'New users can try Pro access for 30 days without payment information, then choose the free 10-hour monthly tier or a Pro subscription after the trial.',
     primaryLabel: 'Start Free Now',
     secondaryLabel: 'See Pricing Details',
   },

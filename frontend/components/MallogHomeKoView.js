@@ -206,7 +206,7 @@ export default function MallogHomeKoView(props) {
         <title>mallog24 - AI Speech to Text</title>
         <meta
           name="description"
-          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
+          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 첫 가입 30일 Pro 체험, 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
         />
         <link rel="canonical" href={CANONICAL_URL} />
         <link rel="alternate" hrefLang="ko" href={CANONICAL_URL} />
@@ -216,7 +216,7 @@ export default function MallogHomeKoView(props) {
         <meta property="og:title" content="mallog24 - AI Speech to Text" />
         <meta
           property="og:description"
-          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
+          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 첫 가입 30일 Pro 체험, 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
         />
         <meta property="og:url" content={CANONICAL_URL} />
         <meta property="og:image" content={OG_IMAGE_URL} />

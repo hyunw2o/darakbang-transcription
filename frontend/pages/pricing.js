@@ -8,6 +8,7 @@ const CONTACT_MAIL = 'ours113814@gmail.com'
 const CONTACT_URL = `mailto:${CONTACT_MAIL}?subject=mallog24%20%EC%9A%94%EA%B8%88%EC%A0%9C%20%EC%97%85%EA%B7%B8%EB%A0%88%EC%9D%B4%EB%93%9C%20%EB%AC%B8%EC%9D%98`
 const PLAN_SUMMARY = {
   free: [
+    '첫 가입 30일 Pro 체험 제공',
     '월 10시간까지 무료 사용',
     'TXT / DOCX / 클립보드 저장',
     '설교 / 통화 / 회의 구조화',
@@ -19,17 +20,20 @@ const PLAN_SUMMARY = {
   ],
 }
 const COMPARE_ROWS = [
+  ['신규 가입 혜택', '30일 Pro 체험', '체험 종료 후 선택 가능'],
   ['월 사용량', '월 10시간', '무제한'],
   ['출력 포맷', 'TXT / DOCX / 클립보드', 'TXT / DOCX / 클립보드'],
   ['기록본 저장', '지원', '지원'],
   ['추천 용도', '테스트 / 개인 사용', '팀 운영 / 반복 실무'],
 ]
 const BILLING_NOTES = [
+  '첫 가입 30일 Pro 체험은 결제 정보 없이 제공되며 자동으로 유료 구독으로 전환되지 않습니다.',
   '가격은 월 8,800원이며 부가세 10% 포함 기준입니다.',
   '정기 구독 취소 시 현재 결제 주기 종료 시점까지 사용 가능합니다.',
   '환불 기본 조건은 결제 후 7일 이내이며 사용량이 0초인 경우입니다.',
 ]
 const FAQS = [
+  ['첫 가입 30일 Pro 체험은 자동 결제되나요?', '아닙니다. 신규 가입자에게 30일 동안 Pro 권한을 제공하지만, 체험 종료 후 자동 결제나 자동 구독 전환은 없습니다.'],
   ['결제 전 어떤 정보를 확인하면 되나요?', '무료 플랜 한도, 월간 Pro 요금, 환불 기준, 지원 결제수단을 이 페이지에서 먼저 확인하시면 됩니다.'],
   ['카카오페이와 카드 결제 모두 가능한가요?', '운영 채널 설정에 따라 카드와 카카오페이 결제를 순차적으로 지원합니다. 결제창이 열리지 않으면 채널 심사 상태를 먼저 확인해야 합니다.'],
   ['구독을 취소하면 바로 사용이 막히나요?', '아닙니다. 기본 취소는 당월 결제 주기 종료 시점에 반영됩니다.'],
@@ -253,14 +257,14 @@ export default function PricingPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <span className="inline-flex rounded-full border border-[#3B82F6]/20 bg-[rgba(59,130,246,0.15)] px-4 py-1.5 text-xs font-semibold text-[#93C5FD] whitespace-nowrap">
-                ✦ Free / Pro 요금제를 한 번에 비교
+                ✦ 첫 가입 30일 Pro 체험 제공
               </span>
               <h1 className="mt-5 text-[34px] font-semibold leading-[1.08] text-white sm:text-[46px]">
-                <span className="block mallog-keep">필요한 만큼 무료로 검증하고,</span>
+                <span className="block mallog-keep">30일 동안 Pro로 검증하고,</span>
                 <span className="mt-2 block text-gradient-brand mallog-keep">확신이 생기면 Pro로 전환하세요.</span>
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-white/60 sm:text-lg mallog-keep">
-                mallog24 Pro는 월 8,800원(VAT 포함)으로 무제한 사용 기준입니다. 설교, 통화, 회의 구조화 문서를 반복적으로 만들어야 하는 팀과 개인을 위한 플랜입니다.
+                신규 가입자는 결제 정보 입력 없이 30일 동안 Pro 권한을 사용할 수 있습니다. 체험 종료 후에는 Free 월 10시간 또는 월 8,800원(VAT 포함) Pro 구독을 직접 선택할 수 있습니다.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">

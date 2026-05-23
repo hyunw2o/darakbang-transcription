@@ -206,7 +206,7 @@ export default function MallogHomeEnView(props) {
         <title>mallog24 - AI Speech to Text</title>
         <meta
           name="description"
-          content="AI transcription for sermons, calls, and meetings with structured output. Free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
+          content="AI transcription for sermons, calls, and meetings with structured output. 30-day Pro trial for new signups, free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
         />
         <link rel="canonical" href={CANONICAL_URL} />
         <link rel="alternate" hrefLang="en" href={CANONICAL_URL} />
@@ -216,7 +216,7 @@ export default function MallogHomeEnView(props) {
         <meta property="og:title" content="mallog24 - AI Speech to Text" />
         <meta
           property="og:description"
-          content="AI transcription for sermons, calls, and meetings with structured output. Free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
+          content="AI transcription for sermons, calls, and meetings with structured output. 30-day Pro trial for new signups, free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
         />
         <meta property="og:url" content={CANONICAL_URL} />
         <meta property="og:image" content={OG_IMAGE_URL} />
@@ -224,7 +224,7 @@ export default function MallogHomeEnView(props) {
         <meta name="twitter:title" content="mallog24 - AI Speech to Text" />
         <meta
           name="twitter:description"
-          content="AI transcription for sermons, calls, and meetings with structured output. Free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
+          content="AI transcription for sermons, calls, and meetings with structured output. 30-day Pro trial for new signups, free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
         />
         <meta name="twitter:image" content={OG_IMAGE_URL} />
       </Head>

@@ -8,6 +8,7 @@ const CONTACT_MAIL = 'ours113814@gmail.com'
 const CONTACT_URL = `mailto:${CONTACT_MAIL}?subject=mallog24%20Subscription%20Upgrade%20Inquiry`
 const PLAN_SUMMARY = {
   free: [
+    '30-day Pro trial for new signups',
     'Free up to 10 hours per month',
     'TXT / DOCX / clipboard export',
     'Sermon / call / meeting structuring',
@@ -19,17 +20,20 @@ const PLAN_SUMMARY = {
   ],
 }
 const COMPARE_ROWS = [
+  ['New signup benefit', '30-day Pro trial', 'Optional after the trial'],
   ['Monthly usage', '10 hours/month', 'Unlimited'],
   ['Exports', 'TXT / DOCX / Clipboard', 'TXT / DOCX / Clipboard'],
   ['Structured record saving', 'Included', 'Included'],
   ['Best fit', 'Evaluation / personal use', 'Team workflow / recurring work'],
 ]
 const BILLING_NOTES = [
+  'The 30-day Pro trial for new signups does not require payment information and does not convert into a paid subscription automatically.',
   'The monthly price is KRW 8,800 with 10% VAT included.',
   'Default cancellation takes effect at the end of the current billing period.',
   'Default refund criteria: within 7 days from payment and zero usage seconds.',
 ]
 const FAQS = [
+  ['Does the 30-day Pro trial bill automatically?', 'No. New accounts receive Pro access for 30 days, but the trial does not automatically convert into a paid subscription.'],
   ['What should I verify before payment?', 'Check the free usage cap, monthly Pro price, refund criteria, and available payment methods on this page first.'],
   ['Are both card and KakaoPay supported?', 'Card and KakaoPay are supported in sequence depending on the live channel status. If checkout does not open, the payment-channel review status should be checked first.'],
   ['Does cancellation stop access immediately?', 'No. Default cancellation keeps access available until the current billing cycle ends.'],
@@ -252,14 +256,14 @@ export default function PricingEnPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <span className="inline-flex rounded-full border border-[#3B82F6]/20 bg-[rgba(59,130,246,0.15)] px-4 py-1.5 text-xs font-semibold text-[#93C5FD] whitespace-nowrap">
-                ✦ Compare Free and Pro in one place
+                ✦ 30-day Pro trial for new signups
               </span>
               <h1 className="mt-5 text-[34px] font-semibold leading-[1.08] text-white sm:text-[46px]">
-                <span className="block">Validate with the free tier first,</span>
+                <span className="block">Validate with Pro for 30 days,</span>
                 <span className="mt-2 block text-gradient-brand">then move to Pro when the workflow fits.</span>
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-white/60 sm:text-lg">
-                mallog24 Pro is KRW 8,800 per month including VAT, built for unlimited structured transcription across sermons, calls, and meetings.
+                New users can use Pro access for 30 days without entering payment information. After the trial, they can choose the free 10-hour monthly tier or the KRW 8,800/month Pro subscription.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
