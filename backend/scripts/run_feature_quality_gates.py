@@ -84,6 +84,22 @@ def run_special_term_sample() -> None:
             "print('fine-tuned-glossary-context-ok')"
         ),
     ])
+    run_command([
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "sys.path.insert(0, 'backend'); "
+            "from church_terms import correct_text, get_special_term_prompt_hint; "
+            "en=correct_text('The seven artisan and watch tower are part of the prayer flow.', language='en'); "
+            "ja=correct_text('七つのバーティザンと見張り 台を確認します。', language='ja'); "
+            "hint=get_special_term_prompt_hint('en'); "
+            "assert 'Bartizan' in en and 'watchtower' in en, en; "
+            "assert 'バルティザン' in ja and '見張り台' in ja, ja; "
+            "assert 'Bartizan' in hint and 'watchtower' in hint and '망대' in hint and '파수대' in hint; "
+            "print('multilingual-domain-term-correction-ok')"
+        ),
+    ])
 
 
 def run_script_self_tests() -> None:

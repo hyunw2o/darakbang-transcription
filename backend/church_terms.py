@@ -461,6 +461,59 @@ SPECIAL_TERM_RULES = [
     },
 ]
 
+MULTILINGUAL_DOMAIN_TERM_RULES = [
+    {
+        "ko": "망대",
+        "meaning": "영적 망대/전략적 망대",
+        "en_terms": ["Bartizan", "bartizan"],
+        "en_aliases": [
+            "bartizan",
+            "bartizans",
+            "bartison",
+            "bartisons",
+            "bartisan",
+            "bartisans",
+            "artisan",
+            "artisans",
+            "partisan",
+            "partisans",
+        ],
+        "ja_terms": ["バルティザン", "望楼", "やぐら", "見張り台"],
+        "ja_aliases": [
+            "バルティザン",
+            "バーティザン",
+            "バルチザン",
+            "バーチザン",
+            "望楼",
+            "やぐら",
+            "櫓",
+            "見張り台",
+            "見張り 台",
+        ],
+    },
+    {
+        "ko": "파수대",
+        "meaning": "파수/감시를 위한 탑",
+        "en_terms": ["watchtower", "watch tower"],
+        "en_aliases": [
+            "watchtower",
+            "watchtowers",
+            "watch tower",
+            "watch towers",
+            "watch-tower",
+            "watch-towers",
+        ],
+        "ja_terms": ["監視塔", "見張り台", "望楼"],
+        "ja_aliases": [
+            "監視塔",
+            "監視 塔",
+            "見張り台",
+            "見張り 台",
+            "望楼",
+        ],
+    },
+]
+
 # ===== 3. 담임목사 =====
 PASTORS = [
     "류광수 목사", "류광수 목사님",
@@ -990,6 +1043,16 @@ def _build_special_term_terms() -> list[str]:
             if term and term not in seen:
                 seen.add(term)
                 terms.append(term)
+    for rule in MULTILINGUAL_DOMAIN_TERM_RULES:
+        for term in [
+            rule.get("ko"),
+            rule.get("meaning"),
+            *rule.get("en_terms", []),
+            *rule.get("ja_terms", []),
+        ]:
+            if term and term not in seen:
+                seen.add(term)
+                terms.append(term)
     return terms
 
 
@@ -1307,6 +1370,14 @@ def get_special_term_prompt_hint(language: str = "ko") -> str:
     term_pairs = "; ".join(
         f"{rule['canonical']}={rule['meaning']}" for rule in SPECIAL_TERM_RULES
     )
+    multilingual_pairs = "; ".join(
+        (
+            f"{rule['ko']}={rule['meaning']} "
+            f"(EN: {', '.join(rule.get('en_terms', []))}; "
+            f"JA: {', '.join(rule.get('ja_terms', []))})"
+        )
+        for rule in MULTILINGUAL_DOMAIN_TERM_RULES
+    )
     context_notes = []
     for rule in SPECIAL_TERM_RULES:
         mistakes = ", ".join(rule.get("context_mistakes", [])[:3])
@@ -1321,6 +1392,8 @@ def get_special_term_prompt_hint(language: str = "ko") -> str:
         return (
             "\n\n[Special Domain Terms]\n"
             f"- Keep these terms exact: {term_pairs}.\n"
+            f"- Korean meaning map for multilingual terms: {multilingual_pairs}.\n"
+            "- Use the meaning map to correct STT errors, but do not translate the transcript unless the source wording clearly uses the mapped term.\n"
             f"- Context-sensitive corrections: {note}.\n"
             "- Preserve these abbreviations exactly when they appear as domain terms."
         )
@@ -1329,6 +1402,8 @@ def get_special_term_prompt_hint(language: str = "ko") -> str:
         return (
             "\n\n[専門用語]\n"
             f"- 次の表記を正確に維持してください: {term_pairs}.\n"
+            f"- 韓国語の意味に対応する多言語用語: {multilingual_pairs}.\n"
+            "- この対応表は音声認識誤りの補正に使い、原文がその用語を示していない場合は翻訳語を無理に追加しないでください。\n"
             f"- 文脈補正: {note}.\n"
             "- これらの略語は専門用語として正確に表記してください。"
         )
@@ -1336,6 +1411,8 @@ def get_special_term_prompt_hint(language: str = "ko") -> str:
     return (
         "\n\n[특수 용어 고정]\n"
         f"- 다음 용어는 정확히 유지하라: {term_pairs}.\n"
+        f"- 한국어 의미 기준 다국어 매핑: {multilingual_pairs}.\n"
+        "- 이 매핑은 STT 오인식 보정에만 사용하고, 원문에 없는 번역어를 임의로 추가하지 말라.\n"
         f"- 문맥 보정: {note}.\n"
         "- 약어를 풀어 쓰거나 다른 비슷한 약어로 바꾸지 말고, 도메인 문맥에서는 위 표기를 우선하라."
     )
@@ -2928,6 +3005,11 @@ def _normalize_english_contextual_terms(text: str) -> str:
         r"immanuel|troas|harvester|blessing|prayer journal|vision school|unity training|RUTC|"
         r"acts|psalm|romans|john)"
     )
+    tower_context = (
+        r"(seven|7|tower|watch\s*tower|watchtower|bartizan|bartison|bartisan|"
+        r"platform|journey|guidepost|prayer tower|covenant tower|spiritual tower|"
+        r"망대|파수대)"
+    )
     medical_info_context = (
         r"(medical data|clinical data|clinical research|common data elements|data standard|"
         r"registry|cohort|CRF|eCRF|CDISC|case report form)"
@@ -2939,7 +3021,15 @@ def _normalize_english_contextual_terms(text: str) -> str:
             continue
 
         has_church_context = re.search(church_context, segment, flags=re.IGNORECASE) is not None
+        has_tower_context = re.search(tower_context, segment, flags=re.IGNORECASE) is not None
         has_medical_info_context = re.search(medical_info_context, segment, flags=re.IGNORECASE) is not None
+
+        if has_tower_context:
+            segment = re.sub(r"\bwatch[\s-]+tower(s)?\b", lambda m: f"watchtower{m.group(1) or ''}", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bbarti[sz]an(s)?\b", lambda m: f"Bartizan{m.group(1) or ''}", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bbartison(s)?\b", lambda m: f"Bartizan{m.group(1) or ''}", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bbartisan(s)?\b", lambda m: f"Bartizan{m.group(1) or ''}", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\b(?:artisan|partisan)(s)?\b", lambda m: f"Bartizan{m.group(1) or ''}", segment, flags=re.IGNORECASE)
 
         if has_church_context:
             segment = re.sub(r"\bsalmon\b", "sermon", segment, flags=re.IGNORECASE)
@@ -2983,6 +3073,37 @@ def _normalize_english_contextual_terms(text: str) -> str:
         corrected,
     )
     return corrected
+
+
+def _normalize_japanese_contextual_terms(text: str) -> str:
+    import re
+
+    if not text:
+        return text
+
+    corrected = text
+    segments = re.split(r"(\n+|(?<=[。.!?？！]))", corrected)
+    normalized_segments: list[str] = []
+    tower_context = (
+        r"(七|7|塔|望楼|やぐら|櫓|見張り|監視塔|バルティザン|バーティザン|"
+        r"祈り|契約|レムナント|237|旅程|道しるべ|망대|파수대)"
+    )
+
+    for segment in segments:
+        if not segment or re.fullmatch(r"\n+|[。.!?？！]", segment):
+            normalized_segments.append(segment)
+            continue
+
+        has_tower_context = re.search(tower_context, segment, flags=re.IGNORECASE) is not None
+        if has_tower_context:
+            segment = re.sub(r"バ[ールー]*[テチデ]ィ?ザン", "バルティザン", segment)
+            segment = re.sub(r"見張り\s*台", "見張り台", segment)
+            segment = re.sub(r"監視\s*塔", "監視塔", segment)
+            segment = re.sub(r"望\s*楼", "望楼", segment)
+
+        normalized_segments.append(segment)
+
+    return "".join(normalized_segments)
 
 
 def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko", custom_terms: list[str] = None) -> str:
@@ -3074,6 +3195,7 @@ def correct_text(
         corrected = re.sub(r'\n{3,}', '\n\n', corrected)
 
     elif language == "ja":
+        corrected = _normalize_japanese_contextual_terms(corrected)
         corrected = re.sub(r"(?m)^\s*(?:えー+|えっと+|あの+|その+|まあ+)\s*[,、。\-:;~?!？！]*\s*", "", corrected)
         corrected = re.sub(
             r"(?m)^((?:話者|参加者)\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?\s*[:：]\s*)(?:えー+|えっと+|あの+|その+|まあ+)\s*[,、。\-:;~?!？！]*\s*",
