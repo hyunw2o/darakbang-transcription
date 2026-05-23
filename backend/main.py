@@ -7917,6 +7917,76 @@ async def login(
     return response
 
 
+@app.post("/api/auth/password-reset/request")
+async def request_password_reset(
+    email: str = Form(...),
+    redirect_to: str = Form(""),
+):
+    """이메일 기반 비밀번호 재설정 메일 요청.
+
+    계정 존재 여부를 노출하지 않기 위해 유효한 이메일 형식이면 항상 같은 응답을 반환합니다.
+    """
+    normalized_email = _normalize_email_or_raise(email)
+    target_path = "recover"
+    if redirect_to.strip():
+        validated_redirect_url = _validate_redirect_url(redirect_to)
+        target_path = f"recover?{urllib.parse.urlencode({'redirect_to': validated_redirect_url})}"
+
+    try:
+        await _supabase_auth_request(target_path, payload={"email": normalized_email})
+    except HTTPException as exc:
+        if exc.status_code >= 500:
+            raise
+        print(f"Password reset request did not complete for {normalized_email}: {exc.detail}")
+
+    return {
+        "success": True,
+        "message": "가입된 이메일이라면 비밀번호 재설정 안내 메일이 발송됩니다.",
+    }
+
+
+@app.post("/api/auth/password-reset/confirm")
+async def confirm_password_reset(
+    request: Request,
+    new_password: str = Form(...),
+    authorization: str | None = Header(default=None),
+):
+    """복구 세션 또는 현재 세션으로 새 비밀번호 설정"""
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
+    if len(new_password) > 128:
+        raise HTTPException(status_code=400, detail="비밀번호 길이가 너무 깁니다.")
+
+    token = ""
+    if authorization:
+        try:
+            token = _extract_bearer_token(authorization)
+        except HTTPException:
+            token = ""
+    if not token:
+        token = (request.cookies.get(AUTH_COOKIE_NAME) or "").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="비밀번호 재설정 세션이 만료되었습니다. 메일 링크를 다시 요청해 주세요.")
+
+    data = await _supabase_auth_request(
+        "user",
+        method="PUT",
+        payload={"password": new_password},
+        token=token,
+    )
+    user = data.get("user") if isinstance(data, dict) and isinstance(data.get("user"), dict) else data
+    if token and isinstance(user, dict) and user.get("id"):
+        _cache_user_by_token(token, user)
+
+    payload = {
+        **(_build_auth_payload(token, user) if isinstance(user, dict) and user.get("id") else {"success": True, "user": user}),
+        "message": "비밀번호가 변경되었습니다.",
+    }
+    response = JSONResponse(payload)
+    _set_auth_cookie(response, request, token)
+    return response
+
+
 @app.post("/api/auth/apple")
 async def login_with_apple(
     request: Request,

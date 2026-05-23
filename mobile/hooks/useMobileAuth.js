@@ -10,6 +10,7 @@ import {
   AUTH_TOKEN_KEY,
   FREE_MONTHLY_LIMIT_SECONDS,
   OURS_URL,
+  SITE_URL,
 } from "../config";
 import {
   buildDirectOauthUrl,
@@ -327,6 +328,32 @@ export default function useMobileAuth({
     }
   }, [authEmail, authMode, authName, authPassword, clearMessages, copy, hydrateWithToken, onSessionClearedRef, setError, setNotice]);
 
+  const handlePasswordResetRequest = useCallback(async () => {
+    clearMessages();
+    const email = authEmail.trim();
+    if (!email) {
+      setError(copy.errors.recoveryEmailRequired);
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const body = new FormData();
+      body.append("email", email);
+      body.append("redirect_to", language === "en" ? `${SITE_URL}/en` : SITE_URL);
+      const data = await requestApiWithTimeoutRetry("/api/auth/password-reset/request", {
+        method: "POST",
+        body,
+        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+      });
+      setNotice(data?.message || copy.notices.passwordResetRequested);
+    } catch (error) {
+      setError(error?.message || copy.errors.passwordResetFailed);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [authEmail, clearMessages, copy.errors.passwordResetFailed, copy.errors.recoveryEmailRequired, copy.notices.passwordResetRequested, language, setError, setNotice]);
+
   const handleSocialLogin = useCallback(async (provider) => {
     if (socialLoading) return;
 
@@ -504,6 +531,7 @@ export default function useMobileAuth({
     usageLoading,
     fetchUsage,
     handleAuthSubmit,
+    handlePasswordResetRequest,
     handleSocialLogin,
     handleLogout,
     handleOpenOurs,

@@ -67,6 +67,8 @@ export default function MallogHomeEnView(props) {
     setAuthEmail,
     authPassword,
     setAuthPassword,
+    authPasswordConfirm,
+    setAuthPasswordConfirm,
     authLoading,
     socialLoading,
     authToken,
@@ -199,6 +201,19 @@ export default function MallogHomeEnView(props) {
   ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
+  const isRecoverMode = authMode === 'recover'
+  const isResetPasswordMode = authMode === 'reset_password'
+  const shouldShowAuthForm = !authToken || isResetPasswordMode
+  const authCardTitle = isResetPasswordMode
+    ? 'Set a new password.'
+    : isRecoverMode
+      ? 'Find account / reset password'
+      : 'Sign in and upload your first file right away.'
+  const authCardSubcopy = isResetPasswordMode
+    ? 'The email link is verified. Save a new password to finish recovery.'
+    : isRecoverMode
+      ? 'Your account ID is the email used for sign-up. Enter it to receive reset instructions.'
+      : 'Start in under a minute with email, Apple, Google, or Kakao.'
 
   return (
     <div className="min-h-screen pb-12">
@@ -277,13 +292,14 @@ export default function MallogHomeEnView(props) {
         )}
 
         {/* Auth Card */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${!authToken ? 'max-w-2xl mx-auto' : ''}`}>
-          {!authToken ? (
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''}`}>
+          {shouldShowAuthForm ? (
             <>
               <div className="mb-4">
-                <p className="text-base font-bold text-nm-text-primary">Sign in and upload your first file right away.</p>
-                <p className="mt-1 text-xs text-nm-text-secondary">Start in under a minute with email, Apple, Google, or Kakao.</p>
-                <div className="nm-segment-group mt-3">
+                <p className="text-base font-bold text-nm-text-primary">{authCardTitle}</p>
+                <p className="mt-1 text-xs text-nm-text-secondary">{authCardSubcopy}</p>
+                {!isRecoverMode && !isResetPasswordMode && (
+                  <div className="nm-segment-group mt-3">
                   <button
                     type="button"
                     onClick={() => setAuthMode('login')}
@@ -300,11 +316,12 @@ export default function MallogHomeEnView(props) {
                   >
                     Sign Up
                   </button>
-                </div>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={handleAuthSubmit} className="space-y-3">
-                {authMode === 'signup' && (
+                {authMode === 'signup' && !isResetPasswordMode && (
                   <input
                     type="text"
                     value={authName}
@@ -313,23 +330,38 @@ export default function MallogHomeEnView(props) {
                     className="w-full nm-input"
                   />
                 )}
-                <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  placeholder="Email"
-                  required
-                  className="w-full nm-input"
-                />
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="Password (8+ chars)"
-                  required
-                  minLength={8}
-                  className="w-full nm-input"
-                />
+                {!isResetPasswordMode && (
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="Email"
+                    required
+                    className="w-full nm-input"
+                  />
+                )}
+                {!isRecoverMode && (
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder={isResetPasswordMode ? 'New password (8+ chars)' : 'Password (8+ chars)'}
+                    required
+                    minLength={8}
+                    className="w-full nm-input"
+                  />
+                )}
+                {isResetPasswordMode && (
+                  <input
+                    type="password"
+                    value={authPasswordConfirm}
+                    onChange={(e) => setAuthPasswordConfirm(e.target.value)}
+                    placeholder="Confirm new password"
+                    required
+                    minLength={8}
+                    className="w-full nm-input"
+                  />
+                )}
                 <button
                   type="submit"
                   disabled={authLoading}
@@ -337,12 +369,29 @@ export default function MallogHomeEnView(props) {
                 >
                   {authLoading
                     ? 'Processing...'
-                    : authMode === 'signup'
-                      ? 'Create Account'
-                      : 'Login'}
+                    : isRecoverMode
+                      ? 'Send reset email'
+                      : isResetPasswordMode
+                        ? 'Save new password'
+                        : authMode === 'signup'
+                          ? 'Create Account'
+                          : 'Login'}
                 </button>
               </form>
-              <div className="mt-4">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs font-semibold text-nm-text-secondary">
+                {authMode === 'login' && (
+                  <button type="button" onClick={() => setAuthMode('recover')} className="text-nm-accent">
+                    Find account / reset password
+                  </button>
+                )}
+                {(isRecoverMode || isResetPasswordMode) && (
+                  <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
+                    Back to login
+                  </button>
+                )}
+              </div>
+              {!isRecoverMode && !isResetPasswordMode && (
+                <div className="mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {socialProviders.map((provider) => (
                     <SocialProviderButton
@@ -355,7 +404,8 @@ export default function MallogHomeEnView(props) {
                     />
                   ))}
                 </div>
-              </div>
+                </div>
+              )}
               {error && (
                 <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-red-500 animate-slide-up">
                   <p className="text-sm text-red-600">{error}</p>

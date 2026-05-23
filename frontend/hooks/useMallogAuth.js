@@ -16,6 +16,13 @@ const AUTH_MESSAGES = {
     signupDone: '회원가입 및 로그인이 완료되었습니다.',
     loginDone: '로그인되었습니다.',
     signupPending: '회원가입이 완료되었습니다. 이메일 인증 후 로그인해주세요.',
+    passwordResetRequested: '가입된 이메일이라면 비밀번호 재설정 안내 메일이 발송됩니다.',
+    passwordRecoveryReady: '새 비밀번호를 입력해 계정 복구를 완료해 주세요.',
+    passwordResetDone: '비밀번호가 변경되었습니다.',
+    passwordMismatch: '새 비밀번호가 서로 일치하지 않습니다.',
+    passwordMin: '비밀번호는 8자 이상이어야 합니다.',
+    recoveryEmailRequired: '가입에 사용한 이메일을 입력해 주세요.',
+    resetSessionExpired: '비밀번호 재설정 세션이 만료되었습니다. 메일 링크를 다시 요청해 주세요.',
     loggedOut: '로그아웃되었습니다.',
     loggedInUserFallback: '인증된 사용자',
     oauthRedirectPath: '',
@@ -35,6 +42,13 @@ const AUTH_MESSAGES = {
     signupDone: 'Sign-up and login completed.',
     loginDone: 'Logged in successfully.',
     signupPending: 'Sign-up completed. Please verify your email and log in.',
+    passwordResetRequested: 'If the email is registered, password reset instructions will be sent.',
+    passwordRecoveryReady: 'Enter a new password to finish account recovery.',
+    passwordResetDone: 'Your password has been updated.',
+    passwordMismatch: 'The new passwords do not match.',
+    passwordMin: 'Password must be at least 8 characters.',
+    recoveryEmailRequired: 'Please enter the email used for sign-up.',
+    resetSessionExpired: 'The password reset session has expired. Please request a new email link.',
     loggedOut: 'You have been logged out.',
     loggedInUserFallback: 'Authenticated user',
     oauthRedirectPath: '/en',
@@ -86,6 +100,7 @@ export default function useMallogAuth({
   const [authName, setAuthName] = useState('')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [authPasswordConfirm, setAuthPasswordConfirm] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState('')
   const [authToken, setAuthToken] = useState('')
@@ -214,7 +229,7 @@ export default function useMallogAuth({
     }
   }, [apiUrl, applySessionData, authToken, getAuthHeaders, messages.sessionExpired, readResponseData, resetAuthState])
 
-  const establishCookieSession = useCallback(async (token) => {
+  const establishCookieSession = useCallback(async (token, { noticeMessage = messages.socialComplete } = {}) => {
     const formData = new FormData()
     formData.append('access_token', token)
 
@@ -223,7 +238,7 @@ export default function useMallogAuth({
       body: formData,
     })
     const data = await readResponseData(response, messages.socialSessionError)
-    applySessionData(data, { noticeMessage: messages.socialComplete })
+    applySessionData(data, { noticeMessage })
     return data
   }, [apiUrl, applySessionData, messages.socialComplete, messages.socialSessionError, readResponseData])
 
@@ -244,6 +259,7 @@ export default function useMallogAuth({
       const oauthParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
       const queryParams = new URLSearchParams(window.location.search)
       const oauthAccessToken = oauthParams.get('access_token') || queryParams.get('access_token')
+      const oauthType = oauthParams.get('type') || queryParams.get('type')
       const oauthError =
         oauthParams.get('error_description') ||
         oauthParams.get('error') ||
@@ -259,7 +275,15 @@ export default function useMallogAuth({
           resetAuthState({ errorMessage: messages.sessionExpired })
         } else {
           try {
-            await establishCookieSession(oauthAccessToken)
+            const isPasswordRecovery = oauthType === 'recovery'
+            await establishCookieSession(oauthAccessToken, {
+              noticeMessage: isPasswordRecovery ? messages.passwordRecoveryReady : messages.socialComplete,
+            })
+            if (isPasswordRecovery) {
+              setAuthMode('reset_password')
+              setAuthPassword('')
+              setAuthPasswordConfirm('')
+            }
           } catch (error) {
             if (!cancelled) {
               resetAuthState({ errorMessage: error?.message || messages.socialSessionError })
@@ -279,7 +303,7 @@ export default function useMallogAuth({
     return () => {
       cancelled = true
     }
-  }, [establishCookieSession, fetchBootstrap, isJwtExpired, messages.sessionExpired, messages.socialFailedPrefix, messages.socialSessionError, resetAuthState, setError, warmUpBackend])
+  }, [establishCookieSession, fetchBootstrap, isJwtExpired, messages.passwordRecoveryReady, messages.sessionExpired, messages.socialComplete, messages.socialFailedPrefix, messages.socialSessionError, resetAuthState, setError, warmUpBackend])
 
   useEffect(() => {
     if (!authToken || !sessionExpiresAtMs) return undefined
@@ -306,6 +330,47 @@ export default function useMallogAuth({
     setAuthLoading(true)
 
     try {
+      if (authMode === 'recover') {
+        if (!authEmail.trim()) {
+          throw new Error(messages.recoveryEmailRequired)
+        }
+        const formData = new FormData()
+        formData.append('email', authEmail.trim())
+        formData.append('redirect_to', `${window.location.origin}${messages.oauthRedirectPath || window.location.pathname}`)
+        const response = await apiFetch(`${apiUrl}/api/auth/password-reset/request`, {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await readResponseData(response, messages.authFailed)
+        setNotice(data.message || messages.passwordResetRequested)
+        setAuthMode('login')
+        setAuthPassword('')
+        setAuthPasswordConfirm('')
+        return
+      }
+
+      if (authMode === 'reset_password') {
+        if (authPassword.length < 8) {
+          throw new Error(messages.passwordMin)
+        }
+        if (authPassword !== authPasswordConfirm) {
+          throw new Error(messages.passwordMismatch)
+        }
+        const formData = new FormData()
+        formData.append('new_password', authPassword)
+        const response = await apiFetch(`${apiUrl}/api/auth/password-reset/confirm`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData,
+        })
+        const data = await readResponseData(response, messages.resetSessionExpired)
+        applySessionData(data, { noticeMessage: data.message || messages.passwordResetDone })
+        setAuthMode('login')
+        setAuthPassword('')
+        setAuthPasswordConfirm('')
+        return
+      }
+
       const formData = new FormData()
       formData.append('email', authEmail.trim())
       formData.append('password', authPassword)
@@ -329,6 +394,7 @@ export default function useMallogAuth({
       }
 
       setAuthPassword('')
+      setAuthPasswordConfirm('')
       if (authMode === 'signup') {
         setAuthMode('login')
       }
@@ -344,9 +410,18 @@ export default function useMallogAuth({
     authMode,
     authName,
     authPassword,
+    authPasswordConfirm,
+    getAuthHeaders,
     messages.authError,
     messages.authFailed,
     messages.loginDone,
+    messages.oauthRedirectPath,
+    messages.passwordMismatch,
+    messages.passwordMin,
+    messages.passwordResetDone,
+    messages.passwordResetRequested,
+    messages.recoveryEmailRequired,
+    messages.resetSessionExpired,
     messages.signupDone,
     messages.signupPending,
     readResponseData,
@@ -396,6 +471,8 @@ export default function useMallogAuth({
     setAuthEmail,
     authPassword,
     setAuthPassword,
+    authPasswordConfirm,
+    setAuthPasswordConfirm,
     authLoading,
     socialLoading,
     authToken,

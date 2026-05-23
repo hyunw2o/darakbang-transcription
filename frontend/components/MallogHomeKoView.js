@@ -67,6 +67,8 @@ export default function MallogHomeKoView(props) {
     setAuthEmail,
     authPassword,
     setAuthPassword,
+    authPasswordConfirm,
+    setAuthPasswordConfirm,
     authLoading,
     socialLoading,
     authToken,
@@ -199,6 +201,19 @@ export default function MallogHomeKoView(props) {
   ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
+  const isRecoverMode = authMode === 'recover'
+  const isResetPasswordMode = authMode === 'reset_password'
+  const shouldShowAuthForm = !authToken || isResetPasswordMode
+  const authCardTitle = isResetPasswordMode
+    ? '새 비밀번호를 설정하세요.'
+    : isRecoverMode
+      ? '아이디/비밀번호 찾기'
+      : '로그인 후 바로 파일 업로드를 시작하세요.'
+  const authCardSubcopy = isResetPasswordMode
+    ? '메일 링크 인증이 완료되었습니다. 새 비밀번호를 저장하면 다시 로그인할 수 있습니다.'
+    : isRecoverMode
+      ? '아이디는 가입에 사용한 이메일입니다. 이메일을 입력하면 재설정 안내를 보내드립니다.'
+      : '이메일 또는 Apple/Google/Kakao로 1분 안에 시작할 수 있습니다.'
 
   return (
     <div className="min-h-screen pb-12">
@@ -277,13 +292,14 @@ export default function MallogHomeKoView(props) {
         )}
 
         {/* 인증 카드 */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${!authToken ? 'max-w-2xl mx-auto' : ''}`}>
-          {!authToken ? (
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''}`}>
+          {shouldShowAuthForm ? (
             <>
               <div className="mb-4">
-                <p className="text-base font-bold text-nm-text-primary">로그인 후 바로 파일 업로드를 시작하세요.</p>
-                <p className="mt-1 text-xs text-nm-text-secondary">이메일 또는 Apple/Google/Kakao로 1분 안에 시작할 수 있습니다.</p>
-                <div className="nm-segment-group mt-3">
+                <p className="text-base font-bold text-nm-text-primary">{authCardTitle}</p>
+                <p className="mt-1 text-xs text-nm-text-secondary">{authCardSubcopy}</p>
+                {!isRecoverMode && !isResetPasswordMode && (
+                  <div className="nm-segment-group mt-3">
                   <button
                     type="button"
                     onClick={() => setAuthMode('login')}
@@ -298,11 +314,12 @@ export default function MallogHomeKoView(props) {
                   >
                     회원가입
                   </button>
-                </div>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={handleAuthSubmit} className="space-y-3">
-                {authMode === 'signup' && (
+                {authMode === 'signup' && !isResetPasswordMode && (
                   <input
                     type="text"
                     value={authName}
@@ -311,23 +328,38 @@ export default function MallogHomeKoView(props) {
                     className="w-full nm-input"
                   />
                 )}
-                <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  placeholder="이메일"
-                  required
-                  className="w-full nm-input"
-                />
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="비밀번호 (8자 이상)"
-                  required
-                  minLength={8}
-                  className="w-full nm-input"
-                />
+                {!isResetPasswordMode && (
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="이메일"
+                    required
+                    className="w-full nm-input"
+                  />
+                )}
+                {!isRecoverMode && (
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder={isResetPasswordMode ? '새 비밀번호 (8자 이상)' : '비밀번호 (8자 이상)'}
+                    required
+                    minLength={8}
+                    className="w-full nm-input"
+                  />
+                )}
+                {isResetPasswordMode && (
+                  <input
+                    type="password"
+                    value={authPasswordConfirm}
+                    onChange={(e) => setAuthPasswordConfirm(e.target.value)}
+                    placeholder="새 비밀번호 확인"
+                    required
+                    minLength={8}
+                    className="w-full nm-input"
+                  />
+                )}
                 <button
                   type="submit"
                   disabled={authLoading}
@@ -335,12 +367,29 @@ export default function MallogHomeKoView(props) {
                 >
                   {authLoading
                     ? '처리 중...'
-                    : authMode === 'signup'
-                      ? '회원가입하기'
-                      : '로그인하기'}
+                    : isRecoverMode
+                      ? '재설정 메일 보내기'
+                      : isResetPasswordMode
+                        ? '새 비밀번호 저장'
+                        : authMode === 'signup'
+                          ? '회원가입하기'
+                          : '로그인하기'}
                 </button>
               </form>
-              <div className="mt-4">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs font-semibold text-nm-text-secondary">
+                {authMode === 'login' && (
+                  <button type="button" onClick={() => setAuthMode('recover')} className="text-nm-accent">
+                    아이디/비밀번호 찾기
+                  </button>
+                )}
+                {(isRecoverMode || isResetPasswordMode) && (
+                  <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
+                    로그인으로 돌아가기
+                  </button>
+                )}
+              </div>
+              {!isRecoverMode && !isResetPasswordMode && (
+                <div className="mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {socialProviders.map((provider) => (
                     <SocialProviderButton
@@ -353,7 +402,8 @@ export default function MallogHomeKoView(props) {
                     />
                   ))}
                 </div>
-              </div>
+                </div>
+              )}
               {error && (
                 <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-red-500 animate-slide-up">
                   <p className="text-sm text-red-600">{error}</p>

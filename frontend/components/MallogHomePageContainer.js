@@ -154,6 +154,8 @@ export default function MallogHomePageContainer({
     setAuthEmail,
     authPassword,
     setAuthPassword,
+    authPasswordConfirm,
+    setAuthPasswordConfirm,
     authLoading,
     socialLoading,
     authToken,
@@ -427,6 +429,8 @@ export default function MallogHomePageContainer({
       setAuthEmail={setAuthEmail}
       authPassword={authPassword}
       setAuthPassword={setAuthPassword}
+      authPasswordConfirm={authPasswordConfirm}
+      setAuthPasswordConfirm={setAuthPasswordConfirm}
       authLoading={authLoading}
       socialLoading={socialLoading}
       authToken={authToken}

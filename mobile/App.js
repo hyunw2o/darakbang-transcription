@@ -720,6 +720,7 @@ function App() {
     usageLoading,
     fetchUsage,
     handleAuthSubmit,
+    handlePasswordResetRequest,
     handleSocialLogin,
     handleLogout,
     handleOpenOurs,
@@ -2267,6 +2268,18 @@ function App() {
                       : copy.login}
                 </Text>
               </NmPressable>
+
+              {authMode === "login" ? (
+                <NmPressable
+                  style={[styles.accountRecoveryButton, authLoading ? styles.buttonDisabled : null]}
+                  onPress={handlePasswordResetRequest}
+                  disabled={authLoading}
+                >
+                  <Text style={[styles.accountRecoveryButtonText, { color: activeTheme.accent }]}>
+                    {copy.forgotAccount}
+                  </Text>
+                </NmPressable>
+              ) : null}
 
               <NmPressable
                 style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
@@ -3829,6 +3842,15 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontWeight: "700",
     fontSize: 13,
+  },
+  accountRecoveryButton: {
+    alignSelf: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  },
+  accountRecoveryButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
   },
   tinyButton: {
     borderRadius: 999,
