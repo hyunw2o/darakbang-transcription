@@ -25,7 +25,7 @@ export default function MallogHomePageContainer({
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
   const APP_DOWNLOAD_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.mallog24.app&pcampaignid=web_share'
-  const IOS_APP_STORE_URL = process.env.NEXT_PUBLIC_APP_STORE_URL || ''
+  const IOS_APP_STORE_URL = process.env.NEXT_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/us/app/mallog24/id6765552782'
   const OURS_PRIVACY_URL = `${OURS_URL}/${isEnglish ? 'privacy-en' : 'privacy'}`
   const OURS_TERMS_URL = `${OURS_URL}/${isEnglish ? 'terms-en' : 'terms'}`
   const OURS_COMPANY_POLICY_URL = `${OURS_URL}/${isEnglish ? 'company-policy-en' : 'company-policy'}`
