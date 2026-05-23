@@ -10,6 +10,21 @@ import UserGlossaryPanel from './UserGlossaryPanel'
 import { EN_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
 
+function FooterInlineRow({ items, className = '' }) {
+  const visibleItems = items.filter(Boolean)
+
+  return (
+    <p className={`flex flex-wrap items-center justify-center gap-x-2 gap-y-1 ${className}`}>
+      {visibleItems.map((item, index) => (
+        <span key={`${item}-${index}`} className="inline-flex items-center gap-x-2">
+          {index > 0 ? <span className="opacity-45">|</span> : null}
+          <span>{item}</span>
+        </span>
+      ))}
+    </p>
+  )
+}
+
 export default function MallogHomeEnView(props) {
   const {
     darkMode,
@@ -177,6 +192,11 @@ export default function MallogHomeEnView(props) {
         { label: 'Android Download', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS Download' : 'iOS Review', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
       ]
+  const footerBusinessRows = [
+    [`Company Name: ${BUSINESS_NAME}`, `Representative: ${REPRESENTATIVE_NAME}`, `Business Registration No.: ${BUSINESS_REG_NUMBER}`, `E-commerce Registration No.: ${ECOMMERCE_REG_NUMBER}`],
+    [`Business Address: ${BUSINESS_ADDRESS}`, LANDLINE_PHONE ? `Representative Phone: ${LANDLINE_PHONE}` : '', `Business Inquiry Email: ${SUPPORT_EMAIL}`],
+    [`Trademark Application No.: ${TRADEMARK_APPLICATION_NO}`, `Copyright Registration No.: ${COPYRIGHT_REGISTRATION_NO}`, `1:1 Inquiry Email: ${SUPPORT_EMAIL}`],
+  ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
 
@@ -1078,30 +1098,23 @@ export default function MallogHomeEnView(props) {
 
         {/* 푸터 */}
         <footer className="mt-12 text-center">
-          <div className="mb-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
             <a href={OURS_PRIVACY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               Privacy Policy
             </a>
-            <span className="text-nm-text-secondary">·</span>
+            <span className="text-nm-text-secondary opacity-45">|</span>
             <a href={OURS_TERMS_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               Terms of Service
             </a>
-            <span className="text-nm-text-secondary">·</span>
+            <span className="text-nm-text-secondary opacity-45">|</span>
             <a href={OURS_COMPANY_POLICY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               Company Policy
             </a>
           </div>
-          <div className="space-y-1 text-[11px] text-nm-text-secondary mb-2">
-            <p>Company Name: {BUSINESS_NAME}</p>
-            <p>Business Registration No.: {BUSINESS_REG_NUMBER}</p>
-            {LANDLINE_PHONE && <p>Representative Phone: {LANDLINE_PHONE}</p>}
-            <p>Business Address: {BUSINESS_ADDRESS}</p>
-            <p>Representative (CEO): {REPRESENTATIVE_NAME}</p>
-            <p>E-commerce Registration No.: {ECOMMERCE_REG_NUMBER}</p>
-            <p>Trademark Application No.: {TRADEMARK_APPLICATION_NO}</p>
-            <p>Copyright Registration No.: {COPYRIGHT_REGISTRATION_NO}</p>
-            <p>Business Inquiry Email: {SUPPORT_EMAIL}</p>
-            <p>1:1 Inquiry Email: {SUPPORT_EMAIL}</p>
+          <div className="mb-2 flex flex-col items-center gap-1 text-[11px] text-nm-text-secondary leading-relaxed">
+            {footerBusinessRows.map((row, index) => (
+              <FooterInlineRow key={`footer-business-${index}`} items={row} />
+            ))}
           </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.

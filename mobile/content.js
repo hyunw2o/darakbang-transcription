@@ -827,20 +827,14 @@ const SUPPORT_CONTACT_EN = `Contact: ${SUPPORT_EMAIL}`;
 const SERVICE_INQUIRY_CONTACT_KO = `서비스 관련 문의: ${SUPPORT_EMAIL}`;
 const SERVICE_INQUIRY_CONTACT_EN = `Service inquiries: ${SUPPORT_EMAIL}`;
 const BUSINESS_DISCLOSURE_KO = [
-  `상호: ${BUSINESS_NAME}`,
-  `사업자등록번호: ${BUSINESS_REG_NUMBER}`,
-  `유선전화번호: ${LANDLINE_PHONE}`,
+  `상호: ${BUSINESS_NAME} | 대표: ${REPRESENTATIVE_NAME} | 사업자등록번호: ${BUSINESS_REG_NUMBER}`,
+  `통신판매신고번호: ${ECOMMERCE_REG_NUMBER} | 유선전화번호: ${LANDLINE_PHONE}`,
   `사업장주소: ${BUSINESS_ADDRESS}`,
-  `대표: ${REPRESENTATIVE_NAME}`,
-  `통신판매신고번호: ${ECOMMERCE_REG_NUMBER}`,
 ];
 const BUSINESS_DISCLOSURE_EN = [
-  `Company name: ${BUSINESS_NAME}`,
-  `Business registration no.: ${BUSINESS_REG_NUMBER}`,
-  `Landline: ${LANDLINE_PHONE}`,
+  `Company name: ${BUSINESS_NAME} | Representative: ${REPRESENTATIVE_NAME_EN} | Business registration no.: ${BUSINESS_REG_NUMBER}`,
+  `E-commerce registration no.: ${ECOMMERCE_REG_NUMBER} | Landline: ${LANDLINE_PHONE}`,
   `Business address: ${BUSINESS_ADDRESS_EN}`,
-  `Representative (CEO): ${REPRESENTATIVE_NAME_EN}`,
-  `E-commerce registration no.: ${ECOMMERCE_REG_NUMBER}`,
 ];
 
 const LEGAL_DOCUMENTS = {

@@ -10,6 +10,21 @@ import UserGlossaryPanel from './UserGlossaryPanel'
 import { KO_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
 
+function FooterInlineRow({ items, className = '' }) {
+  const visibleItems = items.filter(Boolean)
+
+  return (
+    <p className={`flex flex-wrap items-center justify-center gap-x-2 gap-y-1 ${className}`}>
+      {visibleItems.map((item, index) => (
+        <span key={`${item}-${index}`} className="inline-flex items-center gap-x-2">
+          {index > 0 ? <span className="opacity-45">|</span> : null}
+          <span>{item}</span>
+        </span>
+      ))}
+    </p>
+  )
+}
+
 export default function MallogHomeKoView(props) {
   const {
     darkMode,
@@ -177,6 +192,11 @@ export default function MallogHomeKoView(props) {
         { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
       ]
+  const footerBusinessRows = [
+    [`상호: ${BUSINESS_NAME}`, `대표: ${REPRESENTATIVE_NAME}`, `사업자등록번호: ${BUSINESS_REG_NUMBER}`, `통신판매신고번호: ${ECOMMERCE_REG_NUMBER}`],
+    [`사업장주소: ${BUSINESS_ADDRESS}`, LANDLINE_PHONE ? `대표자 전화번호: ${LANDLINE_PHONE}` : '', `비즈니스 문의 이메일: ${SUPPORT_EMAIL}`],
+    [`상표 출원번호: ${TRADEMARK_APPLICATION_NO}`, `저작권 등록번호: ${COPYRIGHT_REGISTRATION_NO}`, `1:1 문의 이메일: ${SUPPORT_EMAIL}`],
+  ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
 
@@ -1074,30 +1094,23 @@ export default function MallogHomeKoView(props) {
 
         {/* 푸터 */}
         <footer className="mt-12 text-center">
-          <div className="mb-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
             <a href={OURS_PRIVACY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               개인정보처리방침
             </a>
-            <span className="text-nm-text-secondary">·</span>
+            <span className="text-nm-text-secondary opacity-45">|</span>
             <a href={OURS_TERMS_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               이용약관
             </a>
-            <span className="text-nm-text-secondary">·</span>
+            <span className="text-nm-text-secondary opacity-45">|</span>
             <a href={OURS_COMPANY_POLICY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               회사 정책
             </a>
           </div>
-          <div className="space-y-1 text-[11px] text-nm-text-secondary mb-2">
-            <p>상호: {BUSINESS_NAME}</p>
-            <p>사업자등록번호: {BUSINESS_REG_NUMBER}</p>
-            {LANDLINE_PHONE && <p>대표자 전화번호: {LANDLINE_PHONE}</p>}
-            <p>사업장주소: {BUSINESS_ADDRESS}</p>
-            <p>대표: {REPRESENTATIVE_NAME}</p>
-            <p>통신판매신고번호: {ECOMMERCE_REG_NUMBER}</p>
-            <p>상표 출원번호: {TRADEMARK_APPLICATION_NO}</p>
-            <p>저작권 등록번호: {COPYRIGHT_REGISTRATION_NO}</p>
-            <p>비즈니스 문의 이메일: {SUPPORT_EMAIL}</p>
-            <p>1:1 문의 이메일: {SUPPORT_EMAIL}</p>
+          <div className="mb-2 flex flex-col items-center gap-1 text-[11px] text-nm-text-secondary leading-relaxed">
+            {footerBusinessRows.map((row, index) => (
+              <FooterInlineRow key={`footer-business-${index}`} items={row} />
+            ))}
           </div>
           <p className="text-[11px] text-nm-text-secondary">
             mallog24 &middot; Copyright 2026. OURS All rights reserved.

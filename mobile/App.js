@@ -24,10 +24,16 @@ import SocialAuthButton from "./components/SocialAuthButton";
 import AppleIapSubscriptionCard from "./components/AppleIapSubscriptionCard";
 import {
   APP_TABS,
+  BUSINESS_ADDRESS,
+  BUSINESS_ADDRESS_EN,
+  BUSINESS_NAME,
+  BUSINESS_REG_NUMBER,
+  ECOMMERCE_REG_NUMBER,
   FREE_MONTHLY_LIMIT_SECONDS,
   GUEST_MAX_AUDIO_SECONDS,
   GUEST_MONTHLY_LIMIT_SECONDS,
   GUEST_SESSION_KEY,
+  LANDLINE_PHONE,
   MAX_UPLOAD_BYTES,
   MOBILE_THEME_OPTIONS,
   MOBILE_THEMES,
@@ -35,7 +41,10 @@ import {
   PRIVACY_CONSENT_KEY,
   PRIVACY_POLICY_VERSION,
   RECORD_CATEGORIES,
+  REPRESENTATIVE_NAME,
+  REPRESENTATIVE_NAME_EN,
   STATUS_POLL_INTERVAL_MS,
+  SUPPORT_EMAIL,
   TRANSCRIBE_POLL_TIMEOUT_MS,
   UI_THEME_KEY,
   UI_THEME_MODE_KEY,
@@ -390,6 +399,23 @@ function App() {
     [baseLegalDocs, isIosAppStoreReviewMode, uiLanguage]
   );
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
+  const settingsBusinessRows = useMemo(() => {
+    if (uiLanguage === "en") {
+      return [
+        [`Company: ${BUSINESS_NAME}`, `Representative: ${REPRESENTATIVE_NAME_EN}`, `Business Reg. No.: ${BUSINESS_REG_NUMBER}`],
+        [`E-commerce Reg. No.: ${ECOMMERCE_REG_NUMBER}`, `Phone: ${LANDLINE_PHONE}`],
+        [`Address: ${BUSINESS_ADDRESS_EN}`],
+        [`Contact: ${SUPPORT_EMAIL}`],
+      ];
+    }
+
+    return [
+      [`상호: ${BUSINESS_NAME}`, `대표: ${REPRESENTATIVE_NAME}`, `사업자등록번호: ${BUSINESS_REG_NUMBER}`],
+      [`통신판매신고번호: ${ECOMMERCE_REG_NUMBER}`, `대표자 전화번호: ${LANDLINE_PHONE}`],
+      [`사업장주소: ${BUSINESS_ADDRESS}`],
+      [`문의 이메일: ${SUPPORT_EMAIL}`],
+    ];
+  }, [uiLanguage]);
   const clearMessages = useCallback(() => {
     setNotice("");
     setError("");
@@ -3235,6 +3261,22 @@ function App() {
                   </ScrollView>
                 </View>
               </FadeInView>
+
+              <FadeInView key="settings-business-footer" delay={250}>
+                <View style={styles.settingsBusinessFooter}>
+                  {settingsBusinessRows.map((row, index) => (
+                    <Text
+                      key={`settings-business-${index}`}
+                      style={[styles.settingsBusinessFooterText, { color: activeTheme.textSecondary }]}
+                    >
+                      {row.filter(Boolean).join(" | ")}
+                    </Text>
+                  ))}
+                  <Text style={[styles.settingsBusinessFooterText, { color: activeTheme.textSecondary }]}>
+                    mallog24 | Copyright 2026. OURS All rights reserved.
+                  </Text>
+                </View>
+              </FadeInView>
             </ScrollView>
           ) : null}
         </View>
@@ -3813,6 +3855,19 @@ const styles = StyleSheet.create({
     color: NM.textSecondary,
     fontSize: 12,
     lineHeight: 18,
+  },
+  settingsBusinessFooter: {
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 6,
+    gap: 3,
+  },
+  settingsBusinessFooterText: {
+    color: NM.textSecondary,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "600",
+    textAlign: "center",
   },
   topUsageCard: {
     marginHorizontal: 16,
