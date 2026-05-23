@@ -2280,6 +2280,11 @@ function App() {
                   </Text>
                 </NmPressable>
               ) : null}
+              {authMode === "login" ? (
+                <Text style={[styles.accountRecoveryHint, { color: activeTheme.textSecondary }]}>
+                  {copy.accountRecoveryHint}
+                </Text>
+              ) : null}
 
               <NmPressable
                 style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
@@ -3851,6 +3856,14 @@ const styles = StyleSheet.create({
   accountRecoveryButtonText: {
     fontSize: 12,
     fontWeight: "800",
+  },
+  accountRecoveryHint: {
+    alignSelf: "center",
+    maxWidth: 420,
+    textAlign: "center",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: -4,
   },
   tinyButton: {
     borderRadius: 999,

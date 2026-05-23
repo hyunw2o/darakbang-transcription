@@ -212,7 +212,7 @@ export default function MallogHomeEnView(props) {
   const authCardSubcopy = isResetPasswordMode
     ? 'The email link is verified. Save a new password to finish recovery.'
     : isRecoverMode
-      ? 'Your account ID is the email used for sign-up. Enter it to receive reset instructions.'
+      ? 'Your account ID is the email used for sign-up. Enter it to receive reset instructions. If you cannot remember the sign-up email, contact ours113814@gmail.com.'
       : 'Start in under a minute with email, Apple, Google, or Kakao.'
 
   return (

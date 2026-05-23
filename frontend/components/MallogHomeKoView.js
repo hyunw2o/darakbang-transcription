@@ -212,7 +212,7 @@ export default function MallogHomeKoView(props) {
   const authCardSubcopy = isResetPasswordMode
     ? '메일 링크 인증이 완료되었습니다. 새 비밀번호를 저장하면 다시 로그인할 수 있습니다.'
     : isRecoverMode
-      ? '아이디는 가입에 사용한 이메일입니다. 이메일을 입력하면 재설정 안내를 보내드립니다.'
+      ? '아이디는 가입에 사용한 이메일입니다. 이메일을 입력하면 재설정 안내를 보내드립니다. 가입 이메일을 기억하지 못하면 ours113814@gmail.com으로 문의해 주세요.'
       : '이메일 또는 Apple/Google/Kakao로 1분 안에 시작할 수 있습니다.'
 
   return (
