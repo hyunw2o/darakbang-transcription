@@ -207,6 +207,7 @@ export default function MallogHomeKoView(props) {
   const isAuthPage = authPageMode === 'recover'
   const isRecoverMode = authMode === 'recover'
   const isResetPasswordMode = authMode === 'reset_password'
+  const isRecoveryOnlyView = isAuthPage || isResetPasswordMode
   const shouldShowAuthForm = !authToken || isResetPasswordMode
   const authCardTitle = isResetPasswordMode
     ? '새 비밀번호를 설정하세요.'
@@ -282,7 +283,7 @@ export default function MallogHomeKoView(props) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
-        {!authToken && !isAuthPage && (
+        {!authToken && !isRecoveryOnlyView && (
           <MallogLandingSections
             locale="kr"
             content={KO_MALLOG_LANDING_CONTENT}
@@ -296,7 +297,7 @@ export default function MallogHomeKoView(props) {
         )}
 
         {/* 인증 카드 */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isAuthPage ? 'mt-8 sm:mt-14' : ''}`}>
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isRecoveryOnlyView ? 'mt-8 sm:mt-14' : ''}`}>
           {shouldShowAuthForm ? (
             <>
               <div className="mb-4">
@@ -387,7 +388,7 @@ export default function MallogHomeKoView(props) {
                   </Link>
                 )}
                 {(isRecoverMode || isResetPasswordMode) && (
-                  isAuthPage ? (
+                  isRecoveryOnlyView ? (
                     <Link href={homeHref || '/'} className="text-nm-accent">
                       로그인으로 돌아가기
                     </Link>
@@ -443,7 +444,7 @@ export default function MallogHomeKoView(props) {
               >
                 로그아웃
               </button>
-              {isAuthPage && (
+              {isRecoveryOnlyView && (
                 <Link
                   href={homeHref || '/'}
                   className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
@@ -455,7 +456,7 @@ export default function MallogHomeKoView(props) {
           )}
         </div>
 
-        {!isAuthPage && (authToken || isGuestMode) && (
+        {!isRecoveryOnlyView && (authToken || isGuestMode) && (
           <>
             {usage && (
               <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">

@@ -207,6 +207,7 @@ export default function MallogHomeEnView(props) {
   const isAuthPage = authPageMode === 'recover'
   const isRecoverMode = authMode === 'recover'
   const isResetPasswordMode = authMode === 'reset_password'
+  const isRecoveryOnlyView = isAuthPage || isResetPasswordMode
   const shouldShowAuthForm = !authToken || isResetPasswordMode
   const authCardTitle = isResetPasswordMode
     ? 'Set a new password.'
@@ -282,7 +283,7 @@ export default function MallogHomeEnView(props) {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
-        {!authToken && !isAuthPage && (
+        {!authToken && !isRecoveryOnlyView && (
           <MallogLandingSections
             locale="en"
             content={EN_MALLOG_LANDING_CONTENT}
@@ -296,7 +297,7 @@ export default function MallogHomeEnView(props) {
         )}
 
         {/* Auth Card */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isAuthPage ? 'mt-8 sm:mt-14' : ''}`}>
+        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isRecoveryOnlyView ? 'mt-8 sm:mt-14' : ''}`}>
           {shouldShowAuthForm ? (
             <>
               <div className="mb-4">
@@ -389,7 +390,7 @@ export default function MallogHomeEnView(props) {
                   </Link>
                 )}
                 {(isRecoverMode || isResetPasswordMode) && (
-                  isAuthPage ? (
+                  isRecoveryOnlyView ? (
                     <Link href={homeHref || '/en'} className="text-nm-accent">
                       Back to login
                     </Link>
@@ -445,7 +446,7 @@ export default function MallogHomeEnView(props) {
               >
                 Logout
               </button>
-              {isAuthPage && (
+              {isRecoveryOnlyView && (
                 <Link
                   href={homeHref || '/en'}
                   className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
@@ -457,7 +458,7 @@ export default function MallogHomeEnView(props) {
           )}
         </div>
 
-        {!isAuthPage && (authToken || isGuestMode) && (
+        {!isRecoveryOnlyView && (authToken || isGuestMode) && (
           <>
             {usage && (
               <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
