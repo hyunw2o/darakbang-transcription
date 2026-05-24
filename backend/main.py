@@ -3631,7 +3631,13 @@ def _extract_audio_duration_seconds(file_path: str) -> int:
     duration_seconds = _extract_duration_with_ffprobe(file_path)
 
     if duration_seconds <= 0:
+        duration_seconds = _extract_duration_with_ffprobe_packets(file_path)
+
+    if duration_seconds <= 0:
         duration_seconds = _extract_duration_with_wave(file_path)
+
+    if duration_seconds <= 0:
+        duration_seconds = _extract_duration_with_ffmpeg_decode(file_path)
 
     if duration_seconds <= 0:
         raise HTTPException(status_code=400, detail="오디오 길이를 확인할 수 없는 파일입니다.")
@@ -3639,7 +3645,50 @@ def _extract_audio_duration_seconds(file_path: str) -> int:
     return max(1, int(math.ceil(duration_seconds)))
 
 
+def _parse_positive_float(value: str | None) -> float:
+    try:
+        parsed = float(str(value or "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(parsed) or parsed <= 0:
+        return 0.0
+    return parsed
+
+
 def _extract_duration_with_ffprobe(file_path: str) -> float:
+    if not shutil.which("ffprobe"):
+        return 0.0
+
+    for entry in ("format=duration", "stream=duration"):
+        try:
+            proc = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "a:0",
+                    "-show_entries",
+                    entry,
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    file_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=FFPROBE_PROCESS_TIMEOUT_SECONDS,
+            )
+            for raw in (proc.stdout or "").splitlines():
+                duration = _parse_positive_float(raw)
+                if duration > 0:
+                    return duration
+        except Exception:
+            continue
+    return 0.0
+
+
+def _extract_duration_with_ffprobe_packets(file_path: str) -> float:
     if not shutil.which("ffprobe"):
         return 0.0
     try:
@@ -3648,10 +3697,12 @@ def _extract_duration_with_ffprobe(file_path: str) -> float:
                 "ffprobe",
                 "-v",
                 "error",
+                "-select_streams",
+                "a:0",
                 "-show_entries",
-                "format=duration",
+                "packet=pts_time,dts_time,duration_time",
                 "-of",
-                "default=noprint_wrappers=1:nokey=1",
+                "csv=p=0",
                 file_path,
             ],
             capture_output=True,
@@ -3659,12 +3710,26 @@ def _extract_duration_with_ffprobe(file_path: str) -> float:
             check=True,
             timeout=FFPROBE_PROCESS_TIMEOUT_SECONDS,
         )
-        raw = (proc.stdout or "").strip()
-        if not raw:
-            return 0.0
-        return max(0.0, float(raw))
     except Exception:
         return 0.0
+
+    duration_seconds = 0.0
+    for line in (proc.stdout or "").splitlines():
+        values = [part.strip() for part in line.split(",")]
+        timestamp = 0.0
+        packet_duration = 0.0
+        for index, value in enumerate(values[:3]):
+            parsed = _parse_positive_float(value)
+            if parsed <= 0:
+                continue
+            if index < 2 and timestamp <= 0:
+                timestamp = parsed
+            elif index == 2:
+                packet_duration = parsed
+        if timestamp > 0:
+            duration_seconds = max(duration_seconds, timestamp + packet_duration)
+
+    return duration_seconds
 
 
 def _extract_duration_with_wave(file_path: str) -> float:
@@ -3677,6 +3742,48 @@ def _extract_duration_with_wave(file_path: str) -> float:
     except Exception:
         return 0.0
     return 0.0
+
+
+def _extract_duration_with_ffmpeg_decode(file_path: str) -> float:
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        return 0.0
+
+    decoded_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as decoded_file:
+            decoded_path = decoded_file.name
+
+        subprocess.run(
+            [
+                ffmpeg_bin,
+                "-v",
+                "error",
+                "-nostdin",
+                "-y",
+                "-i",
+                file_path,
+                "-vn",
+                "-acodec",
+                "pcm_s16le",
+                "-f",
+                "wav",
+                decoded_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
+        )
+        return _extract_duration_with_wave(decoded_path)
+    except Exception:
+        return 0.0
+    finally:
+        if decoded_path and os.path.exists(decoded_path):
+            try:
+                os.unlink(decoded_path)
+            except OSError:
+                pass
 
 
 def _resolve_audio_mime_type(file_path: str) -> str:
