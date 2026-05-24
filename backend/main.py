@@ -354,6 +354,14 @@ WHISPER_SEGMENT_SECONDS = max(
     60,
     int(os.getenv("WHISPER_SEGMENT_SECONDS", "360")),
 )
+WHISPER_CHUNK_OVERLAP_SECONDS = max(
+    0,
+    min(30, int(os.getenv("WHISPER_CHUNK_OVERLAP_SECONDS", "4"))),
+)
+WHISPER_BOUNDARY_PADDING_SECONDS = max(
+    0.0,
+    min(2.0, float(os.getenv("WHISPER_BOUNDARY_PADDING_SECONDS", "0.35"))),
+)
 WHISPER_CHUNK_CONCURRENCY = max(1, int(os.getenv("WHISPER_CHUNK_CONCURRENCY", "2")))
 
 # 외부 프로세스/LLM 타임아웃
@@ -4338,6 +4346,54 @@ def get_optimal_model():
     return "gemini-2.5-flash"
 
 
+def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
+    """
+    Overlapped audio chunks can produce a repeated boundary phrase.
+    Trim only exact token-prefix duplicates so real repeated speech is preserved.
+    """
+    if not previous_text or not current_text:
+        return current_text
+
+    token_pattern = re.compile(r"[A-Za-z0-9]+|[가-힣]+|[ぁ-ゟ゠-ヿ一-龯]+")
+    previous_matches = list(token_pattern.finditer(previous_text))
+    current_matches = list(token_pattern.finditer(current_text))
+    if len(previous_matches) < 4 or len(current_matches) < 4:
+        return current_text
+
+    previous_tokens = [match.group(0).lower() for match in previous_matches]
+    current_tokens = [match.group(0).lower() for match in current_matches]
+    max_overlap = min(48, len(previous_tokens), len(current_tokens))
+
+    for overlap in range(max_overlap, 3, -1):
+        if previous_tokens[-overlap:] != current_tokens[:overlap]:
+            continue
+
+        duplicate_text = current_text[:current_matches[overlap - 1].end()]
+        if len(re.sub(r"\s+", "", duplicate_text)) < 8:
+            continue
+        return current_text[current_matches[overlap - 1].end():].lstrip(" \t\r\n,.;:!?，、。？！-—")
+
+    return current_text
+
+
+def _join_whisper_chunk_texts(chunks: list[str]) -> str:
+    joined_parts: list[str] = []
+    previous_text = ""
+    for chunk in chunks:
+        current = (chunk or "").strip()
+        if not current:
+            continue
+        current = _trim_duplicate_chunk_prefix(previous_text, current)
+        current = current.strip()
+        if not current:
+            continue
+        joined_parts.append(current)
+        previous_text = f"{previous_text}\n\n{current}".strip()
+        if len(previous_text) > 3000:
+            previous_text = previous_text[-3000:]
+    return "\n\n".join(joined_parts)
+
+
 def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list[tuple[str, float]]:
     """
     Whisper 전처리 + 청크 분할 (메모리 최적화 버전).
@@ -4354,7 +4410,15 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
     # 1) Whisper 업로드용 저용량 mp3로 전처리
     prepared_path = f"{file_path}_whisper.mp3"
     highpass_freq = "100" if transcription_type == "sermon" else "80"
-    filter_expr = f"highpass=f={highpass_freq},lowpass=f=7600"
+    boundary_pad_ms = int(WHISPER_BOUNDARY_PADDING_SECONDS * 1000)
+    filter_parts = [
+        "aresample=async=1:first_pts=0",
+        f"adelay={boundary_pad_ms}:all=1",
+        f"highpass=f={highpass_freq}",
+        "lowpass=f=7600",
+        f"apad=pad_dur={WHISPER_BOUNDARY_PADDING_SECONDS:.2f}",
+    ]
+    filter_expr = ",".join(filter_parts)
 
     try:
         subprocess.run(
@@ -4390,54 +4454,76 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
     if prepared_size <= WHISPER_MAX_SIZE and prepared_duration <= WHISPER_SEGMENT_SECONDS:
         return [(prepared_path, prepared_duration)]
 
-    # 2) 짧은 단위로 재인코딩 분할한다.
-    # MP3 copy 분할은 프레임/타임스탬프 경계가 흔들려 앞부분 누락이나 반복 전사를 유발할 수 있다.
-    chunk_pattern = f"{prepared_path}_chunk_%03d.mp3"
+    # 2) 경계 누락을 줄이기 위해 앞뒤가 조금 겹치도록 정확한 시간 구간을 추출한다.
+    # ffmpeg segment muxer는 MP3 프레임/타임스탬프 경계에 따라 첫 단어나 중간 단어가 흔들릴 수 있다.
+    overlap_seconds = min(
+        WHISPER_CHUNK_OVERLAP_SECONDS,
+        max(0, WHISPER_SEGMENT_SECONDS // 4),
+    )
+    chunk_paths: list[str] = []
+    chunk_index = 0
+    segment_start = 0.0
     try:
-        subprocess.run(
-            [
-                ffmpeg_bin,
-                "-y",
-                "-fflags",
-                "+genpts",
-                "-i",
-                prepared_path,
-                "-f",
-                "segment",
-                "-segment_time",
-                str(WHISPER_SEGMENT_SECONDS),
-                "-reset_timestamps",
-                "1",
-                "-map",
-                "0:a:0",
-                "-c:a",
-                "libmp3lame",
-                "-ar",
-                "16000",
-                "-ac",
-                "1",
-                "-b:a",
-                "32k",
-                "-segment_format",
-                "mp3",
-                "-avoid_negative_ts",
-                "make_zero",
-                chunk_pattern,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=True,
-            timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
-        )
+        while segment_start < prepared_duration:
+            remaining_duration = prepared_duration - segment_start
+            min_tail_seconds = max(1.0, WHISPER_BOUNDARY_PADDING_SECONDS + 0.5)
+            if chunk_index > 0 and remaining_duration <= min_tail_seconds:
+                break
+
+            chunk_start = max(0.0, segment_start - overlap_seconds)
+            nominal_end = min(prepared_duration, segment_start + WHISPER_SEGMENT_SECONDS)
+            chunk_end = min(
+                prepared_duration,
+                nominal_end + (overlap_seconds if nominal_end < prepared_duration else 0),
+            )
+            chunk_duration = max(0.1, chunk_end - chunk_start)
+            chunk_path = f"{prepared_path}_chunk_{chunk_index:03d}.mp3"
+
+            subprocess.run(
+                [
+                    ffmpeg_bin,
+                    "-y",
+                    "-fflags",
+                    "+genpts",
+                    "-i",
+                    prepared_path,
+                    "-ss",
+                    f"{chunk_start:.3f}",
+                    "-t",
+                    f"{chunk_duration:.3f}",
+                    "-map",
+                    "0:a:0",
+                    "-c:a",
+                    "libmp3lame",
+                    "-ar",
+                    "16000",
+                    "-ac",
+                    "1",
+                    "-b:a",
+                    "32k",
+                    "-avoid_negative_ts",
+                    "make_zero",
+                    chunk_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+                timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
+            )
+            chunk_paths.append(chunk_path)
+            chunk_index += 1
+            if chunk_end >= prepared_duration - 0.05:
+                break
+            segment_start += WHISPER_SEGMENT_SECONDS
     except Exception as exc:
-        print(f"ffmpeg segmentation failed, using prepared file: {exc}")
+        print(f"ffmpeg overlapped chunk extraction failed, using prepared file: {exc}")
+        for created in chunk_paths:
+            try:
+                os.unlink(created)
+            except Exception:
+                pass
         return [(prepared_path, prepared_duration)]
 
-    chunk_paths = sorted(
-        str(path_obj)
-        for path_obj in pathlib.Path(prepared_path).parent.glob(f"{pathlib.Path(prepared_path).name}_chunk_*.mp3")
-        if path_obj.is_file()
-    )
     if not chunk_paths:
         return [(prepared_path, prepared_duration)]
 
@@ -4675,7 +4761,7 @@ def whisper_transcribe(
             finally:
                 if chunk_path != file_path and os.path.exists(chunk_path):
                     os.unlink(chunk_path)
-        return "\n\n".join(part for part in all_text if part)
+        return _join_whisper_chunk_texts(all_text)
 
     print(f"  Whisper chunk concurrency enabled: {worker_count} workers")
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -4692,7 +4778,7 @@ def whisper_transcribe(
                 if chunk_path != file_path and os.path.exists(chunk_path):
                     os.unlink(chunk_path)
 
-    return "\n\n".join(part for part in all_text if part)
+    return _join_whisper_chunk_texts(all_text)
 
 
 async def gemini_correct_and_structure(

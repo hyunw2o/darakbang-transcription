@@ -74,6 +74,7 @@ DARAKBANG_CORE = [
     "HMC",  # Harvesters Missions Church
     "HMIS", # Harvesters Missions International School
     "HMVS", # Harvester Mission Vision School
+    "WRC",  # World Remnant Conference
     "RVIS", # Rwanda Vision International School
     "RRTS", # Rwanda Remnant Theological Seminary
     "REA",  # Rwanda East-africa Africa
@@ -123,6 +124,42 @@ SPECIAL_TERM_RULES = [
             "꿈",
             "이미지",
             "실천",
+        ],
+    },
+    {
+        "canonical": "WRC",
+        "meaning": "World Remnant Conference",
+        "aliases": [
+            "WRC",
+            "W R C",
+            "wrc",
+            "w r c",
+            "더블유 알 씨",
+            "더블유알씨",
+            "더블유 아르 씨",
+            "더블유아르씨",
+        ],
+        "full_name_aliases": [
+            "World Remnant Conference",
+            "World Remnant Convention",
+            "월드 렘넌트 컨퍼런스",
+            "월드렘넌트컨퍼런스",
+            "세계 렘넌트 대회",
+            "세계렘넌트대회",
+        ],
+        "context_mistakes": [
+            "WRC",
+            "W R C",
+            "더블유 알 씨",
+            "월드 렘넌트 컨퍼런스",
+        ],
+        "context_terms": [
+            "WRC",
+            "World Remnant Conference",
+            "렘넌트",
+            "세계",
+            "대회",
+            "컨퍼런스",
         ],
     },
     {
@@ -215,11 +252,21 @@ SPECIAL_TERM_RULES = [
             "Rwanda Remnant Theological Seminary",
             "Remnant Reformed Theological Seminary",
         ],
-        "context_mistakes": [],
+        "context_mistakes": [
+            "RSTS",
+            "R S T S",
+            "RTS",
+            "알 에스 티 에스",
+            "알에스티에스",
+            "알 티 에스",
+            "알티에스",
+        ],
         "context_terms": [
             "RRTS",
             "Rwanda Remnant Theological Seminary",
             "Rwanda",
+            "르완다",
+            "Remnant Theological",
             "Theological Seminary",
             "신학교",
         ],
@@ -261,13 +308,23 @@ SPECIAL_TERM_RULES = [
             "Remnant Summit Training Synagogue",
             "Remnant Summit Training School",
         ],
-        "context_mistakes": [],
+        "context_mistakes": [
+            "RRTS",
+            "R R T S",
+            "RTS",
+            "알 알 티 에스",
+            "알알티에스",
+            "알 티 에스",
+            "알티에스",
+        ],
         "context_terms": [
             "RSTS",
             "Remnant Summit Training Synagogue",
             "Summit Training",
             "서밋",
             "훈련",
+            "시나고그",
+            "Synagogue",
         ],
     },
     {
@@ -603,6 +660,15 @@ COMMON_MISTAKES = {
     "H M V S": "HMVS",
     "에이치 엠 브이 에스": "HMVS",
     "에이치엠브이에스": "HMVS",
+    "W R C": "WRC",
+    "더블유 알 씨": "WRC",
+    "더블유알씨": "WRC",
+    "더블유 아르 씨": "WRC",
+    "더블유아르씨": "WRC",
+    "월드 렘넌트 컨퍼런스": "World Remnant Conference",
+    "월드렘넌트컨퍼런스": "World Remnant Conference",
+    "세계 렘넌트 대회": "World Remnant Conference",
+    "세계렘넌트대회": "World Remnant Conference",
     "R R T S": "RRTS",
     "알 알 티 에스": "RRTS",
     "알알티에스": "RRTS",
@@ -1114,6 +1180,7 @@ EN_COMMON_CORRECTIONS = {
     "h m c": "HMC",
     "h m i s": "HMIS",
     "h m v s": "HMVS",
+    "w r c": "WRC",
     "r r t s": "RRTS",
     "r v i s": "RVIS",
     "r u t c": "RUTC",
@@ -1127,6 +1194,7 @@ EN_COMMON_CORRECTIONS = {
     "hmc": "HMC",
     "hmis": "HMIS",
     "hmvs": "HMVS",
+    "wrc": "WRC",
     "rrts": "RRTS",
     "rvis": "RVIS",
     "rutc": "RUTC",
@@ -1154,6 +1222,8 @@ EN_COMMON_CORRECTIONS = {
     "remnant training unity center": "Remnant Unity Training Center",
     "remnant unity training center": "Remnant Unity Training Center",
     "remnant vision school": "Remnant Vision School",
+    "world remnant conference": "World Remnant Conference",
+    "world remnant convention": "World Remnant Conference",
 }
 
 EN_MINISTRY_CORRECTIONS = {
@@ -2871,6 +2941,26 @@ def _normalize_contextual_homophones(text: str) -> str:
         flags=re.IGNORECASE,
     )
 
+    # WRC: World Remnant Conference는 월드/세계 렘넌트 대회 문맥에서 약어를 고정한다.
+    wrc_context = r"(?:World\s+Remnant\s+Conference|world\s+remnant|월드\s*렘넌트|세계\s*렘넌트|렘넌트\s*대회|컨퍼런스|대회)"
+    corrected = re.sub(rf"{latin_left}W\s*R\s*C{latin_right}", "WRC", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(r"더블유\s*(?:알|아르)\s*(?:씨|시)", "WRC", corrected)
+    corrected = re.sub(r"월드\s*렘넌트\s*컨퍼런스", "World Remnant Conference", corrected)
+    corrected = re.sub(r"세계\s*렘넌트\s*대회", "World Remnant Conference", corrected)
+    corrected = re.sub(rf"({wrc_context}[^\n.!?]{{0,60}}){latin_left}WRC{latin_right}", r"\1WRC", corrected, flags=re.IGNORECASE)
+
+    # RRTS/RSTS: 비슷한 발음의 약어를 Rwanda/Summit 문맥으로 분리한다.
+    rrts_context = r"(?:Rwanda|르완다|Remnant\s+Theological|Theological\s+Seminary|신학교|Rwanda\s+Remnant)"
+    rsts_context = r"(?:Summit|서밋|Training\s+Synagogue|Training\s+School|Synagogue|시나고그|훈련)"
+    corrected = re.sub(rf"{latin_left}R\s*R\s*T\s*S{latin_right}", "RRTS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"{latin_left}R\s*S\s*T\s*S{latin_right}", "RSTS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(r"알\s*알\s*티\s*(?:에스|애스)", "RRTS", corrected)
+    corrected = re.sub(r"알\s*에스\s*티\s*(?:에스|애스)", "RSTS", corrected)
+    corrected = re.sub(rf"({rrts_context}[^\n.!?]{{0,80}}){latin_left}(?:RSTS|RTS){latin_right}", r"\1RRTS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"{latin_left}(?:RSTS|RTS){latin_right}(?=[^\n.!?]{{0,80}}{rrts_context})", "RRTS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"({rsts_context}[^\n.!?]{{0,80}}){latin_left}(?:RRTS|RTS){latin_right}", r"\1RSTS", corrected, flags=re.IGNORECASE)
+    corrected = re.sub(rf"{latin_left}(?:RRTS|RTS){latin_right}(?=[^\n.!?]{{0,80}}{rsts_context})", "RSTS", corrected, flags=re.IGNORECASE)
+
     # RBS/RVS: Remnant Vision School/비전스쿨 맥락에서는 RVS를 우선 복원
     rvs_context = r"(?:드로아교회|비전\s*스쿨|비전학교|Remnant\s+Vision\s+School|Remnant\s+Vision|vision\s*school|유아유치|유치부|유초등부|어린이)"
     corrected = re.sub(
@@ -3003,7 +3093,7 @@ def _normalize_english_contextual_terms(text: str) -> str:
         r"(church|sermon|scripture|gospel|pastor|prayer|worship|ministry|grace|faith|"
         r"mission|fellowship|congregation|elder|deacon|benediction|remnant|covenant|"
         r"immanuel|troas|harvester|blessing|prayer journal|vision school|unity training|RUTC|"
-        r"acts|psalm|romans|john)"
+        r"world remnant|remnant conference|RRTS|RSTS|acts|psalm|romans|john)"
     )
     tower_context = (
         r"(seven|7|tower|watch\s*tower|watchtower|bartizan|bartison|bartisan|"
@@ -3052,9 +3142,19 @@ def _normalize_english_contextual_terms(text: str) -> str:
             segment = re.sub(r"\btrous church\b", "Troas Church", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\br\s*u\s*t\s*c\b", "RUTC", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\brutc\b", "RUTC", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bw\s*r\s*c\b", "WRC", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bwrc\b", "WRC", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bworld remnant convention\b", "World Remnant Conference", segment, flags=re.IGNORECASE)
+            segment = re.sub(r"\bworld remnant conference\b", "World Remnant Conference", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\bremnant training unity center\b", "Remnant Unity Training Center", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\bremnant unity training center\b", "Remnant Unity Training Center", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\bremnant vision school\b", "Remnant Vision School", segment, flags=re.IGNORECASE)
+            if re.search(r"\b(?:Rwanda|Rwanda Remnant|Theological Seminary)\b", segment, flags=re.IGNORECASE):
+                segment = re.sub(r"\br\s*r\s*t\s*s\b", "RRTS", segment, flags=re.IGNORECASE)
+                segment = re.sub(r"\b(?:RSTS|RTS)\b", "RRTS", segment, flags=re.IGNORECASE)
+            if re.search(r"\b(?:Summit|Training Synagogue|Training School|Synagogue)\b", segment, flags=re.IGNORECASE):
+                segment = re.sub(r"\br\s*s\s*t\s*s\b", "RSTS", segment, flags=re.IGNORECASE)
+                segment = re.sub(r"\b(?:RRTS|RTS)\b", "RSTS", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\bRBS\b(?=(?:[^.!?\n]{0,60}\b(?:Remnant Vision|Vision School)\b))", "RVS", segment, flags=re.IGNORECASE)
             segment = re.sub(r"\b((?:Remnant Vision|Vision School)[^.!?\n]{0,60})RBS\b", r"\1RVS", segment, flags=re.IGNORECASE)
 
