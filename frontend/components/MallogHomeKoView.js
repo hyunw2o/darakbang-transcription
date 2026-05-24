@@ -127,6 +127,8 @@ export default function MallogHomeKoView(props) {
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
     fileDurationSeconds,
+    recordingState,
+    recordingSeconds,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -171,6 +173,9 @@ export default function MallogHomeKoView(props) {
     handleUploadZoneKeyDown,
     handleFileChange,
     handleDrop,
+    startRecording,
+    stopRecording,
+    cancelRecording,
     handleSubmit,
   } = props
 
@@ -584,6 +589,53 @@ export default function MallogHomeKoView(props) {
                       </p>
                       <p className="text-xs text-nm-text-secondary">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
                     </div>
+                  )}
+                </div>
+
+                <div className="mt-3 nm-flat p-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-nm-text-primary">마이크로 바로 녹음</p>
+                      <p className="text-[11px] text-nm-text-secondary mt-1">
+                        기기 마이크 권한을 허용하면 녹음 후 같은 변환 흐름으로 처리됩니다.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {recordingState === 'recording' || recordingState === 'stopping' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={stopRecording}
+                            disabled={recordingState === 'stopping'}
+                            className="nm-btn-primary px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                          >
+                            {recordingState === 'stopping' ? '저장 중...' : '녹음 중지'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelRecording}
+                            disabled={recordingState === 'stopping'}
+                            className="nm-btn px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                          >
+                            취소
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          disabled={loading || uploadBlockedByQuota || recordingState === 'requesting'}
+                          className="nm-btn px-4 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {recordingState === 'requesting' ? '권한 확인 중...' : '녹음 시작'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {recordingState === 'recording' && (
+                    <p className="mt-3 text-xs font-semibold text-red-500">
+                      ● 녹음 중 · {formatSecondsToHourMinute(recordingSeconds)}
+                    </p>
                   )}
                 </div>
 

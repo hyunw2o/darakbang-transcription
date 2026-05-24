@@ -127,6 +127,8 @@ export default function MallogHomeEnView(props) {
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
     fileDurationSeconds,
+    recordingState,
+    recordingSeconds,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -171,6 +173,9 @@ export default function MallogHomeEnView(props) {
     handleUploadZoneKeyDown,
     handleFileChange,
     handleDrop,
+    startRecording,
+    stopRecording,
+    cancelRecording,
     handleSubmit,
   } = props
 
@@ -585,6 +590,53 @@ export default function MallogHomeEnView(props) {
                       </p>
                       <p className="text-xs text-nm-text-secondary">MP3, WAV, M4A, OGG, FLAC (up to 100MB)</p>
                     </div>
+                  )}
+                </div>
+
+                <div className="mt-3 nm-flat p-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-nm-text-primary">Record with microphone</p>
+                      <p className="text-[11px] text-nm-text-secondary mt-1">
+                        Allow microphone access to record audio and send it through the same transcription flow.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {recordingState === 'recording' || recordingState === 'stopping' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={stopRecording}
+                            disabled={recordingState === 'stopping'}
+                            className="nm-btn-primary px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                          >
+                            {recordingState === 'stopping' ? 'Saving...' : 'Stop recording'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelRecording}
+                            disabled={recordingState === 'stopping'}
+                            className="nm-btn px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          disabled={loading || uploadBlockedByQuota || recordingState === 'requesting'}
+                          className="nm-btn px-4 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {recordingState === 'requesting' ? 'Checking permission...' : 'Start recording'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {recordingState === 'recording' && (
+                    <p className="mt-3 text-xs font-semibold text-red-500">
+                      ● Recording · {formatSecondsToHourMinute(recordingSeconds, 'en')}
+                    </p>
                   )}
                 </div>
 

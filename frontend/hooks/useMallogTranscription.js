@@ -14,6 +14,28 @@ const STATUS_POLL_REQUEST_TIMEOUT_MS = 12000
 const STATUS_POLL_MAX_FAILURES = 5
 const HISTORY_DELETE_CONFIRM_WINDOW_MS = 5000
 
+function resolveRecordingMimeType() {
+  if (typeof window === 'undefined' || typeof window.MediaRecorder === 'undefined') return ''
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ]
+  return candidates.find((type) => window.MediaRecorder.isTypeSupported(type)) || ''
+}
+
+function resolveRecordingExtension(mimeType) {
+  if (String(mimeType || '').includes('mp4')) return 'm4a'
+  if (String(mimeType || '').includes('ogg')) return 'ogg'
+  return 'webm'
+}
+
+function buildRecordingFilename(extension) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-')
+  return `mallog24-recording-${stamp}.${extension}`
+}
+
 const TRANSCRIPTION_MESSAGES = {
   ko: {
     fileSizeExceeded: '파일 크기는 100MB 이하여야 합니다.',
@@ -29,6 +51,13 @@ const TRANSCRIPTION_MESSAGES = {
     guestTranscribeHint: '비로그인 체험은 파일 1개당 최대 10분, 총 30분까지 가능합니다.',
     guestTranscribeStart: '비로그인 체험 변환하기',
     selectFile: '파일을 선택해주세요.',
+    recordingUnsupported: '이 브라우저에서는 녹음 기능을 사용할 수 없습니다. 최신 Chrome, Edge, Safari를 사용하거나 파일 업로드를 이용해 주세요.',
+    recordingPermissionDenied: '마이크 권한이 필요합니다. 브라우저 주소창의 권한 설정에서 마이크 접근을 허용해 주세요.',
+    recordingStartFailed: '녹음을 시작하지 못했습니다. 마이크 권한과 입력 장치를 확인해 주세요.',
+    recordingStopFailed: '녹음을 저장하지 못했습니다. 다시 시도해 주세요.',
+    recordingEmpty: '녹음된 음성이 없습니다. 조금 더 길게 녹음한 뒤 다시 시도해 주세요.',
+    recordingReady: '녹음 파일이 준비되었습니다. 변환하기를 눌러 진행해 주세요.',
+    recordingCanceled: '녹음을 취소했습니다.',
     transcribeFailed: '변환 실패',
     loadHistoryFailed: '해당 기록을 불러올 수 없습니다.',
     loadHistoryGeneric: '불러오기 실패',
@@ -78,6 +107,13 @@ const TRANSCRIPTION_MESSAGES = {
     guestTranscribeHint: 'Guest trial supports up to 10 minutes per file and 30 minutes total.',
     guestTranscribeStart: 'Start Guest Trial',
     selectFile: 'Please select an audio file.',
+    recordingUnsupported: 'Recording is not available in this browser. Please use the latest Chrome, Edge, Safari, or upload a file instead.',
+    recordingPermissionDenied: 'Microphone permission is required. Allow microphone access in your browser permission settings.',
+    recordingStartFailed: 'Could not start recording. Please check microphone permission and input device.',
+    recordingStopFailed: 'Could not save the recording. Please try again.',
+    recordingEmpty: 'No audio was recorded. Please record a little longer and try again.',
+    recordingReady: 'Recording is ready. Press Start Transcription to continue.',
+    recordingCanceled: 'Recording canceled.',
     transcribeFailed: 'Transcription failed.',
     loadHistoryFailed: 'Unable to load this record.',
     loadHistoryGeneric: 'Failed to load record.',
@@ -155,6 +191,8 @@ export default function useMallogTranscription({
   const [transcriptEditText, setTranscriptEditText] = useState('')
   const [transcriptEditSaving, setTranscriptEditSaving] = useState(false)
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
+  const [recordingState, setRecordingState] = useState('idle')
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [guestSessionId, setGuestSessionId] = useState('')
   const [guestUsage, setGuestUsage] = useState({
     plan_tier: 'guest',
@@ -176,6 +214,12 @@ export default function useMallogTranscription({
   const resultEpochRef = useRef(0)
   const historyDeleteConfirmTimerRef = useRef(null)
   const historyDeleteAllConfirmTimerRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const recordingStreamRef = useRef(null)
+  const recordingChunksRef = useRef([])
+  const recordingTimerRef = useRef(null)
+  const recordingStartedAtRef = useRef(0)
+  const discardRecordingRef = useRef(false)
 
   const readResponseData = useCallback(async (response, fallbackMessage) => {
     const data = await safeReadJson(response)
@@ -447,7 +491,7 @@ export default function useMallogTranscription({
   const validateAndSetFile = useCallback(async (selectedFile, usage) => {
     if (selectedFile.size > 100 * 1024 * 1024) {
       setError(messages.fileSizeExceeded)
-      return
+      return false
     }
 
     const currentUsage = usage || null
@@ -464,7 +508,7 @@ export default function useMallogTranscription({
 
     try {
       const durationSeconds = await getAudioDurationSecondsInBrowser(selectedFile)
-      if (fileDurationProbeRef.current !== probeId) return
+      if (fileDurationProbeRef.current !== probeId) return false
 
       if (planTier === 'guest' && maxAudioSeconds > 0 && durationSeconds > maxAudioSeconds) {
         setFile(null)
@@ -472,7 +516,7 @@ export default function useMallogTranscription({
         setError(messages.guestTranscribeHint)
         setNotice(null)
         showToast(messages.guestTranscribeHint)
-        return
+        return false
       }
 
       if (isLimitedTier && durationSeconds > remainingQuotaSeconds) {
@@ -481,7 +525,7 @@ export default function useMallogTranscription({
         setError(messages.quotaExceeded)
         setNotice(null)
         showToast(messages.quotaExceeded)
-        return
+        return false
       }
 
       setFile(selectedFile)
@@ -489,15 +533,176 @@ export default function useMallogTranscription({
       setError(null)
       setNotice(null)
       resetResultWorkspace(true)
+      return true
     } catch {
-      if (fileDurationProbeRef.current !== probeId) return
+      if (fileDurationProbeRef.current !== probeId) return false
       setFile(selectedFile)
       setFileDurationSeconds(0)
       setError(null)
       setNotice(messages.browserDurationFallback)
       resetResultWorkspace(true)
+      return true
     }
   }, [authToken, messages.browserDurationFallback, messages.fileSizeExceeded, messages.guestTranscribeHint, messages.quotaExceeded, resetResultWorkspace, setError, setNotice, showToast])
+
+  const clearRecordingTimer = useCallback(() => {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current)
+      recordingTimerRef.current = null
+    }
+  }, [])
+
+  const stopRecordingStream = useCallback(() => {
+    recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop())
+    recordingStreamRef.current = null
+  }, [])
+
+  const startRecording = useCallback(async (uploadBlockedByQuota) => {
+    if (uploadBlockedByQuota) {
+      showToast(messages.usageLimitToast)
+      return
+    }
+    if (loading || recordingState === 'recording' || recordingState === 'requesting' || recordingState === 'stopping') return
+
+    if (
+      typeof window === 'undefined' ||
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof window.MediaRecorder === 'undefined'
+    ) {
+      setError(messages.recordingUnsupported)
+      return
+    }
+
+    setRecordingState('requesting')
+    setRecordingSeconds(0)
+    setError(null)
+    setNotice(null)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = resolveRecordingMimeType()
+      const recorder = mimeType ? new window.MediaRecorder(stream, { mimeType }) : new window.MediaRecorder(stream)
+
+      discardRecordingRef.current = false
+      recordingStreamRef.current = stream
+      mediaRecorderRef.current = recorder
+      recordingChunksRef.current = []
+      fileDurationProbeRef.current += 1
+      setFile(null)
+      setFileDurationSeconds(0)
+      resetResultWorkspace(true)
+
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size > 0) {
+          recordingChunksRef.current.push(event.data)
+        }
+      }
+      recorder.onerror = () => {
+        clearRecordingTimer()
+        stopRecordingStream()
+        setRecordingState('idle')
+        setError(messages.recordingStartFailed)
+      }
+      recorder.start(1000)
+      recordingStartedAtRef.current = Date.now()
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds(Math.max(1, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000)))
+      }, 500)
+      setRecordingState('recording')
+    } catch (error) {
+      clearRecordingTimer()
+      stopRecordingStream()
+      mediaRecorderRef.current = null
+      setRecordingState('idle')
+      const denied = error?.name === 'NotAllowedError' || error?.name === 'SecurityError'
+      setError(denied ? messages.recordingPermissionDenied : messages.recordingStartFailed)
+    }
+  }, [clearRecordingTimer, loading, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, messages.usageLimitToast, recordingState, resetResultWorkspace, setError, setFileDurationSeconds, setNotice, showToast, stopRecordingStream])
+
+  const stopRecording = useCallback(async (usage) => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+
+    setRecordingState('stopping')
+    clearRecordingTimer()
+
+    try {
+      const stopped = new Promise((resolve) => {
+        recorder.onstop = resolve
+      })
+      recorder.requestData?.()
+      recorder.stop()
+      await stopped
+
+      stopRecordingStream()
+      mediaRecorderRef.current = null
+
+      if (discardRecordingRef.current) {
+        recordingChunksRef.current = []
+        discardRecordingRef.current = false
+        setRecordingSeconds(0)
+        setRecordingState('idle')
+        setNotice(messages.recordingCanceled)
+        return
+      }
+
+      const mimeType = recorder.mimeType || resolveRecordingMimeType() || 'audio/webm'
+      const blob = new Blob(recordingChunksRef.current, { type: mimeType })
+      recordingChunksRef.current = []
+
+      if (!blob.size) {
+        setRecordingSeconds(0)
+        setRecordingState('idle')
+        setError(messages.recordingEmpty)
+        return
+      }
+
+      const extension = resolveRecordingExtension(mimeType)
+      const filename = buildRecordingFilename(extension)
+      const recordedFile = typeof File === 'function'
+        ? new File([blob], filename, { type: mimeType, lastModified: Date.now() })
+        : Object.assign(blob, { name: filename, lastModified: Date.now() })
+
+      const accepted = await validateAndSetFile(recordedFile, usage)
+      setRecordingState('idle')
+      if (accepted) {
+        setNotice(messages.recordingReady)
+      }
+    } catch (error) {
+      stopRecordingStream()
+      mediaRecorderRef.current = null
+      recordingChunksRef.current = []
+      setRecordingSeconds(0)
+      setRecordingState('idle')
+      setError(messages.recordingStopFailed)
+    }
+  }, [clearRecordingTimer, messages.recordingCanceled, messages.recordingEmpty, messages.recordingReady, messages.recordingStopFailed, setError, setNotice, stopRecordingStream, validateAndSetFile])
+
+  const cancelRecording = useCallback(async () => {
+    const recorder = mediaRecorderRef.current
+    discardRecordingRef.current = true
+    if (recorder && recorder.state !== 'inactive') {
+      await stopRecording(null)
+      return
+    }
+
+    clearRecordingTimer()
+    stopRecordingStream()
+    recordingChunksRef.current = []
+    mediaRecorderRef.current = null
+    discardRecordingRef.current = false
+    setRecordingSeconds(0)
+    setRecordingState('idle')
+    setNotice(messages.recordingCanceled)
+  }, [clearRecordingTimer, messages.recordingCanceled, setNotice, stopRecording, stopRecordingStream])
+
+  useEffect(() => () => {
+    clearRecordingTimer()
+    stopRecordingStream()
+    mediaRecorderRef.current = null
+    recordingChunksRef.current = []
+  }, [clearRecordingTimer, stopRecordingStream])
 
   const handleFileChange = useCallback((event, usage) => {
     const selectedFile = event.target.files?.[0]
@@ -1275,6 +1480,8 @@ export default function useMallogTranscription({
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
     fileDurationSeconds,
+    recordingState,
+    recordingSeconds,
     guestUsage,
     guestTranscribeHint: messages.guestTranscribeHint,
     guestTranscribeStart: messages.guestTranscribeStart,
@@ -1291,6 +1498,9 @@ export default function useMallogTranscription({
     handleDrop,
     handleDragOver,
     handleDragLeave,
+    startRecording,
+    stopRecording,
+    cancelRecording,
     handleSubmit,
     handleLoadHistory,
     handleDeleteHistory,

@@ -209,6 +209,8 @@ export default function MallogHomePageContainer({
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
     fileDurationSeconds,
+    recordingState,
+    recordingSeconds,
     guestUsage,
     guestTranscribeHint,
     guestTranscribeStart,
@@ -241,6 +243,9 @@ export default function MallogHomePageContainer({
     handleUploadZoneKeyDown: handleUploadKeyDownInternal,
     handleFileChange: handleFileChangeInternal,
     handleDrop: handleDropInternal,
+    startRecording: startRecordingInternal,
+    stopRecording: stopRecordingInternal,
+    cancelRecording,
     handleSubmit: handleSubmitInternal,
   } = transcription
 
@@ -270,6 +275,8 @@ export default function MallogHomePageContainer({
   const handleSubmit = (event) => handleSubmitInternal(event, effectiveUsage)
   const triggerFilePicker = () => openFilePicker(uploadBlockedByQuota)
   const handleUploadZoneKeyDown = (event) => handleUploadKeyDownInternal(event, uploadBlockedByQuota)
+  const startRecording = () => startRecordingInternal(uploadBlockedByQuota)
+  const stopRecording = () => stopRecordingInternal(effectiveUsage)
 
   const typeLabels = isEnglish
     ? { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
@@ -494,6 +501,8 @@ export default function MallogHomePageContainer({
       transcriptEditSaving={transcriptEditSaving}
       transcriptHasUnsavedEdit={transcriptHasUnsavedEdit}
       fileDurationSeconds={fileDurationSeconds}
+      recordingState={recordingState}
+      recordingSeconds={recordingSeconds}
       fileInputRef={fileInputRef}
       isGuestMode={isGuestMode}
       guestTranscribeHint={guestTranscribeHint}
@@ -538,6 +547,9 @@ export default function MallogHomePageContainer({
       handleUploadZoneKeyDown={handleUploadZoneKeyDown}
       handleFileChange={handleFileChange}
       handleDrop={handleDrop}
+      startRecording={startRecording}
+      stopRecording={stopRecording}
+      cancelRecording={cancelRecording}
       handleSubmit={handleSubmit}
     />
   )
