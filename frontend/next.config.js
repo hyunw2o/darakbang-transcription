@@ -48,7 +48,7 @@ const nextConfig = {
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
           { key: 'Cross-Origin-Resource-Policy', value: 'same-site' },
           { key: 'X-DNS-Prefetch-Control', value: 'off' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
         ],
       },
     ]
