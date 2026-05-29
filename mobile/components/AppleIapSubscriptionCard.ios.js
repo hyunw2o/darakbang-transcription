@@ -133,8 +133,8 @@ export default function AppleIapSubscriptionCard({
 
       // StoreKit occasionally returns a valid auto-renewable subscription only
       // through the broader query path while App Store Connect metadata is still
-      // propagating. Query both paths before deciding that the product is missing.
-      const queryTypes = ["subs", "all"];
+      // propagating. Query every safe path before deciding that the product is missing.
+      const queryTypes = ["subs", "all", "in-app"];
       let lastError = null;
       for (const queryType of queryTypes) {
         try {
@@ -293,26 +293,38 @@ export default function AppleIapSubscriptionCard({
       if (!connected) {
         setNotice(copy.appleIapDisconnected);
       }
-      const purchasePromise = requestPurchase({
-        type: "subs",
-        request: {
-          apple: { sku: APPLE_IAP_PRODUCT_ID_PRO },
-        },
-      });
-      purchasePromise.catch((error) => {
-        if (purchaseRequestRef.current !== requestId) return;
-        const message = String(error?.message || "");
-        if (!/cancel|user/i.test(message)) {
-          setError(getFriendlyIapError(message, copy));
-        }
-        setBusyAction("");
-      });
-      const result = await withTimeout(purchasePromise, PURCHASE_REQUEST_TIMEOUT_MS, "__iap_request_timeout__");
+
+      if (!product) {
+        await fetchAppleProducts({ quiet: true });
+      }
+
+      const requestApplePurchase = async (purchaseType) => {
+        const purchasePromise = requestPurchase({
+          type: purchaseType,
+          request: {
+            apple: { sku: APPLE_IAP_PRODUCT_ID_PRO },
+          },
+        });
+        purchasePromise.catch((error) => {
+          if (purchaseRequestRef.current !== requestId) return;
+          const message = String(error?.message || "");
+          if (!/cancel|user/i.test(message)) {
+            setError(getFriendlyIapError(message, copy));
+          }
+          setBusyAction("");
+        });
+        return withTimeout(purchasePromise, PURCHASE_REQUEST_TIMEOUT_MS, "__iap_request_timeout__");
+      };
+
+      let result = await requestApplePurchase("subs");
       if (result === "__iap_request_timeout__") {
-        if (purchaseRequestRef.current === requestId) {
-          setNotice(copy.appleIapPurchaseDispatchTimeout || copy.appleIapPurchaseStarted);
+        result = await requestApplePurchase("in-app");
+        if (result === "__iap_request_timeout__") {
+          if (purchaseRequestRef.current === requestId) {
+            setNotice(copy.appleIapPurchaseDispatchTimeout || copy.appleIapPurchaseStarted);
+          }
+          return;
         }
-        return;
       }
       const purchase = Array.isArray(result) ? result[0] : result;
       if (purchase) {
@@ -331,6 +343,8 @@ export default function AppleIapSubscriptionCard({
     copy,
     copy.appleIapPurchaseStarted,
     copy.appleIapDisconnected,
+    fetchAppleProducts,
+    product,
     requestPurchase,
     setError,
     setNotice,

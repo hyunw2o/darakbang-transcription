@@ -14,6 +14,13 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from "expo-audio";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import NmPressable from "./components/NmPressable";
@@ -70,6 +77,11 @@ const TRANSCRIPTION_TYPE_CARD_META = {
   conversation: { icon: "M" },
   phonecall: { icon: "C" },
 };
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+};
+const RECORDING_WAVEFORM_BARS = [0.2, 0.48, 0.74, 0.52, 0.96, 0.64, 0.84, 0.38, 0.7, 0.3, 0.9, 0.5];
 const PROCESSING_STEP_KEYS = ["uploaded", "recognized", "structured", "saved"];
 const TASK_PHASE_STEP_INDEX = {
   uploading: 0,
@@ -79,6 +91,11 @@ const TASK_PHASE_STEP_INDEX = {
   historyLoading: 3,
   done: PROCESSING_STEP_KEYS.length,
 };
+
+function buildRecordedAudioName() {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  return `mallog24-recording-${stamp}.m4a`;
+}
 
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -151,6 +168,46 @@ function parseGlossaryListInput(value) {
 
 function compactTranscriptText(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeRecordingLevel(metering) {
+  if (typeof metering !== "number" || !Number.isFinite(metering)) return 0;
+  if (metering <= 0) {
+    return Math.max(0, Math.min(1, (metering + 60) / 60));
+  }
+  return Math.max(0, Math.min(1, metering / 100));
+}
+
+function RecordingWaveform({ active, level, label, theme }) {
+  const normalizedLevel = active ? Math.max(0.04, Math.max(0, Math.min(1, level || 0))) : 0;
+
+  return (
+    <View style={[styles.recordWaveformRow]}>
+      <View style={[styles.recordWaveformTrack, { borderColor: "rgba(239, 68, 68, 0.14)", backgroundColor: "rgba(239, 68, 68, 0.04)" }]}>
+        {RECORDING_WAVEFORM_BARS.map((weight, index) => {
+          const height = 6 + Math.round((0.14 + normalizedLevel * weight) * 30);
+          const opacity = active ? 0.16 + normalizedLevel * 0.52 : 0.1;
+          return (
+            <View
+              key={`record-wave-${index}`}
+              style={[
+                styles.recordWaveformBar,
+                {
+                  height,
+                  opacity,
+                  backgroundColor: "#ef4444",
+                  shadowColor: "#ef4444",
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
+      <Text style={[styles.recordDurationText, { color: theme?.accent || "#ef4444" }]}>
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 function getMobileLegalDocuments(baseDocs, language) {
@@ -313,6 +370,8 @@ function getMobileLegalDocuments(baseDocs, language) {
 }
 
 function App() {
+  const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
+  const audioRecorderState = useAudioRecorderState(audioRecorder, 250);
   const pollRef = useRef(null);
   const pollStartedAtRef = useRef(0);
   const pollTokenRef = useRef(0);
@@ -321,6 +380,7 @@ function App() {
   const scrollUnlockTimerRef = useRef(null);
   const historyDeleteConfirmTimerRef = useRef(null);
   const historyDeleteAllConfirmTimerRef = useRef(null);
+  const discardRecordingRef = useRef(false);
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions();
 
@@ -334,6 +394,7 @@ function App() {
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("ko");
   const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
+  const [recordingStatus, setRecordingStatus] = useState("idle");
   const [guestModeStarted, setGuestModeStarted] = useState(false);
   const [guestSessionId, setGuestSessionId] = useState("");
   const [guestUsage, setGuestUsage] = useState({
@@ -389,6 +450,10 @@ function App() {
   // Apple Review requires paid digital subscriptions to be purchasable in-app on iOS.
   // Do not allow an environment toggle or review-mode flag to hide the IAP entry point.
   const copy = I18N[uiLanguage] || I18N.ko;
+  const recordingDurationSeconds = Math.max(0, Math.floor((audioRecorderState?.durationMillis || 0) / 1000));
+  const recordingActive = recordingStatus === "recording" || Boolean(audioRecorderState?.isRecording);
+  const recordingBusy = recordingStatus === "requesting" || recordingStatus === "stopping" || recordingActive;
+  const recordingLevel = recordingActive ? normalizeRecordingLevel(audioRecorderState?.metering) : 0;
   const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
   const legalDocs = useMemo(
     () => (
@@ -1016,6 +1081,16 @@ function App() {
     };
   }, []);
 
+  useEffect(() => () => {
+    try {
+      if (audioRecorder.getStatus?.()?.isRecording) {
+        audioRecorder.stop().catch(() => {});
+      }
+    } catch {
+      // Recorder may already be released during native teardown.
+    }
+  }, [audioRecorder]);
+
   useEffect(() => {
     AsyncStorage.setItem(UI_THEME_KEY, themeKey).catch(() => {});
     AsyncStorage.setItem(UI_THEME_MODE_KEY, themeMode).catch(() => {});
@@ -1051,6 +1126,95 @@ function App() {
       setNotice(copy.notices.fileSelected);
     } catch (e) {
       setError(e.message || copy.errors.filePickFailed);
+    }
+  };
+
+  const startAudioRecording = async () => {
+    if (submitting || recordingBusy) return;
+    clearMessages();
+
+    try {
+      setRecordingStatus("requesting");
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission?.granted) {
+        setRecordingStatus("idle");
+        setError(copy.errors.recordingPermissionDenied);
+        return;
+      }
+
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+
+      discardRecordingRef.current = false;
+      setPickedFile(null);
+      resetResultWorkspace(true);
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecordingStatus("recording");
+      setNotice(copy.notices.recordingStarted);
+    } catch (e) {
+      setRecordingStatus("idle");
+      setError(e.message || copy.errors.recordingStartFailed);
+      setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+    }
+  };
+
+  const stopAudioRecording = async ({ discard = false } = {}) => {
+    if (!recordingActive && recordingStatus !== "stopping") return;
+
+    try {
+      discardRecordingRef.current = discard;
+      setRecordingStatus("stopping");
+      await audioRecorder.stop();
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      }).catch(() => {});
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      if (discardRecordingRef.current) {
+        setPickedFile(null);
+        setNotice(copy.notices.recordingCanceled);
+        return;
+      }
+
+      const statusAfterStop = audioRecorder.getStatus?.() || {};
+      const uri = audioRecorder.uri || statusAfterStop.url || audioRecorderState?.url;
+      if (!uri) {
+        throw new Error(copy.errors.recordingNoFile);
+      }
+
+      let size = 0;
+      try {
+        const FileSystem = require("expo-file-system/legacy");
+        const info = await FileSystem.getInfoAsync(uri);
+        size = info?.exists ? info.size || 0 : 0;
+      } catch {
+        size = 0;
+      }
+
+      if (size > MAX_UPLOAD_BYTES) {
+        setPickedFile(null);
+        setError(copy.errors.fileTooLarge);
+        return;
+      }
+
+      setPickedFile({
+        uri,
+        name: buildRecordedAudioName(),
+        size,
+        mimeType: "audio/mp4",
+      });
+      resetResultWorkspace(true);
+      setNotice(copy.notices.recordingReady);
+    } catch (e) {
+      setError(e.message || copy.errors.recordingStopFailed);
+    } finally {
+      discardRecordingRef.current = false;
+      setRecordingStatus("idle");
     }
   };
 
@@ -2486,8 +2650,10 @@ function App() {
                         backgroundColor: activeTheme.inputBg,
                         borderColor: pickedFile ? activeTheme.accent : activeTheme.inputBorder,
                       },
+                      recordingBusy ? styles.buttonDisabled : null,
                     ]}
                     onPress={pickAudioFile}
+                    disabled={recordingBusy}
                   >
                     <Text style={[styles.uploadZoneIcon, { color: activeTheme.accent }]}>↑</Text>
                     <Text style={[styles.uploadZoneTitle, { color: activeTheme.textPrimary }]}>
@@ -2500,14 +2666,86 @@ function App() {
                     </Text>
                   </NmPressable>
 
+                  <View
+                    style={[
+                      styles.recordPanel,
+                      { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder },
+                    ]}
+                  >
+                    <View style={styles.recordPanelTop}>
+                      <View style={styles.recordPanelCopy}>
+                        <Text style={[styles.recordPanelTitle, { color: activeTheme.textPrimary }]}>
+                          {copy.recordMicTitle}
+                        </Text>
+                        <Text style={[styles.recordPanelHint, { color: activeTheme.textSecondary }]}>
+                          {copy.recordMicHint}
+                        </Text>
+                      </View>
+                      <View style={styles.recordButtonRow}>
+                        {recordingActive || recordingStatus === "stopping" ? (
+                          <>
+                            <NmPressable
+                              style={[
+                                styles.recordButton,
+                                { backgroundColor: activeTheme.textPrimary, borderColor: activeTheme.textPrimary },
+                                recordingStatus === "stopping" ? styles.buttonDisabled : null,
+                              ]}
+                              onPress={() => stopAudioRecording()}
+                              disabled={recordingStatus === "stopping"}
+                            >
+                              <Text style={[styles.recordButtonText, { color: activeTheme.bg }]}>
+                                {recordingStatus === "stopping" ? copy.recordSaving : copy.recordStop}
+                              </Text>
+                            </NmPressable>
+                            <NmPressable
+                              style={[
+                                styles.recordButton,
+                                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                                recordingStatus === "stopping" ? styles.buttonDisabled : null,
+                              ]}
+                              onPress={() => stopAudioRecording({ discard: true })}
+                              disabled={recordingStatus === "stopping"}
+                            >
+                              <Text style={[styles.recordButtonText, { color: activeTheme.textSecondary }]}>
+                                {copy.recordCancel}
+                              </Text>
+                            </NmPressable>
+                          </>
+                        ) : (
+                          <NmPressable
+                            style={[
+                              styles.recordButton,
+                              { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
+                              submitting || recordingStatus === "requesting" ? styles.buttonDisabled : null,
+                            ]}
+                            onPress={startAudioRecording}
+                            disabled={submitting || recordingStatus === "requesting"}
+                          >
+                            <Text style={[styles.recordButtonText, { color: activeTheme.textPrimary }]}>
+                              {recordingStatus === "requesting" ? copy.processing : copy.recordStart}
+                            </Text>
+                          </NmPressable>
+                        )}
+                      </View>
+                    </View>
+                    {recordingActive ? (
+                      <RecordingWaveform
+                        active
+                        level={recordingLevel}
+                        theme={activeTheme}
+                        label={`${copy.recordingActive} · ${formatSecondsToHourMinute(recordingDurationSeconds)}`}
+                      />
+                    ) : null}
+                  </View>
+
                   <NmPressable
                     style={[
                       styles.startTranscribeButton,
                       { backgroundColor: activeTheme.textPrimary, borderColor: activeTheme.textPrimary },
-                      submitting ? styles.buttonDisabled : null,
+                      submitting || recordingBusy ? styles.buttonDisabled : null,
                     ]}
                     onPress={handleTranscribe}
-                    disabled={submitting}
+                    disabled={submitting || recordingBusy}
                   >
                     <Text style={[styles.startTranscribeButtonText, { color: activeTheme.bg }]}>
                       {submitting ? copy.transcribing : copy.transcribeStart}
@@ -4021,6 +4259,73 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     lineHeight: 14,
+  },
+  recordPanel: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    gap: 10,
+  },
+  recordPanelTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  recordPanelCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  recordPanelTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  recordPanelHint: {
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  recordButtonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  recordButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recordButtonText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  recordWaveformRow: {
+    gap: 7,
+  },
+  recordWaveformTrack: {
+    height: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    overflow: "hidden",
+  },
+  recordWaveformBar: {
+    width: 5,
+    borderRadius: 999,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.32,
+    shadowRadius: 9,
+    elevation: 1,
+  },
+  recordDurationText: {
+    fontSize: 11,
+    fontWeight: "900",
   },
   startTranscribeButton: {
     borderRadius: 10,

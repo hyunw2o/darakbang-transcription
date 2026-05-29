@@ -2,7 +2,7 @@
   "expo": {
     "name": "mallog24",
     "slug": "mallog24-mobile-shell",
-    "version": "1.0.0",
+    "version": "1.1.2",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -21,9 +21,10 @@
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.mallog24.app",
-      "buildNumber": "1.0.54",
+      "buildNumber": "1.1.2",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "mallog24에서 음성을 녹음해 텍스트로 변환하려면 마이크 접근 권한이 필요합니다."
       },
       "entitlements": {
         "com.apple.developer.applesignin": [
@@ -32,7 +33,7 @@
       }
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 20,
       "package": "com.mallog24.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -56,7 +57,15 @@
     "plugins": [
       "expo-apple-authentication",
       "expo-iap",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "mallog24에서 음성을 녹음해 텍스트로 변환하려면 마이크 접근 권한이 필요합니다.",
+          "recordAudioAndroid": true
+        }
+      ],
+      "expo-asset"
     ]
   }
 }

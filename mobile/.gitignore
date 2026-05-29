@@ -5,3 +5,10 @@ ios/
 screenshots/
 
 build/
+*.tar.gz
+*.xcarchive/
+ios-export*/
+ios-simulator-*/
+ios-simulator-build-*/
+credentials.json
+credentials/
