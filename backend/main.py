@@ -203,12 +203,17 @@ TRANSCRIPTION_JOBS_TABLE_NAME = "transcription_jobs"
 USAGE_TABLE_NAME = "user_usage_quotas"
 USER_GLOSSARY_TABLE_NAME = "user_glossary_terms"
 USER_CORRECTION_SAMPLES_TABLE_NAME = "user_correction_samples"
+TRAINING_TEXT_SAMPLES_TABLE_NAME = "training_text_samples"
 MAX_USER_GLOSSARY_TERMS = max(1, int(os.getenv("MAX_USER_GLOSSARY_TERMS", "100")))
 MAX_USER_GLOSSARY_TERM_CHARS = max(10, int(os.getenv("MAX_USER_GLOSSARY_TERM_CHARS", "80")))
 MAX_USER_GLOSSARY_MEANING_CHARS = max(20, int(os.getenv("MAX_USER_GLOSSARY_MEANING_CHARS", "240")))
 MAX_USER_GLOSSARY_ALIAS_COUNT = max(0, int(os.getenv("MAX_USER_GLOSSARY_ALIAS_COUNT", "20")))
 MAX_USER_GLOSSARY_CONTEXT_COUNT = max(0, int(os.getenv("MAX_USER_GLOSSARY_CONTEXT_COUNT", "20")))
 MAX_CORRECTION_SAMPLE_TEXT_CHARS = max(1000, int(os.getenv("MAX_CORRECTION_SAMPLE_TEXT_CHARS", "120000")))
+OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS = max(
+    1,
+    int(os.getenv("OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS", "5")),
+)
 USAGE_FREE_PLAN = "free"
 USAGE_GUEST_PLAN = "guest"
 USAGE_ADMIN_PLAN = "admin"
@@ -500,6 +505,7 @@ BILLING_SCOPE_VALIDATED = False
 BILLING_REFUND_SCOPE_VALIDATED = False
 USER_GLOSSARY_SCOPE_VALIDATED = False
 USER_CORRECTION_SAMPLES_SCOPE_VALIDATED = False
+TRAINING_TEXT_SAMPLES_SCOPE_VALIDATED = False
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
@@ -2523,6 +2529,54 @@ def _ensure_user_correction_samples_scope_ready() -> None:
                 detail="Supabase 설정 필요: backend/sql/user_correction_samples.sql 을 실행한 뒤 API 서버를 다시 시작하세요.",
             )
         raise
+
+
+def _training_text_samples_scope_ready() -> bool:
+    """Return whether the optional training text sample table is available."""
+    global TRAINING_TEXT_SAMPLES_SCOPE_VALIDATED
+    if TRAINING_TEXT_SAMPLES_SCOPE_VALIDATED:
+        return True
+
+    try:
+        (
+            _get_supabase_client()
+            .table(TRAINING_TEXT_SAMPLES_TABLE_NAME)
+            .select(
+                "id,user_id,task_id,audio_asset_id,source_type,category,language,"
+                "transcription_type,raw_transcript,current_result,final_result,"
+                "quality_status,train_split,metadata,created_at,updated_at"
+            )
+            .limit(1)
+            .execute()
+        )
+        TRAINING_TEXT_SAMPLES_SCOPE_VALIDATED = True
+        return True
+    except Exception as e:
+        error_text = str(e).lower()
+        if (
+            TRAINING_TEXT_SAMPLES_TABLE_NAME in error_text
+            or "schema cache" in error_text
+            or "could not find" in error_text
+            or "does not exist" in error_text
+        ):
+            print(
+                "Warning: training_text_samples table is not ready. "
+                "Run backend/sql/training_data_assets.sql and reload PostgREST schema."
+            )
+            return False
+        print(f"Warning: training_text_samples readiness check failed: {e}")
+        return False
+
+
+async def _training_text_samples_scope_ready_async() -> bool:
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_training_text_samples_scope_ready),
+            timeout=OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        print("Warning: training_text_samples readiness check timed out.")
+        return False
 
 
 def _ensure_billing_scope_ready() -> None:
@@ -8512,6 +8566,91 @@ async def _store_user_correction_sample(user_id: str, payload: dict) -> dict:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"수정 데이터 저장 실패: {str(e)}")
+
+    stored_sample = response.data[0] if response.data else insert_row
+    training_sample = await _store_training_text_sample_candidate(
+        user_id=user_id,
+        correction_sample=stored_sample,
+        correction_row=insert_row,
+        original_text=original_text,
+        edited_text=edited_text,
+    )
+
+    return {
+        "success": True,
+        "stored": True,
+        "sample": stored_sample,
+        "training_sample": training_sample,
+    }
+
+
+async def _store_training_text_sample_candidate(
+    user_id: str,
+    correction_sample: dict,
+    correction_row: dict,
+    original_text: str,
+    edited_text: str,
+) -> dict:
+    """Mirror user edits into the optional separated training sample table."""
+    if not await _training_text_samples_scope_ready_async():
+        return {
+            "success": True,
+            "stored": False,
+            "reason": "schema_unavailable",
+        }
+
+    metadata = correction_row.get("metadata") if isinstance(correction_row.get("metadata"), dict) else {}
+    raw_transcript = str(
+        metadata.get("raw_transcript")
+        or metadata.get("raw_text")
+        or metadata.get("asr_text")
+        or ""
+    ).strip()
+    training_metadata = {
+        **metadata,
+        "source_correction_sample_id": correction_sample.get("id"),
+        "source_table": USER_CORRECTION_SAMPLES_TABLE_NAME,
+    }
+    insert_row = {
+        "user_id": user_id,
+        "task_id": correction_row.get("task_id"),
+        "source_type": correction_row.get("source_type") or "user_correction",
+        "category": correction_row.get("category"),
+        "language": correction_row.get("language") or "ko",
+        "transcription_type": metadata.get("transcription_type") or correction_row.get("category"),
+        "raw_transcript": raw_transcript or None,
+        "current_result": original_text,
+        "final_result": edited_text,
+        "quality_status": "candidate",
+        "train_split": "unassigned",
+        "metadata": training_metadata,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    try:
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                _get_supabase_client()
+                .table(TRAINING_TEXT_SAMPLES_TABLE_NAME)
+                .insert(insert_row)
+                .execute
+            ),
+            timeout=OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        print("Warning: training_text_samples insert timed out.")
+        return {
+            "success": True,
+            "stored": False,
+            "reason": "insert_timeout",
+        }
+    except Exception as e:
+        print(f"Warning: failed to store training text sample candidate: {e}")
+        return {
+            "success": True,
+            "stored": False,
+            "reason": "insert_failed",
+        }
 
     return {
         "success": True,

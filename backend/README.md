@@ -55,6 +55,7 @@ uvicorn main:app --reload
    - `backend/sql/saved_records.sql` (저장 기록 테이블 + RLS 정책)
    - `backend/sql/user_glossary_terms.sql` (사용자 용어집 테이블 + RLS 정책)
    - `backend/sql/user_correction_samples.sql` (사용자 수정 결과 학습 데이터 + RLS 정책)
+   - `backend/sql/training_data_assets.sql` (장기 학습 후보 음원/최종 정답 샘플 분리 보관)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
    - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
    - `backend/sql/billing_subscriptions.sql` (구독 결제 상태 저장 + RLS 정책)
@@ -82,6 +83,7 @@ uvicorn main:app --reload
    - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
    - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)
    - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)
+   - `OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS` (기본 5초, 학습 후보 저장 같은 선택적 DB 쓰기 제한)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
    - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회)
    - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준)
@@ -115,6 +117,19 @@ python worker.py
 
 사용자가 변환 결과 또는 기록본 초안을 직접 수정한 뒤 저장하면 `user_correction_samples`에 원본과 수정본이 누적됩니다.
 실제 파인튜닝을 시작하기 전에 아래 스크립트로 JSONL 데이터셋을 만들고 필터링 통계를 확인하세요.
+
+장기 학습 후보 데이터는 운영 기록과 분리해서 관리합니다.
+
+- `transcription-inputs`: 변환 대기열/운영용 원본 업로드 임시 보관
+- `training-audio`: 사용자 동의와 보관 정책을 통과한 장기 학습 후보 음원
+- `training_audio_assets`: 장기 학습 후보 음원의 소유자, 원본 경로, 길이, 보관/동의 상태
+- `training_text_samples`: 현재 변환 결과(`current_result`)와 사용자가 수정한 최종 정답(`final_result`)을 연결한 학습 후보 텍스트
+
+사용자가 수정 결과를 저장하면 기존 `user_correction_samples` 저장 성공 후 `training_text_samples`에도 `candidate` 상태로 복제됩니다.
+`training_data_assets.sql`이 아직 실행되지 않은 환경에서는 기존 저장 흐름을 유지하고 서버 로그에 경고만 남깁니다.
+
+초기 단계에서는 기존 변환 파이프라인이 음성 원본을 `training-audio`로 자동 복사하지 않습니다.
+음성 원본을 ASR 파인튜닝 후보로 장기 보관하려면 먼저 약관/개인정보처리방침, 사용자 동의 UI, 삭제/철회 플로우를 확정한 뒤 서버에서 명시적으로 복사하도록 연결하세요.
 
 먼저 누적 샘플의 분포와 주요 교정 패턴을 확인합니다. 기본 출력에는 원문/수정문 전문을 넣지 않습니다.
 

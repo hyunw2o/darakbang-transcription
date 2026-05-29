@@ -12,8 +12,10 @@ from pathlib import Path
 TABLE_SQL_FILES = {
     "user_glossary_terms": "backend/sql/user_glossary_terms.sql",
     "user_correction_samples": "backend/sql/user_correction_samples.sql",
+    "training_audio_assets": "backend/sql/training_data_assets.sql",
+    "training_text_samples": "backend/sql/training_data_assets.sql",
 }
-DEFAULT_SQL_FILES = list(TABLE_SQL_FILES.values())
+DEFAULT_SQL_FILES = list(dict.fromkeys(TABLE_SQL_FILES.values()))
 
 NOTIFY_STATEMENT = "NOTIFY pgrst, 'reload schema';"
 
@@ -72,11 +74,12 @@ def table_exists(client, table_name: str) -> bool:
 
 def resolve_missing_sql_files() -> list[str]:
     client = load_supabase_client()
-    return [
+    missing_sql_files = [
         sql_file
         for table_name, sql_file in TABLE_SQL_FILES.items()
         if not table_exists(client, table_name)
     ]
+    return list(dict.fromkeys(missing_sql_files))
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,8 +110,11 @@ def run_self_test() -> int:
     bundle = build_bundle(DEFAULT_SQL_FILES, include_notify=True)
     assert "create table if not exists public.user_glossary_terms" in bundle
     assert "create table if not exists public.user_correction_samples" in bundle
+    assert "create table if not exists public.training_audio_assets" in bundle
+    assert "create table if not exists public.training_text_samples" in bundle
     assert NOTIFY_STATEMENT in bundle
     assert TABLE_SQL_FILES["user_glossary_terms"] in DEFAULT_SQL_FILES
+    assert DEFAULT_SQL_FILES.count("backend/sql/training_data_assets.sql") == 1
     print("feature-sql-bundle-self-test-ok")
     return 0
 

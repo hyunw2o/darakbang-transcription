@@ -19,6 +19,8 @@ from export_correction_finetune_dataset import DEFAULT_SELECT, DEFAULT_SYSTEM_PR
 REQUIRED_TABLES = {
     "user_glossary_terms": "backend/sql/user_glossary_terms.sql",
     "user_correction_samples": "backend/sql/user_correction_samples.sql",
+    "training_audio_assets": "backend/sql/training_data_assets.sql",
+    "training_text_samples": "backend/sql/training_data_assets.sql",
 }
 
 
@@ -242,6 +244,8 @@ def run_self_test() -> int:
     tables = [
         TableReadiness(table="user_glossary_terms", ok=True, count=3, sql_file=REQUIRED_TABLES["user_glossary_terms"]),
         TableReadiness(table="user_correction_samples", ok=False, sql_file=REQUIRED_TABLES["user_correction_samples"], error="PGRST205"),
+        TableReadiness(table="training_audio_assets", ok=True, count=0, sql_file=REQUIRED_TABLES["training_audio_assets"]),
+        TableReadiness(table="training_text_samples", ok=True, count=0, sql_file=REQUIRED_TABLES["training_text_samples"]),
     ]
     payload = summarize_result(
         tables,
