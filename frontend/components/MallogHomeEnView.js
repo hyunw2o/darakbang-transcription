@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import HeaderMenuControls from './HeaderMenuControls'
 import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
+import RecordingWaveform from './RecordingWaveform'
 import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
 import UserGlossaryPanel from './UserGlossaryPanel'
@@ -129,6 +130,7 @@ export default function MallogHomeEnView(props) {
     fileDurationSeconds,
     recordingState,
     recordingSeconds,
+    recordingLevel,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -634,9 +636,11 @@ export default function MallogHomeEnView(props) {
                     </div>
                   </div>
                   {recordingState === 'recording' && (
-                    <p className="mt-3 text-xs font-semibold text-red-500">
-                      ● Recording · {formatSecondsToHourMinute(recordingSeconds, 'en')}
-                    </p>
+                    <RecordingWaveform
+                      active
+                      level={recordingLevel}
+                      label={`Recording · ${formatSecondsToHourMinute(recordingSeconds, 'en')}`}
+                    />
                   )}
                 </div>
 

@@ -360,8 +360,8 @@ export default function MallogHomePageContainer({
         saving: 'Saving...',
         add: 'Add term',
         empty: 'No user glossary terms saved yet.',
-        termPlaceholder: 'Preferred spelling (e.g. RVS)',
-        meaningPlaceholder: 'Meaning (e.g. Remnant Vision School)',
+        termPlaceholder: 'Preferred spelling',
+        meaningPlaceholder: 'Meaning or description',
         aliasesPlaceholder: 'Aliases or misrecognitions',
         contextsPlaceholder: 'Context hints',
         active: 'Active',
@@ -380,8 +380,8 @@ export default function MallogHomePageContainer({
         saving: '저장 중...',
         add: '용어 추가',
         empty: '아직 저장된 사용자 용어가 없습니다.',
-        termPlaceholder: '정확한 표기 (예: RVS)',
-        meaningPlaceholder: '뜻/설명 (예: Remnant Vision School)',
+        termPlaceholder: '정확한 표기',
+        meaningPlaceholder: '뜻/설명',
         aliasesPlaceholder: '오인식/별칭',
         contextsPlaceholder: '문맥 힌트',
         active: '활성',
@@ -503,6 +503,7 @@ export default function MallogHomePageContainer({
       fileDurationSeconds={fileDurationSeconds}
       recordingState={recordingState}
       recordingSeconds={recordingSeconds}
+      recordingLevel={transcription.recordingLevel}
       fileInputRef={fileInputRef}
       isGuestMode={isGuestMode}
       guestTranscribeHint={guestTranscribeHint}

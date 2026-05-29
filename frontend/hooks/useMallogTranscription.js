@@ -193,6 +193,7 @@ export default function useMallogTranscription({
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
   const [recordingState, setRecordingState] = useState('idle')
   const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [recordingLevel, setRecordingLevel] = useState(0)
   const [guestSessionId, setGuestSessionId] = useState('')
   const [guestUsage, setGuestUsage] = useState({
     plan_tier: 'guest',
@@ -219,6 +220,10 @@ export default function useMallogTranscription({
   const recordingChunksRef = useRef([])
   const recordingTimerRef = useRef(null)
   const recordingStartedAtRef = useRef(0)
+  const recordingAudioContextRef = useRef(null)
+  const recordingAnalyserRef = useRef(null)
+  const recordingLevelDataRef = useRef(null)
+  const recordingMeterFrameRef = useRef(null)
   const discardRecordingRef = useRef(false)
 
   const readResponseData = useCallback(async (response, fallbackMessage) => {
@@ -552,10 +557,71 @@ export default function useMallogTranscription({
     }
   }, [])
 
+  const stopRecordingMeter = useCallback(() => {
+    if (recordingMeterFrameRef.current && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(recordingMeterFrameRef.current)
+      recordingMeterFrameRef.current = null
+    }
+    recordingAnalyserRef.current = null
+    recordingLevelDataRef.current = null
+    const audioContext = recordingAudioContextRef.current
+    recordingAudioContextRef.current = null
+    audioContext?.close?.().catch?.(() => {})
+    setRecordingLevel(0)
+  }, [])
+
+  const startRecordingMeter = useCallback((stream) => {
+    stopRecordingMeter()
+    if (typeof window === 'undefined') return
+
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextConstructor) return
+
+    try {
+      const audioContext = new AudioContextConstructor()
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 512
+      analyser.smoothingTimeConstant = 0.82
+      audioContext.createMediaStreamSource(stream).connect(analyser)
+
+      const data = new Uint8Array(analyser.fftSize)
+      recordingAudioContextRef.current = audioContext
+      recordingAnalyserRef.current = analyser
+      recordingLevelDataRef.current = data
+      audioContext.resume?.().catch?.(() => {})
+
+      let lastLevel = 0
+      const updateMeter = () => {
+        const activeAnalyser = recordingAnalyserRef.current
+        const activeData = recordingLevelDataRef.current
+        if (!activeAnalyser || !activeData) return
+
+        activeAnalyser.getByteTimeDomainData(activeData)
+        let sumSquares = 0
+        for (let index = 0; index < activeData.length; index += 1) {
+          const centered = (activeData[index] - 128) / 128
+          sumSquares += centered * centered
+        }
+        const rms = Math.sqrt(sumSquares / activeData.length)
+        const nextLevel = Math.max(0, Math.min(1, rms * 4.8))
+        if (Math.abs(nextLevel - lastLevel) > 0.015) {
+          lastLevel = nextLevel
+          setRecordingLevel(nextLevel)
+        }
+        recordingMeterFrameRef.current = window.requestAnimationFrame(updateMeter)
+      }
+
+      recordingMeterFrameRef.current = window.requestAnimationFrame(updateMeter)
+    } catch {
+      stopRecordingMeter()
+    }
+  }, [stopRecordingMeter])
+
   const stopRecordingStream = useCallback(() => {
+    stopRecordingMeter()
     recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop())
     recordingStreamRef.current = null
-  }, [])
+  }, [stopRecordingMeter])
 
   const startRecording = useCallback(async (uploadBlockedByQuota) => {
     if (uploadBlockedByQuota) {
@@ -588,6 +654,7 @@ export default function useMallogTranscription({
       recordingStreamRef.current = stream
       mediaRecorderRef.current = recorder
       recordingChunksRef.current = []
+      startRecordingMeter(stream)
       fileDurationProbeRef.current += 1
       setFile(null)
       setFileDurationSeconds(0)
@@ -618,7 +685,7 @@ export default function useMallogTranscription({
       const denied = error?.name === 'NotAllowedError' || error?.name === 'SecurityError'
       setError(denied ? messages.recordingPermissionDenied : messages.recordingStartFailed)
     }
-  }, [clearRecordingTimer, loading, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, messages.usageLimitToast, recordingState, resetResultWorkspace, setError, setFileDurationSeconds, setNotice, showToast, stopRecordingStream])
+  }, [clearRecordingTimer, loading, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, messages.usageLimitToast, recordingState, resetResultWorkspace, setError, setFileDurationSeconds, setNotice, showToast, startRecordingMeter, stopRecordingStream])
 
   const stopRecording = useCallback(async (usage) => {
     const recorder = mediaRecorderRef.current
@@ -1482,6 +1549,7 @@ export default function useMallogTranscription({
     fileDurationSeconds,
     recordingState,
     recordingSeconds,
+    recordingLevel,
     guestUsage,
     guestTranscribeHint: messages.guestTranscribeHint,
     guestTranscribeStart: messages.guestTranscribeStart,
