@@ -4507,6 +4507,59 @@ def get_optimal_model():
     return "gemini-2.5-flash"
 
 
+def _extract_gemini_response_text(response, *, task_id: str = "", context: str = "Gemini") -> str:
+    """
+    google-generativeai의 response.text quick accessor는 후보는 있지만 parts가 비어 있으면 예외를 낸다.
+    변환 작업 전체가 SDK 예외 문구로 실패하지 않도록 후보 parts를 직접 확인하고, 비어 있으면 빈 문자열을 반환한다.
+    """
+    if response is None:
+        return ""
+
+    quick_accessor_error = None
+    try:
+        quick_text = response.text
+        if quick_text:
+            return str(quick_text).strip()
+    except Exception as exc:
+        quick_accessor_error = exc
+
+    extracted_parts: list[str] = []
+    finish_reasons: list[str] = []
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        for candidate in candidates:
+            finish_reason = getattr(candidate, "finish_reason", None)
+            if finish_reason is not None:
+                finish_reasons.append(str(finish_reason))
+
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) or []
+            for part in parts:
+                part_text = getattr(part, "text", None)
+                if part_text:
+                    extracted_parts.append(str(part_text))
+    except Exception as exc:
+        print(f"[{task_id}] {context} response fallback extraction failed: {exc}" if task_id else f"{context} response fallback extraction failed: {exc}")
+
+    combined_text = "\n".join(part.strip() for part in extracted_parts if part and part.strip()).strip()
+    if combined_text:
+        return combined_text
+
+    prompt_feedback = getattr(response, "prompt_feedback", None)
+    prefix = f"[{task_id}] " if task_id else ""
+    print(
+        f"{prefix}{context} returned no text parts. "
+        f"finish_reasons={finish_reasons or 'unknown'}, "
+        f"prompt_feedback={prompt_feedback or 'none'}, "
+        f"quick_accessor_error={quick_accessor_error or 'none'}"
+    )
+    return ""
+
+
+def _gemini_empty_response_retry_delay(attempt: int) -> float:
+    return min(20.0, (attempt + 1) * 2.0 + random.uniform(0.2, 1.5))
+
+
 def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
     """
     Overlapped audio chunks can produce a repeated boundary phrase.
@@ -5017,7 +5070,6 @@ async def gemini_correct_and_structure(
     max_retries = 5
 
     async def run_correction_prompt(prompt_parts: list[str], run_label: str) -> str:
-        response = None
         for attempt in range(max_retries):
             try:
                 _touch_task_runtime_state(task_id)
@@ -5027,7 +5079,22 @@ async def gemini_correct_and_structure(
                     request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
                 )
                 _touch_task_runtime_state(task_id)
-                break
+                response_text = _extract_gemini_response_text(
+                    response,
+                    task_id=task_id,
+                    context=f"Gemini correction {run_label}",
+                )
+                if response_text:
+                    return response_text
+                if attempt < max_retries - 1:
+                    wait_time = _gemini_empty_response_retry_delay(attempt)
+                    print(
+                        f"[{task_id}] Gemini correction returned empty text in {run_label}. "
+                        f"Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})"
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
+                return ""
             except Exception as e:
                 if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
                     wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
@@ -5038,8 +5105,7 @@ async def gemini_correct_and_structure(
                     await asyncio.sleep(wait_time)
                 else:
                     raise e
-
-        return (response.text or "").strip() if response else ""
+        return ""
 
     chunks = _split_text_for_gemini_correction(raw_text, GEMINI_CORRECTION_CHUNK_CHARS)
     if len(chunks) > 1:
@@ -5109,7 +5175,8 @@ async def gemini_correct_and_structure(
     if not chunks:
         return ""
 
-    return await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
+    corrected_single = await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
+    return corrected_single or chunks[0].strip()
 
 
 def _is_retryable_gemini_error(error: Exception) -> bool:
@@ -5158,7 +5225,7 @@ def _transcribe_with_gemini_only(
             custom_terms,
         )
 
-        response = None
+        raw_text = ""
         max_retries = 5
         for attempt in range(max_retries):
             try:
@@ -5168,7 +5235,24 @@ def _transcribe_with_gemini_only(
                     request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
                 )
                 _touch_task_runtime_state(task_id)
-                break
+                raw_text = _extract_gemini_response_text(
+                    response,
+                    task_id=task_id,
+                    context="Gemini-only transcription",
+                )
+                if raw_text:
+                    break
+                if attempt < max_retries - 1:
+                    wait_time = _gemini_empty_response_retry_delay(attempt)
+                    print(
+                        f"[{task_id}] Gemini-only transcription returned empty text. "
+                        f"Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})"
+                    )
+                    time.sleep(wait_time)
+                    continue
+                raise RuntimeError(
+                    "Gemini가 음성 내용을 반환하지 않았습니다. 녹음 파일에 실제 음성이 들어 있는지 확인한 뒤 다시 시도해 주세요."
+                )
             except Exception as e:
                 if _is_retryable_gemini_error(e) and attempt < max_retries - 1:
                     wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
@@ -5180,7 +5264,6 @@ def _transcribe_with_gemini_only(
                     continue
                 raise
 
-        raw_text = (response.text or "").strip()
         corrected_text = _postprocess_transcript(
             raw_text,
             transcription_type,
@@ -8474,7 +8557,7 @@ async def generate_record_draft(
 {normalized_text}
 """
 
-    response = None
+    content_text = ""
     max_retries = 5
     for attempt in range(max_retries):
         try:
@@ -8482,7 +8565,17 @@ async def generate_record_draft(
                 full_prompt,
                 request_options={"timeout": 120}
             )
-            break
+            content_text = _extract_gemini_response_text(response, context="records-draft")
+            if content_text:
+                break
+            if attempt < max_retries - 1:
+                wait_time = _gemini_empty_response_retry_delay(attempt)
+                print(f"[records-draft] Empty Gemini response. Retrying in {wait_time:.1f}s...")
+                await asyncio.sleep(wait_time)
+                continue
+            raise HTTPException(status_code=502, detail="기록본 초안 생성 응답이 비어 있습니다. 잠시 후 다시 시도해 주세요.")
+        except HTTPException:
+            raise
         except Exception as e:
             if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
                 wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
@@ -8496,7 +8589,7 @@ async def generate_record_draft(
         "category": normalized_category,
         "category_label": _get_record_category_label(normalized_category, normalized_language),
         "title": _get_record_category_label(normalized_category, normalized_language),
-        "content": response.text if response else "",
+        "content": content_text,
     }
 
 
@@ -8931,7 +9024,7 @@ async def summarize_text(
 [{source_label}]
 {normalized_text}"""
 
-        response = None
+        summary_text = ""
         max_retries = 5
 
         for attempt in range(max_retries):
@@ -8940,7 +9033,17 @@ async def summarize_text(
                     full_prompt,
                     request_options={"timeout": 120}
                 )
-                break
+                summary_text = _extract_gemini_response_text(response, context="summarize")
+                if summary_text:
+                    break
+                if attempt < max_retries - 1:
+                    wait_time = _gemini_empty_response_retry_delay(attempt)
+                    print(f"[summarize] Empty Gemini response. Retrying in {wait_time:.1f}s...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise HTTPException(status_code=502, detail="요약 생성 응답이 비어 있습니다. 잠시 후 다시 시도해 주세요.")
+            except HTTPException:
+                raise
             except Exception as e:
                 if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
                     wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
@@ -8951,7 +9054,7 @@ async def summarize_text(
 
         return {
             "success": True,
-            "summary": response.text,
+            "summary": summary_text,
             "summary_type": summary_type,
             "transcription_type": normalized_transcription_type,
             "content_style": normalized_content_style,
