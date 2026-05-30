@@ -2,7 +2,7 @@
   "expo": {
     "name": "mallog24",
     "slug": "mallog24-mobile-shell",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -21,7 +21,7 @@
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.mallog24.app",
-      "buildNumber": "1.1.2",
+      "buildNumber": "1.1.3",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "mallog24에서 음성을 녹음해 텍스트로 변환하려면 마이크 접근 권한이 필요합니다."
