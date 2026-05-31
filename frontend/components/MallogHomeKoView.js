@@ -719,11 +719,19 @@ export default function MallogHomeKoView(props) {
 
             {/* 진행률 표시 */}
             {loading && currentStep > 0 && (
-              <div className="nm-raised p-6 mb-5 animate-slide-up">
-                <StepIndicator currentStep={currentStep} locale="kr" />
-                <div className="progress-bar mt-5">
+              <div className="mallog-processing-card mb-5 animate-slide-up">
+                <div className="mallog-processing-inner">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-nm-text-primary">변환 진행 중</p>
+                    <span className="rounded-full border border-[color:var(--nm-border)] px-2.5 py-1 text-[11px] font-semibold text-nm-text-secondary">
+                      {currentStep}/3
+                    </span>
+                  </div>
+                  <StepIndicator currentStep={currentStep} locale="kr" />
+                </div>
+                <div className="mallog-processing-progress mt-4">
                   <div
-                    className="progress-bar-fill"
+                    className="mallog-processing-progress-fill"
                     style={{ width: currentStep === 1 ? '20%' : currentStep === 2 ? '55%' : '85%' }}
                   />
                 </div>

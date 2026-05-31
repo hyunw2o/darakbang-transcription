@@ -425,6 +425,140 @@ body {
   transition: width 1s ease-out;
 }
 
+.mallog-processing-card {
+  border: 0.5px solid var(--nm-border);
+  border-radius: 8px;
+  background: var(--nm-surface);
+  padding: 18px;
+}
+
+.mallog-processing-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.mallog-step-indicator {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mallog-step-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 0.5px solid var(--nm-border);
+  border-radius: 8px;
+  background: var(--nm-surface-soft);
+  padding: 10px 12px;
+  transition:
+    border-color var(--nm-transition) var(--nm-ease),
+    background var(--nm-transition) var(--nm-ease),
+    color var(--nm-transition) var(--nm-ease);
+}
+
+.mallog-step-item.is-completed {
+  border-color: color-mix(in oklab, #22c55e 42%, var(--nm-border));
+  background: color-mix(in oklab, #22c55e 9%, var(--nm-surface));
+}
+
+.mallog-step-item.is-active {
+  border-color: color-mix(in oklab, var(--nm-accent) 48%, var(--nm-border));
+  background: color-mix(in oklab, var(--nm-accent) 9%, var(--nm-surface));
+}
+
+.mallog-step-dot {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid var(--nm-border);
+  color: var(--nm-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--nm-surface);
+}
+
+.mallog-step-item.is-completed .mallog-step-dot {
+  border-color: #22c55e;
+  background: #22c55e;
+  color: white;
+}
+
+.mallog-step-item.is-active .mallog-step-dot {
+  border-color: var(--nm-accent);
+  background: color-mix(in oklab, var(--nm-accent) 13%, var(--nm-surface));
+  color: var(--nm-accent);
+}
+
+.mallog-step-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: var(--nm-accent);
+  box-shadow: 0 0 0 5px color-mix(in oklab, var(--nm-accent) 14%, transparent);
+}
+
+.mallog-step-label {
+  overflow: hidden;
+  color: var(--nm-text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mallog-step-caption {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--nm-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mallog-step-item.is-completed .mallog-step-label {
+  color: #16a34a;
+}
+
+.mallog-step-item.is-active .mallog-step-label {
+  color: var(--nm-accent);
+}
+
+.mallog-processing-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 0.5px solid var(--nm-border);
+  background: var(--nm-surface-soft);
+}
+
+.mallog-processing-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--nm-accent);
+  transition: width 1s ease-out;
+}
+
+@media (max-width: 640px) {
+  .mallog-processing-card {
+    padding: 14px;
+  }
+
+  .mallog-step-indicator {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .nm-raised,
   .nm-concave,
@@ -434,7 +568,9 @@ body {
   .nm-input,
   .nm-segment-item,
   .action-btn,
-  .progress-bar-fill {
+  .progress-bar-fill,
+  .mallog-step-item,
+  .mallog-processing-progress-fill {
     transition-duration: 0ms !important;
   }
 }

@@ -1,64 +1,52 @@
 const STEP_LABELS = {
   kr: [
-    { label: '업로드', num: 1 },
-    { label: '음성 인식', num: 2 },
-    { label: '교정', num: 3 },
+    { label: '업로드', caption: '파일 전송', num: 1 },
+    { label: '음성 인식', caption: 'AI 전사', num: 2 },
+    { label: '교정', caption: '문서 정리', num: 3 },
   ],
   en: [
-    { label: 'Upload', num: 1 },
-    { label: 'STT', num: 2 },
-    { label: 'Refine', num: 3 },
+    { label: 'Upload', caption: 'Transfer', num: 1 },
+    { label: 'Speech', caption: 'AI transcript', num: 2 },
+    { label: 'Refine', caption: 'Structure', num: 3 },
   ],
 }
 
 export default function StepIndicator({ currentStep, locale = 'kr' }) {
   const steps = STEP_LABELS[locale] || STEP_LABELS.kr
+  const boundedStep = Math.max(1, Math.min(steps.length, Number(currentStep) || 1))
 
   return (
-    <div className="flex items-center justify-center gap-1 sm:gap-2">
-      {steps.map((step, i) => {
-        const isCompleted = currentStep > step.num
-        const isActive = currentStep === step.num
+    <div
+      className="mallog-step-indicator"
+      aria-label={locale === 'en' ? 'Transcription progress' : '변환 진행 상태'}
+    >
+      {steps.map((step) => {
+        const isCompleted = boundedStep > step.num
+        const isActive = boundedStep === step.num
 
         return (
-          <div key={step.num} className="flex items-center gap-1 sm:gap-2">
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500 ${
-                  isCompleted
-                    ? 'nm-raised bg-green-500 text-white'
-                    : isActive
-                      ? 'nm-raised bg-nm-accent text-white animate-pulse-slow'
-                      : 'nm-concave text-nm-text-secondary'
-                }`}
-              >
-                {isCompleted ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  step.num
-                )}
-              </div>
-              <span
-                className={`text-[11px] font-medium ${
-                  isActive
-                    ? 'text-nm-accent'
-                    : isCompleted
-                      ? 'text-green-600'
-                      : 'text-nm-text-secondary'
-                }`}
-              >
-                {step.label}
-              </span>
+          <div
+            key={step.num}
+            className={`mallog-step-item ${
+              isCompleted ? 'is-completed' : isActive ? 'is-active' : 'is-waiting'
+            }`}
+            aria-current={isActive ? 'step' : undefined}
+          >
+            <div className="mallog-step-dot" aria-hidden="true">
+              {isCompleted ? (
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : isActive ? (
+                <span className="mallog-step-pulse" />
+              ) : (
+                step.num
+              )}
             </div>
-            {i < steps.length - 1 && (
-              <div
-                className={`w-8 sm:w-14 h-0.5 mb-5 rounded-full transition-all duration-700 ${
-                  currentStep > step.num ? 'bg-green-400' : 'nm-concave'
-                }`}
-              />
-            )}
+            <div className="min-w-0">
+              <p className="mallog-step-label">{step.label}</p>
+              <p className="mallog-step-caption">{step.caption}</p>
+            </div>
           </div>
         )
       })}
