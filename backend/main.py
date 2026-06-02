@@ -5194,6 +5194,58 @@ def _is_retryable_gemini_error(error: Exception) -> bool:
     return any(marker in message for marker in retry_markers)
 
 
+def _walk_exception_chain(error: Exception | BaseException | None) -> list[Exception | BaseException]:
+    seen: set[int] = set()
+    chain: list[Exception | BaseException] = []
+    current = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _is_openai_insufficient_quota_error(error: Exception | BaseException | None) -> bool:
+    for item in _walk_exception_chain(error):
+        message = str(item).lower()
+        status_code = getattr(item, "status_code", None)
+        error_code = str(getattr(item, "code", "") or "").lower()
+        if (
+            "insufficient_quota" in error_code
+            or "insufficient_quota" in message
+            or "you exceeded your current quota" in message
+        ):
+            return True
+        if status_code == 429 and ("openai" in message or "whisper" in message):
+            return True
+    return False
+
+
+def _sanitize_transcription_error(error: Exception | BaseException | str | None) -> str:
+    if isinstance(error, BaseException):
+        if _is_openai_insufficient_quota_error(error):
+            return (
+                "현재 음성 인식 서버의 OpenAI 할당량이 부족해 변환을 완료하지 못했습니다. "
+                "잠시 후 다시 시도하거나 관리자에게 문의해 주세요."
+            )
+        raw_message = str(error)
+    else:
+        raw_message = str(error or "")
+        lowered = raw_message.lower()
+        if "insufficient_quota" in lowered or "you exceeded your current quota" in lowered:
+            return (
+                "현재 음성 인식 서버의 OpenAI 할당량이 부족해 변환을 완료하지 못했습니다. "
+                "잠시 후 다시 시도하거나 관리자에게 문의해 주세요."
+            )
+
+    lowered = raw_message.lower()
+    if "whisper chunk" in lowered or "openai" in lowered or "platform.openai.com" in lowered:
+        return "음성 인식 중 일부 구간 처리에 실패했습니다. 잠시 후 다시 시도해 주세요."
+    if raw_message:
+        return raw_message
+    return "변환에 실패했습니다. 잠시 후 다시 시도해 주세요."
+
+
 def _transcribe_with_gemini_only(
     *,
     task_id: str,
@@ -5503,8 +5555,10 @@ def _process_transcription_sync(
                 )
                 _log_stage_memory(task_id, "after_postprocess")
             except Exception as whisper_error:
+                openai_quota_error = _is_openai_insufficient_quota_error(whisper_error)
                 allow_gemini_fallback = WHISPER_FALLBACK_TO_GEMINI_ON_ERROR and (
-                    GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS <= 0
+                    openai_quota_error
+                    or GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS <= 0
                     or audio_seconds <= 0
                     or audio_seconds <= GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS
                 )
@@ -5611,10 +5665,11 @@ def _process_transcription_sync(
         print(f"Transcription error: {e}")
         import traceback
         traceback.print_exc()
+        safe_error = _sanitize_transcription_error(e)
         error_payload = {
             "task_id": task_id,
             "status": "error",
-            "error": str(e),
+            "error": safe_error,
             "created_at": datetime.now().isoformat(),
             "language": language,
             "transcription_type": transcription_type,
@@ -5840,7 +5895,7 @@ async def transcribe_audio(
             if str(direct_result.get("status") or "") == "error":
                 raise HTTPException(
                     status_code=500,
-                    detail=str(direct_result.get("error") or "변환에 실패했습니다."),
+                    detail=_sanitize_transcription_error(direct_result.get("error") or "변환에 실패했습니다."),
                 )
             return {
                 **direct_result,
@@ -5937,7 +5992,7 @@ async def transcribe_audio(
     except Exception as e:
         if temp_file_path and (not queued_for_processing) and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
-        raise HTTPException(status_code=500, detail=f"오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=_sanitize_transcription_error(e))
 
 
 @app.get("/api/status/{task_id}")
