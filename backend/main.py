@@ -4560,6 +4560,13 @@ def _gemini_empty_response_retry_delay(attempt: int) -> float:
     return min(20.0, (attempt + 1) * 2.0 + random.uniform(0.2, 1.5))
 
 
+def _gemini_service_retry_delay(error: Exception | BaseException, attempt: int) -> float:
+    message = str(error).lower()
+    base_delay = 10.0 if ("429" in message or "quota" in message or "resourceexhausted" in message) else 3.0
+    max_delay = 60.0 if base_delay >= 10.0 else 30.0
+    return min(max_delay, (2 ** attempt) * base_delay + random.uniform(0.2, base_delay / 2))
+
+
 def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
     """
     Overlapped audio chunks can produce a repeated boundary phrase.
@@ -5096,10 +5103,10 @@ async def gemini_correct_and_structure(
                     continue
                 return ""
             except Exception as e:
-                if ("429" in str(e) or "ResourceExhausted" in str(e) or "quota" in str(e).lower()) and attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                if _is_retryable_gemini_error(e) and attempt < max_retries - 1:
+                    wait_time = _gemini_service_retry_delay(e, attempt)
                     print(
-                        f"[{task_id}] Gemini correction quota/retryable error in {run_label}. "
+                        f"[{task_id}] Gemini correction retryable error in {run_label}. "
                         f"Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})"
                     )
                     await asyncio.sleep(wait_time)
@@ -5221,6 +5228,32 @@ def _is_openai_insufficient_quota_error(error: Exception | BaseException | None)
     return False
 
 
+def _is_gemini_service_error(error: Exception | BaseException | None) -> bool:
+    gemini_markers = (
+        "gemini",
+        "generativeai.google",
+        "google.generativeai",
+        "google.api_core",
+        "resourceexhausted",
+        "finish_reason",
+        "valid `part`",
+    )
+    service_markers = (
+        "internal error has occurred",
+        "developers.generative",
+        "deadline",
+        "unavailable",
+    )
+    for item in _walk_exception_chain(error):
+        message = str(item).lower()
+        if any(marker in message for marker in gemini_markers):
+            return True
+        has_gemini_context = "generative" in message or "google" in message
+        if has_gemini_context and any(marker in message for marker in service_markers):
+            return True
+    return False
+
+
 def _sanitize_transcription_error(error: Exception | BaseException | str | None) -> str:
     if isinstance(error, BaseException):
         if _is_openai_insufficient_quota_error(error):
@@ -5228,6 +5261,14 @@ def _sanitize_transcription_error(error: Exception | BaseException | str | None)
                 "현재 음성 인식 서버의 OpenAI 할당량이 부족해 변환을 완료하지 못했습니다. "
                 "잠시 후 다시 시도하거나 관리자에게 문의해 주세요."
             )
+        if _is_gemini_service_error(error):
+            message = str(error).lower()
+            if "429" in message or "quota" in message or "resourceexhausted" in message:
+                return (
+                    "현재 AI 교정 서버의 사용 한도가 부족해 변환을 완료하지 못했습니다. "
+                    "잠시 후 다시 시도하거나 관리자에게 문의해 주세요."
+                )
+            return "AI 교정 서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
         raw_message = str(error)
     else:
         raw_message = str(error or "")
@@ -5237,6 +5278,20 @@ def _sanitize_transcription_error(error: Exception | BaseException | str | None)
                 "현재 음성 인식 서버의 OpenAI 할당량이 부족해 변환을 완료하지 못했습니다. "
                 "잠시 후 다시 시도하거나 관리자에게 문의해 주세요."
             )
+        if (
+            "generativeai.google" in lowered
+            or "developers.generative" in lowered
+            or "internal error has occurred" in lowered
+            or "resourceexhausted" in lowered
+            or "google.generativeai" in lowered
+            or "gemini" in lowered
+        ):
+            if "429" in lowered or "quota" in lowered or "resourceexhausted" in lowered:
+                return (
+                    "현재 AI 교정 서버의 사용 한도가 부족해 변환을 완료하지 못했습니다. "
+                    "잠시 후 다시 시도하거나 관리자에게 문의해 주세요."
+                )
+            return "AI 교정 서버에서 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
     lowered = raw_message.lower()
     if "whisper chunk" in lowered or "openai" in lowered or "platform.openai.com" in lowered:
@@ -5307,7 +5362,7 @@ def _transcribe_with_gemini_only(
                 )
             except Exception as e:
                 if _is_retryable_gemini_error(e) and attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) * 10 + random.uniform(0, 5)
+                    wait_time = _gemini_service_retry_delay(e, attempt)
                     print(
                         f"[{task_id}] Gemini-only retry in {wait_time:.1f}s "
                         f"(attempt {attempt+1}/{max_retries}): {e}"
@@ -5532,19 +5587,29 @@ def _process_transcription_sync(
                 # 2단계: Gemini로 교정 + 구조화
                 print(f"[{task_id}] Step 2: Gemini correction...")
                 _touch_task_runtime_state(task_id)
-                corrected_text = asyncio.run(
-                    gemini_correct_and_structure(
-                        raw_text,
-                        task_id,
-                        transcription_type,
-                        language,
-                        correction_mode=correction_mode,
-                        custom_terms=runtime_custom_terms,
+                try:
+                    corrected_text = asyncio.run(
+                        gemini_correct_and_structure(
+                            raw_text,
+                            task_id,
+                            transcription_type,
+                            language,
+                            correction_mode=correction_mode,
+                            custom_terms=runtime_custom_terms,
+                        )
                     )
-                )
-                _touch_task_runtime_state(task_id)
-                print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
-                _log_stage_memory(task_id, "after_gemini_correction")
+                    _touch_task_runtime_state(task_id)
+                    print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
+                    _log_stage_memory(task_id, "after_gemini_correction")
+                except Exception as gemini_error:
+                    if not _is_retryable_gemini_error(gemini_error):
+                        raise
+                    print(
+                        f"[{task_id}] Gemini correction failed after retries; "
+                        f"using Whisper raw transcript with local postprocess: {gemini_error}"
+                    )
+                    corrected_text = raw_text
+                    engine = "whisper+local-postprocess"
 
                 # 3단계: 규칙 기반 후처리
                 corrected_text = _postprocess_transcript(
