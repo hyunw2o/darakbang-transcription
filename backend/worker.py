@@ -1,12 +1,14 @@
 import os
 import time
 import uuid
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from main import (
+    MAX_CONCURRENT_TRANSCRIPTIONS,
     TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS,
     _can_use_worker_queue,
     _claim_transcription_job,
@@ -21,6 +23,22 @@ from main import (
 
 
 WORKER_ID = (os.getenv("TRANSCRIPTION_WORKER_ID") or f"worker-{uuid.uuid4().hex[:8]}").strip()
+
+
+def _parse_worker_concurrency() -> int:
+    raw_value = (
+        os.getenv("TRANSCRIPTION_WORKER_CONCURRENCY")
+        or os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS")
+        or str(MAX_CONCURRENT_TRANSCRIPTIONS)
+    )
+    try:
+        value = int(str(raw_value).strip())
+    except Exception:
+        value = MAX_CONCURRENT_TRANSCRIPTIONS
+    return max(1, min(8, value))
+
+
+TRANSCRIPTION_WORKER_CONCURRENCY = _parse_worker_concurrency()
 
 
 def process_claimed_job(job: dict) -> None:
@@ -84,6 +102,26 @@ def process_claimed_job(job: dict) -> None:
         _delete_transcription_input_from_storage(storage_bucket, storage_object_path)
 
 
+def _claim_next_job(fetch_limit: int) -> dict | None:
+    for job in _fetch_queued_transcription_jobs(limit=fetch_limit):
+        if not job.get("storage_object_path"):
+            continue
+        claimed_job = _claim_transcription_job(str(job.get("task_id") or ""), WORKER_ID)
+        if claimed_job:
+            return claimed_job
+    return None
+
+
+def _finish_completed(in_flight: dict[Future, str], completed: set[Future] | None = None) -> None:
+    futures = list(completed) if completed is not None else [future for future in in_flight if future.done()]
+    for future in futures:
+        task_id = in_flight.pop(future, "")
+        try:
+            future.result()
+        except Exception as exc:
+            print(f"[{WORKER_ID}] Worker future for job {task_id or 'unknown'} failed unexpectedly: {exc}")
+
+
 def run_forever() -> None:
     if not _can_use_worker_queue():
         raise RuntimeError(
@@ -91,21 +129,42 @@ def run_forever() -> None:
         )
     _ensure_transcription_jobs_scope_ready(required=True)
 
-    print(f"[{WORKER_ID}] mallog24 transcription worker started")
-    while True:
-        claimed_job = None
-        for job in _fetch_queued_transcription_jobs(limit=10):
-            if not job.get("storage_object_path"):
+    print(
+        f"[{WORKER_ID}] mallog24 transcription worker started "
+        f"(concurrency={TRANSCRIPTION_WORKER_CONCURRENCY})"
+    )
+    fetch_limit = max(10, TRANSCRIPTION_WORKER_CONCURRENCY * 4)
+    with ThreadPoolExecutor(max_workers=TRANSCRIPTION_WORKER_CONCURRENCY) as executor:
+        in_flight: dict[Future, str] = {}
+        while True:
+            _finish_completed(in_flight)
+
+            claimed_any = False
+            while len(in_flight) < TRANSCRIPTION_WORKER_CONCURRENCY:
+                claimed_job = _claim_next_job(fetch_limit)
+                if not claimed_job:
+                    break
+
+                task_id = str(claimed_job.get("task_id") or "").strip()
+                print(f"[{WORKER_ID}] Claimed job {task_id or 'unknown'}")
+                future = executor.submit(process_claimed_job, claimed_job)
+                in_flight[future] = task_id
+                claimed_any = True
+
+            if not in_flight:
+                time.sleep(TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS)
                 continue
-            claimed_job = _claim_transcription_job(str(job.get("task_id") or ""), WORKER_ID)
-            if claimed_job:
-                break
 
-        if not claimed_job:
-            time.sleep(TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS)
-            continue
+            if claimed_any and len(in_flight) < TRANSCRIPTION_WORKER_CONCURRENCY:
+                continue
 
-        process_claimed_job(claimed_job)
+            completed, _ = wait(
+                set(in_flight.keys()),
+                timeout=TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS,
+                return_when=FIRST_COMPLETED,
+            )
+            if completed:
+                _finish_completed(in_flight, completed)
 
 
 if __name__ == "__main__":

@@ -65,7 +65,7 @@ DARAKBANG_CORE = [
     "3단체", "뉴에이지", "프리메이슨", "유대인", "재앙", "지옥배경",
 
     # 성경 관련
-    "네피림", "바벨탑", "앉은뱅이",
+    "네피림", "바벨탑", "앉은뱅이", "무교병", "유월절",
 
     # 행사/모임
     "성회", "전도대회", "수련회", "전도집회", "집회", "세미나", "기도수첩", "포럼방", "포럼 방", "대학부",
@@ -262,7 +262,6 @@ SPECIAL_TERM_RULES = [
             "알티에스",
         ],
         "context_terms": [
-            "RRTS",
             "Rwanda Remnant Theological Seminary",
             "Rwanda",
             "르완다",
@@ -318,7 +317,6 @@ SPECIAL_TERM_RULES = [
             "알티에스",
         ],
         "context_terms": [
-            "RSTS",
             "Remnant Summit Training Synagogue",
             "Summit Training",
             "서밋",
@@ -601,12 +599,22 @@ COMMON_MISTAKES = {
     "램넌트": "렘넌트",
     "레넌트": "렘넌트",
     "레므난트": "렘넌트",
+    "렘런트": "렘넌트",
+    "램런트": "렘넌트",
+    "렘넌뜨": "렘넌트",
+    "랩넌트": "렘넌트",
     
     # 발음 유사어
     "망대": "망대",
     "칠망대": "7망대",
     "칠여정": "7여정",
     "칠이정표": "7이정표",
+    "그리스또": "그리스도",
+    "그리 스도": "그리스도",
+    "그리스 도": "그리스도",
+    "무교 병": "무교병",
+    "무교뱅": "무교병",
+    "무교 변": "무교병",
     
     # 영어 용어
     "헤븐리": "Heavenly",
@@ -1515,7 +1523,7 @@ def get_gemini_prompt(custom_terms: list[str] = None):
     return """당신은 '류광수/이주현 목사' 계열의 다락방 전도운동 메시지 전문 속기사입니다.
 
 [필수 용어]
-237, 5000, 237나라, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
+237, 5000, 237나라, 5000종족, 렘넌트, 그리스도, 예수 그리스도, 무교병, 7망대, 7여정, 7이정표, CVDIP, Heavenly, Thronely, Eternally, TCK, CCK, NCK, 777, 138, 3집중, 24·25·00
 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RRTS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS
 앉은뱅이
 (이삼칠→237, 칠칠칠→777, 오천종족→5000종족 등 숫자/영어 표기 유지)
@@ -1543,6 +1551,9 @@ RVS는 Remnant Vision School, RUTC는 Remnant Unity Training Center로 해석하
    - 예: '할라고' → '하려고' (구어체를 자연스러운 문어체로)
    - 예: '올해'와 '오래'는 반드시 문맥으로 구분하여 기록하라. (연도/시점이면 '올해', 기간/오랜 시간이면 '오래')
    - 예: '삼오늘/세오늘/사모늘/3 오늘'처럼 들리면 문맥상 동일하면 '3오늘'로 표기하라.
+   - 예: '램넌트/렘런트/레므난트'처럼 들리면 문맥상 동일하면 '렘넌트'로 표기하라.
+   - 예: '그리스또/그리 스도'처럼 들리면 문맥상 동일하면 '그리스도'로 표기하라.
+   - 예: '무교 병/무교뱅/무교 변'처럼 들리면 성경·유월절 문맥에서는 '무교병'으로 표기하라.
    - 예: '포럼망'처럼 들리면 문맥상 동일하면 '포럼방'으로 표기하라.
    - 예: '요것도'는 문맥상 동일하면 '이것도'로 표기하라.
    - 혼동어는 기계적으로 치환하지 말고 문맥으로 구분하라:
@@ -1648,7 +1659,7 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 
 [용어 교정]
 - 다락방 전도운동 핵심 용어는 정확히 표기하라:
-  237, 5000종족, 렘넌트, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중, 앉은뱅이
+  237, 5000종족, 렘넌트, 그리스도, 예수 그리스도, 무교병, 7망대, 7여정, 7이정표, CVDIP, 777, 138, 3집중, 앉은뱅이
   Heavenly, Thronely, Eternally, TCK, CCK, NCK, REA, RRTS, Blessing, 블레싱
   드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, 포럼방, HMC, HMIS, HMVS, RVIS, RUTC, RTS, RSTS, RBS, RVS, RPS, RLS, RGS, 대학부, 교역자
   RVS=Remnant Vision School, RUTC=Remnant Unity Training Center로 유지
@@ -1656,6 +1667,9 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 - 음성인식 오류를 문맥에 맞게 교정하라:
   드로우게 교회/드로에게 교회→드로아교회, 하베스터 선교 교회→하베스터선교교회, 미션 홈→미션홈, 태중미션홈→태중 미션홈, 기도 수첩→기도수첩, 아수르→앗수르, 유락민/노량민→유랑민
   포럼망/포럼 망→포럼방
+  램넌트/렘런트/레므난트→렘넌트
+  그리스또/그리 스도/그리스 도→그리스도
+  무교 병/무교뱅/무교 변→무교병
   할라고→하려고, 갈라고→가려고, 배심→뱃심
   삼오늘/세오늘/사모늘/삼 오늘/세 오늘→3오늘
   안즌뱅이/안은뱅이/앉은 뱅이→앉은뱅이
@@ -1724,6 +1738,19 @@ GENERAL_CORRECTIONS = {
     "포럼 망": "포럼방",
     "요것도": "이것도",
     "요 것도": "이것도",
+    "램넌트": "렘넌트",
+    "레넌트": "렘넌트",
+    "레므난트": "렘넌트",
+    "렘런트": "렘넌트",
+    "램런트": "렘넌트",
+    "렘넌뜨": "렘넌트",
+    "랩넌트": "렘넌트",
+    "그리스또": "그리스도",
+    "그리 스도": "그리스도",
+    "그리스 도": "그리스도",
+    "무교 병": "무교병",
+    "무교뱅": "무교병",
+    "무교 변": "무교병",
     "유초동부": "유초등부",
     "유초 동부": "유초등부",
     "대 학부": "대학부",
@@ -2895,6 +2922,27 @@ def _normalize_droa_church_mentions(text: str) -> str:
     return corrected
 
 
+def _normalize_korean_slurred_church_terms(text: str) -> str:
+    """발음이 뭉개져도 교회/성경 맥락에서 안전한 핵심 단어를 복원한다."""
+    import re
+
+    if not text:
+        return text
+
+    corrected = text
+    corrected = re.sub(r"(?:램|렘|랩)\s*(?:넌트|런트|넌뜨|런뜨)", "렘넌트", corrected)
+    corrected = re.sub(r"레\s*므\s*난트", "렘넌트", corrected)
+    corrected = re.sub(r"레\s*넌트", "렘넌트", corrected)
+
+    corrected = re.sub(r"예수\s*그리스\s*(?:도|또)", "예수 그리스도", corrected)
+    corrected = re.sub(r"예수\s*그리\s*스도", "예수 그리스도", corrected)
+    corrected = re.sub(r"그리스\s*(?:도|또)", "그리스도", corrected)
+    corrected = re.sub(r"그리\s*스도", "그리스도", corrected)
+
+    corrected = re.sub(r"무교\s*(?:병|뱅|벵|변)", "무교병", corrected)
+    return corrected
+
+
 def _normalize_contextual_homophones(text: str) -> str:
     """
     문맥 기반 혼동어 교정:
@@ -3332,6 +3380,7 @@ def correct_text(
                 corrected = corrected.replace(wrong, right)
 
         # 문맥 기반 혼동어 보정
+        corrected = _normalize_korean_slurred_church_terms(corrected)
         corrected = _normalize_contextual_homophones(corrected)
 
         # 교회명 보정은 '교회' 문맥에서만 수행 (예: 드로에게 교회 → 드로아교회)
