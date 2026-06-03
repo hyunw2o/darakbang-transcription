@@ -4569,6 +4569,24 @@ def _gemini_service_retry_delay(error: Exception | BaseException, attempt: int) 
     return min(max_delay, (2 ** attempt) * base_delay + random.uniform(0.2, base_delay / 2))
 
 
+def _compact_transcript_length(text: str) -> int:
+    return len(re.sub(r"\s+", "", text or ""))
+
+
+def _is_suspiciously_short_correction(source_text: str, corrected_text: str) -> bool:
+    source_len = _compact_transcript_length(source_text)
+    corrected_len = _compact_transcript_length(corrected_text)
+    if source_len < 800 or corrected_len <= 0:
+        return False
+
+    ratio = corrected_len / max(1, source_len)
+    if source_len >= 6000:
+        return ratio < 0.55
+    if source_len >= 2500:
+        return ratio < 0.50
+    return ratio < 0.42
+
+
 def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
     """
     Overlapped audio chunks can produce a repeated boundary phrase.
@@ -5158,7 +5176,15 @@ async def gemini_correct_and_structure(
                 [correction_prompt, chunk_instruction, f"[{label} {index}/{len(chunks)}]", chunk],
                 f"chunk {index}/{len(chunks)}",
             )
-            if not corrected_chunk and chunk.strip():
+            if _is_suspiciously_short_correction(chunk, corrected_chunk):
+                source_len = _compact_transcript_length(chunk)
+                corrected_len = _compact_transcript_length(corrected_chunk)
+                print(
+                    f"[{task_id}] Gemini correction chunk {index}/{len(chunks)} looks truncated "
+                    f"({corrected_len}/{source_len} compact chars). Keeping raw chunk."
+                )
+                corrected_chunk = chunk.strip()
+            elif not corrected_chunk and chunk.strip():
                 corrected_chunk = chunk.strip()
             return index, corrected_chunk
 
@@ -5185,6 +5211,14 @@ async def gemini_correct_and_structure(
         return ""
 
     corrected_single = await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
+    if _is_suspiciously_short_correction(chunks[0], corrected_single):
+        source_len = _compact_transcript_length(chunks[0])
+        corrected_len = _compact_transcript_length(corrected_single)
+        print(
+            f"[{task_id}] Gemini correction single result looks truncated "
+            f"({corrected_len}/{source_len} compact chars). Keeping raw transcript."
+        )
+        return chunks[0].strip()
     return corrected_single or chunks[0].strip()
 
 
@@ -5622,10 +5656,8 @@ def _process_transcription_sync(
                 )
                 _log_stage_memory(task_id, "after_postprocess")
             except Exception as whisper_error:
-                openai_quota_error = _is_openai_insufficient_quota_error(whisper_error)
                 allow_gemini_fallback = WHISPER_FALLBACK_TO_GEMINI_ON_ERROR and (
-                    openai_quota_error
-                    or GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS <= 0
+                    GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS <= 0
                     or audio_seconds <= 0
                     or audio_seconds <= GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS
                 )
