@@ -376,6 +376,8 @@ GEMINI_REQUEST_TIMEOUT_SECONDS = max(60, int(os.getenv("GEMINI_REQUEST_TIMEOUT_S
 GEMINI_MAX_OUTPUT_TOKENS = max(4096, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "32768")))
 GEMINI_CORRECTION_CHUNK_CHARS = max(4000, int(os.getenv("GEMINI_CORRECTION_CHUNK_CHARS", "12000")))
 GEMINI_CORRECTION_CHUNK_CONCURRENCY = max(1, int(os.getenv("GEMINI_CORRECTION_CHUNK_CONCURRENCY", "2")))
+GEMINI_CORRECTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_CORRECTION_MAX_RETRIES", "2")))
+GEMINI_TRANSCRIPTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_TRANSCRIPTION_MAX_RETRIES", "3")))
 
 # OpenAI (Whisper) 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -5074,7 +5076,7 @@ async def gemini_correct_and_structure(
     )
 
     label = "Original Text" if language == "en" else "元の文字起こし" if language == "ja" else "원본 텍스트"
-    max_retries = 5
+    max_retries = GEMINI_CORRECTION_MAX_RETRIES
 
     async def run_correction_prompt(prompt_parts: list[str], run_label: str) -> str:
         for attempt in range(max_retries):
@@ -5333,7 +5335,7 @@ def _transcribe_with_gemini_only(
         )
 
         raw_text = ""
-        max_retries = 5
+        max_retries = GEMINI_TRANSCRIPTION_MAX_RETRIES
         for attempt in range(max_retries):
             try:
                 _touch_task_runtime_state(task_id)
