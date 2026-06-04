@@ -115,7 +115,7 @@ python worker.py
 
 ## 교정 파인튜닝 데이터셋 준비
 
-사용자가 변환 결과 또는 기록본 초안을 직접 수정한 뒤 저장하면 `user_correction_samples`에 원본과 수정본이 누적됩니다.
+사용자가 변환 결과 또는 기록본 초안을 직접 수정하고 품질 개선 학습 데이터 제공에 명시적으로 동의한 뒤 저장하면 `user_correction_samples`에 원본과 수정본이 누적됩니다.
 실제 파인튜닝을 시작하기 전에 아래 스크립트로 JSONL 데이터셋을 만들고 필터링 통계를 확인하세요.
 
 장기 학습 후보 데이터는 운영 기록과 분리해서 관리합니다.
@@ -125,7 +125,7 @@ python worker.py
 - `training_audio_assets`: 장기 학습 후보 음원의 소유자, 원본 경로, 길이, 보관/동의 상태
 - `training_text_samples`: 현재 변환 결과(`current_result`)와 사용자가 수정한 최종 정답(`final_result`)을 연결한 학습 후보 텍스트
 
-사용자가 수정 결과를 저장하면 기존 `user_correction_samples` 저장 성공 후 `training_text_samples`에도 `candidate` 상태로 복제됩니다.
+사용자가 수정 결과를 학습 데이터로 제공하는 데 동의한 경우에만 기존 `user_correction_samples` 저장 성공 후 `training_text_samples`에도 `candidate` 상태로 복제됩니다.
 `training_data_assets.sql`이 아직 실행되지 않은 환경에서는 기존 저장 흐름을 유지하고 서버 로그에 경고만 남깁니다.
 
 초기 단계에서는 기존 변환 파이프라인이 음성 원본을 `training-audio`로 자동 복사하지 않습니다.

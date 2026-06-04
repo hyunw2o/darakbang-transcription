@@ -127,6 +127,8 @@ export default function MallogHomeEnView(props) {
     setTranscriptEditText,
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
+    trainingDataConsent,
+    setTrainingDataConsent,
     fileDurationSeconds,
     recordingState,
     recordingSeconds,
@@ -808,6 +810,17 @@ export default function MallogHomeEnView(props) {
                       rows={8}
                       className="nm-input w-full text-xs leading-relaxed max-h-64 overflow-y-auto"
                     />
+                    <label className="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-nm-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={trainingDataConsent}
+                        onChange={(e) => setTrainingDataConsent(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-nm-accent"
+                      />
+                      <span>
+                        Share edited text as mallog24 quality-improvement training data. This option does not store the original audio.
+                      </span>
+                    </label>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -902,6 +915,17 @@ export default function MallogHomeEnView(props) {
                   <p className="text-xs text-nm-text-secondary mb-4">
                     Generate a structured note from the transcript and save it as a separate record under your account.
                   </p>
+                  <label className="mb-4 flex items-start gap-2 text-[11px] leading-relaxed text-nm-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={trainingDataConsent}
+                      onChange={(e) => setTrainingDataConsent(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 accent-nm-accent"
+                    />
+                    <span>
+                      Share record edits as quality-improvement training data.
+                    </span>
+                  </label>
 
                   <div className="flex flex-wrap gap-2">
                     {recordCategories.map((recordCategory) => (

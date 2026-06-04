@@ -437,6 +437,7 @@ function App() {
   const [savingCategory, setSavingCategory] = useState("");
   const [transcriptEditText, setTranscriptEditText] = useState("");
   const [transcriptEditSaving, setTranscriptEditSaving] = useState(false);
+  const [trainingDataConsent, setTrainingDataConsent] = useState(false);
   const [workspaceScrollEnabled, setWorkspaceScrollEnabled] = useState(true);
 
   const [notice, setNotice] = useState("");
@@ -1673,7 +1674,7 @@ function App() {
     try {
       const draftSource = recordDraftSources[category] || {};
       const originalDraftText = String(draftSource.originalText || "").trim();
-      const shouldCaptureCorrection = Boolean(originalDraftText && originalDraftText !== content);
+      const shouldCaptureCorrection = Boolean(trainingDataConsent && originalDraftText && originalDraftText !== content);
       const body = new FormData();
       body.append("category", category);
       body.append("title", copy.recordCategories[category] || category);
@@ -1686,6 +1687,9 @@ function App() {
         body.append("correction_metadata_json", JSON.stringify({
           transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
           source_text_preview: String(draftSource.sourceText || "").slice(0, 1000),
+          consent_for_training: true,
+          consent_scope: "text_correction_only",
+          audio_training_consent: false,
         }));
       }
 
@@ -1709,9 +1713,13 @@ function App() {
               task_id: draftSource.taskId || result?.task_id || "",
               original_text: originalDraftText,
               edited_text: content,
+              consent_for_training: true,
               metadata: {
                 transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
                 source_text_preview: String(draftSource.sourceText || "").slice(0, 1000),
+                consent_for_training: true,
+                consent_scope: "text_correction_only",
+                audio_training_consent: false,
               },
             }),
           });
@@ -1792,6 +1800,15 @@ function App() {
           title: record?.title || record?.category || copy.recordsTitle,
           content: editedText,
           language: result?.language || transcriptionLanguage || "ko",
+          capture_correction_sample: trainingDataConsent,
+          correction_metadata: trainingDataConsent
+            ? {
+                consent_for_training: true,
+                consent_scope: "text_correction_only",
+                audio_training_consent: false,
+                source: "mobile_saved_record_editor",
+              }
+            : {},
         }),
       });
       const updatedRecord = data?.record || { ...record, content: editedText };
@@ -1804,7 +1821,7 @@ function App() {
     } finally {
       setRecordSavingId("");
     }
-  }, [authToken, clearMessages, copy.errors.recordUpdateFailed, copy.errors.saveNeedLogin, copy.errors.saveNoContent, copy.notices.correctionNoChange, copy.notices.recordUpdated, copy.recordsTitle, handleCancelRecordEdit, isLoggedIn, recordEditDrafts, result?.language, transcriptionLanguage]);
+  }, [authToken, clearMessages, copy.errors.recordUpdateFailed, copy.errors.saveNeedLogin, copy.errors.saveNoContent, copy.notices.correctionNoChange, copy.notices.recordUpdated, copy.recordsTitle, handleCancelRecordEdit, isLoggedIn, recordEditDrafts, result?.language, trainingDataConsent, transcriptionLanguage]);
 
   const handleResetTranscriptEdit = () => {
     setTranscriptEditText(transcriptSourceText);
@@ -1813,7 +1830,7 @@ function App() {
   const handleSaveTranscriptCorrection = async () => {
     clearMessages();
 
-    if (!isLoggedIn) {
+    if (trainingDataConsent && !isLoggedIn) {
       setError(copy.errors.correctionNeedLogin);
       return;
     }
@@ -1832,22 +1849,28 @@ function App() {
     setTranscriptEditSaving(true);
 
     try {
-      await requestApi("/api/corrections", {
-        method: "POST",
-        token: authToken,
-        body: JSON.stringify({
-          source_type: "transcript_edit",
-          category: result?.transcription_type || transcriptionType,
-          language: result?.language || transcriptionLanguage || "ko",
-          task_id: result?.task_id || "",
-          original_text: originalText,
-          edited_text: editedText,
-          metadata: {
-            content_style: resolveContentStyleKey(result),
-            source: "mobile_transcript_editor",
-          },
-        }),
-      });
+      if (trainingDataConsent) {
+        await requestApi("/api/corrections", {
+          method: "POST",
+          token: authToken,
+          body: JSON.stringify({
+            source_type: "transcript_edit",
+            category: result?.transcription_type || transcriptionType,
+            language: result?.language || transcriptionLanguage || "ko",
+            task_id: result?.task_id || "",
+            original_text: originalText,
+            edited_text: editedText,
+            consent_for_training: true,
+            metadata: {
+              content_style: resolveContentStyleKey(result),
+              source: "mobile_transcript_editor",
+              consent_for_training: true,
+              consent_scope: "text_correction_only",
+              audio_training_consent: false,
+            },
+          }),
+        });
+      }
 
       setResult((prev) => {
         if (!prev) return prev;
@@ -1859,7 +1882,7 @@ function App() {
         };
       });
       setTranscriptEditText(editedText);
-      setNotice(copy.notices.correctionSaved);
+      setNotice(trainingDataConsent ? copy.notices.correctionSaved : copy.notices.correctionAppliedNoTraining);
     } catch (e) {
       setError(e.message || copy.errors.correctionSaveFailed);
     } finally {
@@ -2820,6 +2843,32 @@ function App() {
                         onFocus={lockWorkspaceScroll}
                         onBlur={unlockWorkspaceScroll}
                       />
+                      <NmPressable
+                        style={styles.trainingConsentRow}
+                        onPress={() => setTrainingDataConsent((prev) => !prev)}
+                      >
+                        <View
+                          style={[
+                            styles.trainingConsentBox,
+                            {
+                              borderColor: activeTheme.inputBorder,
+                              backgroundColor: trainingDataConsent ? activeTheme.accent : activeTheme.surface,
+                            },
+                          ]}
+                        >
+                          {trainingDataConsent ? (
+                            <Text style={styles.trainingConsentCheck}>✓</Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.trainingConsentTextGroup}>
+                          <Text style={[styles.trainingConsentLabel, { color: activeTheme.textPrimary }]}>
+                            {copy.trainingConsentLabel}
+                          </Text>
+                          <Text style={[styles.trainingConsentHint, { color: activeTheme.textSecondary }]}>
+                            {copy.trainingConsentHint}
+                          </Text>
+                        </View>
+                      </NmPressable>
                       <View style={styles.exportActionRow}>
                         <NmPressable
                           style={[
@@ -2898,6 +2947,33 @@ function App() {
                 <FadeInView key="transcribe-records" delay={200}>
                   <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.recordGenerateSave}</Text>
+
+                    <NmPressable
+                      style={styles.trainingConsentRow}
+                      onPress={() => setTrainingDataConsent((prev) => !prev)}
+                    >
+                      <View
+                        style={[
+                          styles.trainingConsentBox,
+                          {
+                            borderColor: activeTheme.inputBorder,
+                            backgroundColor: trainingDataConsent ? activeTheme.accent : activeTheme.surface,
+                          },
+                        ]}
+                      >
+                        {trainingDataConsent ? (
+                          <Text style={styles.trainingConsentCheck}>✓</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.trainingConsentTextGroup}>
+                        <Text style={[styles.trainingConsentLabel, { color: activeTheme.textPrimary }]}>
+                          {copy.trainingConsentLabel}
+                        </Text>
+                        <Text style={[styles.trainingConsentHint, { color: activeTheme.textSecondary }]}>
+                          {copy.trainingConsentHint}
+                        </Text>
+                      </View>
+                    </NmPressable>
 
                     {recordCategoryOptions.map((category) => (
                       <View key={category.key} style={[styles.recordBlock, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
@@ -4680,6 +4756,41 @@ const styles = StyleSheet.create({
   },
   transcriptEditHeader: {
     marginTop: 8,
+  },
+  trainingConsentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  trainingConsentBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  trainingConsentCheck: {
+    color: "#ffffff",
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: "900",
+  },
+  trainingConsentTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  trainingConsentLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+  },
+  trainingConsentHint: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "600",
   },
   resultExportGrid: {
     flexDirection: "row",

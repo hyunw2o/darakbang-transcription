@@ -208,6 +208,8 @@ export default function MallogHomePageContainer({
     setTranscriptEditText,
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
+    trainingDataConsent,
+    setTrainingDataConsent,
     fileDurationSeconds,
     recordingState,
     recordingSeconds,
@@ -500,6 +502,8 @@ export default function MallogHomePageContainer({
       setTranscriptEditText={setTranscriptEditText}
       transcriptEditSaving={transcriptEditSaving}
       transcriptHasUnsavedEdit={transcriptHasUnsavedEdit}
+      trainingDataConsent={trainingDataConsent}
+      setTrainingDataConsent={setTrainingDataConsent}
       fileDurationSeconds={fileDurationSeconds}
       recordingState={recordingState}
       recordingSeconds={recordingSeconds}

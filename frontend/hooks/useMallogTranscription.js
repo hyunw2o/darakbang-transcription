@@ -86,6 +86,7 @@ const TRANSCRIPTION_MESSAGES = {
     correctionNoChanges: '저장할 변경 사항이 없습니다.',
     correctionSaveFailed: '수정 결과 저장 실패',
     correctionSaveSuccess: '수정 결과를 저장했습니다.',
+    correctionAppliedNoTraining: '수정 결과를 화면에 반영했습니다. 학습 데이터로는 저장하지 않았습니다.',
     transcriptTitle: '녹취록',
     transcriptFilename: '녹취록',
     copyFailed: '클립보드 복사에 실패했습니다.',
@@ -142,6 +143,7 @@ const TRANSCRIPTION_MESSAGES = {
     correctionNoChanges: 'No transcript changes to save.',
     correctionSaveFailed: 'Failed to save correction.',
     correctionSaveSuccess: 'Correction saved.',
+    correctionAppliedNoTraining: 'Correction applied locally. It was not saved as training data.',
     transcriptTitle: 'Transcript',
     transcriptFilename: 'transcript',
     copyFailed: 'Failed to copy to clipboard.',
@@ -190,6 +192,7 @@ export default function useMallogTranscription({
   const [savingCategory, setSavingCategory] = useState('')
   const [transcriptEditText, setTranscriptEditText] = useState('')
   const [transcriptEditSaving, setTranscriptEditSaving] = useState(false)
+  const [trainingDataConsent, setTrainingDataConsent] = useState(false)
   const [fileDurationSeconds, setFileDurationSeconds] = useState(0)
   const [recordingState, setRecordingState] = useState('idle')
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -1263,7 +1266,7 @@ export default function useMallogTranscription({
   }, [transcriptSourceText])
 
   const handleSaveTranscriptCorrection = useCallback(async () => {
-    if (!authToken) {
+    if (trainingDataConsent && !authToken) {
       setError(messages.correctionLoginRequired)
       return
     }
@@ -1284,26 +1287,33 @@ export default function useMallogTranscription({
     setNotice(null)
 
     try {
-      const response = await apiFetch(`${apiUrl}/api/corrections`, {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          source_type: 'transcript_edit',
-          category: result?.transcription_type || transcriptionType,
-          language: result?.language || language || messages.defaultLanguage,
-          task_id: result?.task_id || '',
-          original_text: originalText,
-          edited_text: editedText,
-          metadata: {
-            content_style: resolveContentStyle(result),
-            source: 'web_transcript_editor',
+      let data = { stored: false }
+      if (trainingDataConsent) {
+        const response = await apiFetch(`${apiUrl}/api/corrections`, {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
           },
-        }),
-      })
-      const data = await readResponseData(response, messages.correctionSaveFailed)
+          body: JSON.stringify({
+            source_type: 'transcript_edit',
+            category: result?.transcription_type || transcriptionType,
+            language: result?.language || language || messages.defaultLanguage,
+            task_id: result?.task_id || '',
+            original_text: originalText,
+            edited_text: editedText,
+            consent_for_training: true,
+            metadata: {
+              content_style: resolveContentStyle(result),
+              source: 'web_transcript_editor',
+              consent_for_training: true,
+              consent_scope: 'text_correction_only',
+              audio_training_consent: false,
+            },
+          }),
+        })
+        data = await readResponseData(response, messages.correctionSaveFailed)
+      }
       setResult((prev) => {
         if (!prev) return prev
         if (result?.task_id && prev.task_id && prev.task_id !== result.task_id) return prev
@@ -1314,13 +1324,17 @@ export default function useMallogTranscription({
         }
       })
       setTranscriptEditText(editedText)
-      setNotice(data?.stored === false ? messages.correctionNoChanges : messages.correctionSaveSuccess)
+      setNotice(
+        trainingDataConsent
+          ? (data?.stored === false ? messages.correctionNoChanges : messages.correctionSaveSuccess)
+          : messages.correctionAppliedNoTraining
+      )
     } catch (error) {
       setError(error?.message || messages.correctionSaveFailed)
     } finally {
       setTranscriptEditSaving(false)
     }
-  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, language, messages.correctionEmpty, messages.correctionLoginRequired, messages.correctionNoChanges, messages.correctionSaveFailed, messages.correctionSaveSuccess, messages.defaultLanguage, readResponseData, resolveContentStyle, result, setError, setNotice, transcriptEditText, transcriptSourceText, transcriptionType])
+  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, language, messages.correctionAppliedNoTraining, messages.correctionEmpty, messages.correctionLoginRequired, messages.correctionNoChanges, messages.correctionSaveFailed, messages.correctionSaveSuccess, messages.defaultLanguage, readResponseData, resolveContentStyle, result, setError, setNotice, trainingDataConsent, transcriptEditText, transcriptSourceText, transcriptionType])
 
   const handleSaveRecord = useCallback(async (category) => {
     if (!authToken) {
@@ -1341,7 +1355,7 @@ export default function useMallogTranscription({
     try {
       const draftSource = recordDraftSources[category] || {}
       const originalDraftText = String(draftSource.originalText || '').trim()
-      const shouldCaptureCorrection = originalDraftText && originalDraftText !== content
+      const shouldCaptureCorrection = trainingDataConsent && originalDraftText && originalDraftText !== content
       const formData = new FormData()
       formData.append('category', category)
       formData.append('title', recordTypeLabels[category] || category)
@@ -1354,6 +1368,9 @@ export default function useMallogTranscription({
         formData.append('correction_metadata_json', JSON.stringify({
           transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
           source_text_preview: String(draftSource.sourceText || '').slice(0, 1000),
+          consent_for_training: true,
+          consent_scope: 'text_correction_only',
+          audio_training_consent: false,
         }))
       }
 
@@ -1380,9 +1397,13 @@ export default function useMallogTranscription({
               task_id: draftSource.taskId || result?.task_id || '',
               original_text: originalDraftText,
               edited_text: content,
+              consent_for_training: true,
               metadata: {
                 transcription_type: draftSource.transcriptionType || result?.transcription_type || transcriptionType,
                 source_text_preview: String(draftSource.sourceText || '').slice(0, 1000),
+                consent_for_training: true,
+                consent_scope: 'text_correction_only',
+                audio_training_consent: false,
               },
             }),
           })
@@ -1399,7 +1420,7 @@ export default function useMallogTranscription({
     } finally {
       setSavingCategory('')
     }
-  }, [apiUrl, authToken, fetchSavedRecords, getAuthHeaders, language, messages.defaultLanguage, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordDraftSources, recordTypeLabels, result, setError, setNotice, transcriptionType])
+  }, [apiUrl, authToken, fetchSavedRecords, getAuthHeaders, language, messages.defaultLanguage, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordDraftSources, recordTypeLabels, result, setError, setNotice, trainingDataConsent, transcriptionType])
 
   const handleStartSavedRecordEdit = useCallback((record) => {
     const recordId = String(record?.id || '')
@@ -1469,6 +1490,15 @@ export default function useMallogTranscription({
           title: record?.title || recordTypeLabels[record?.category] || record?.category || messages.recordDefaultLabel,
           content,
           language: result?.language || language || messages.defaultLanguage,
+          capture_correction_sample: trainingDataConsent,
+          correction_metadata: trainingDataConsent
+            ? {
+                consent_for_training: true,
+                consent_scope: 'text_correction_only',
+                audio_training_consent: false,
+                source: 'web_saved_record_editor',
+              }
+            : {},
         }),
       })
       const data = await readResponseData(response, messages.recordUpdateFailed)
@@ -1482,7 +1512,7 @@ export default function useMallogTranscription({
     } finally {
       setSavedRecordSavingId('')
     }
-  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, savedRecordEditDrafts, setError, setNotice])
+  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, savedRecordEditDrafts, setError, setNotice, trainingDataConsent])
 
   const usageState = useMemo(() => {
     return (usage) => {
@@ -1546,6 +1576,8 @@ export default function useMallogTranscription({
     setTranscriptEditText,
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
+    trainingDataConsent,
+    setTrainingDataConsent,
     fileDurationSeconds,
     recordingState,
     recordingSeconds,

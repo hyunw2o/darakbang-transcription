@@ -152,6 +152,8 @@ const I18N = {
     transcriptEditSave: "수정 저장",
     transcriptEditReset: "되돌리기",
     transcriptEditSaving: "저장 중",
+    trainingConsentLabel: "수정한 텍스트를 품질 개선 학습 데이터로 제공",
+    trainingConsentHint: "이 선택만으로 음성 원본은 저장하지 않습니다.",
     generateSummary: "설교 요약 생성",
     generateSummaryByType: {
       sermon: "설교 요약 생성",
@@ -344,6 +346,7 @@ const I18N = {
       recordSaved: "기록본을 저장했습니다.",
       recordUpdated: "기록본을 수정했습니다.",
       correctionSaved: "수정 결과를 저장했습니다.",
+      correctionAppliedNoTraining: "수정 결과를 화면에 반영했습니다. 학습 데이터로는 저장하지 않았습니다.",
       correctionNoChange: "저장할 변경 사항이 없습니다.",
       privacyAccepted: "개인정보처리방침 동의가 완료되었습니다.",
       guestUsageLoaded: "비로그인 체험 사용량을 업데이트했습니다.",
@@ -577,6 +580,8 @@ const I18N = {
     transcriptEditSave: "Save Correction",
     transcriptEditReset: "Reset",
     transcriptEditSaving: "Saving",
+    trainingConsentLabel: "Share edited text as quality-improvement training data",
+    trainingConsentHint: "This option does not store the original audio.",
     generateSummary: "Generate Summary",
     generateSummaryByType: {
       sermon: "Generate Sermon Summary",
@@ -769,6 +774,7 @@ const I18N = {
       recordSaved: "Record saved.",
       recordUpdated: "Record updated.",
       correctionSaved: "Correction saved.",
+      correctionAppliedNoTraining: "Correction applied locally. It was not saved as training data.",
       correctionNoChange: "No transcript changes to save.",
       privacyAccepted: "Privacy consent saved.",
       guestUsageLoaded: "Guest trial usage updated.",

@@ -8792,6 +8792,13 @@ async def _store_user_correction_sample(user_id: str, payload: dict) -> dict:
         normalized_category = "custom"
 
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    if bool(payload.get("consent_for_training")):
+        metadata = {
+            **metadata,
+            "consent_for_training": True,
+            "consent_scope": metadata.get("consent_scope") or "text_correction_only",
+            "audio_training_consent": bool(metadata.get("audio_training_consent")),
+        }
     insert_row = {
         "user_id": user_id,
         "task_id": str(payload.get("task_id") or "").strip() or None,
@@ -8839,6 +8846,14 @@ async def _store_training_text_sample_candidate(
     edited_text: str,
 ) -> dict:
     """Mirror user edits into the optional separated training sample table."""
+    metadata = correction_row.get("metadata") if isinstance(correction_row.get("metadata"), dict) else {}
+    if not bool(metadata.get("consent_for_training")):
+        return {
+            "success": True,
+            "stored": False,
+            "reason": "consent_not_granted",
+        }
+
     if not await _training_text_samples_scope_ready_async():
         return {
             "success": True,
@@ -8846,7 +8861,6 @@ async def _store_training_text_sample_candidate(
             "reason": "schema_unavailable",
         }
 
-    metadata = correction_row.get("metadata") if isinstance(correction_row.get("metadata"), dict) else {}
     raw_transcript = str(
         metadata.get("raw_transcript")
         or metadata.get("raw_text")
@@ -8949,12 +8963,21 @@ async def save_record(
     saved_record = response.data[0] if response.data else insert_row
     correction_sample = {"success": True, "stored": False, "reason": "not_requested"}
     original_content = str(correction_original_text or "").strip()
-    if original_content:
+    correction_metadata = {}
+    consent_for_training = False
+    if correction_metadata_json:
         try:
             correction_metadata = _parse_optional_json_object(
                 correction_metadata_json,
                 "correction_metadata_json",
             )
+            consent_for_training = bool(correction_metadata.get("consent_for_training"))
+        except Exception:
+            correction_metadata = {}
+            consent_for_training = False
+
+    if original_content and consent_for_training:
+        try:
             correction_sample = await _store_user_correction_sample(
                 user["id"],
                 {
@@ -9042,8 +9065,11 @@ async def update_record(
     updated_record = response.data[0] if response.data else {**existing_record, **update_row}
     correction_sample = {"success": True, "stored": False, "reason": "unchanged"}
     original_content = str(existing_record.get("content") or "").strip()
-    if original_content and original_content != normalized_content:
-        correction_metadata = payload.get("correction_metadata") if isinstance(payload.get("correction_metadata"), dict) else {}
+    correction_metadata = payload.get("correction_metadata") if isinstance(payload.get("correction_metadata"), dict) else {}
+    capture_correction_sample = bool(payload.get("capture_correction_sample")) and bool(
+        correction_metadata.get("consent_for_training")
+    )
+    if original_content and original_content != normalized_content and capture_correction_sample:
         try:
             correction_sample = await _store_user_correction_sample(
                 user["id"],

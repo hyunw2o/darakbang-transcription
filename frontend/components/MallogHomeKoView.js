@@ -127,6 +127,8 @@ export default function MallogHomeKoView(props) {
     setTranscriptEditText,
     transcriptEditSaving,
     transcriptHasUnsavedEdit,
+    trainingDataConsent,
+    setTrainingDataConsent,
     fileDurationSeconds,
     recordingState,
     recordingSeconds,
@@ -805,6 +807,17 @@ export default function MallogHomeKoView(props) {
                       rows={8}
                       className="nm-input w-full text-xs leading-relaxed max-h-64 overflow-y-auto"
                     />
+                    <label className="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-nm-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={trainingDataConsent}
+                        onChange={(e) => setTrainingDataConsent(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-nm-accent"
+                      />
+                      <span>
+                        수정한 텍스트를 mallog24 품질 개선 학습 데이터로 제공합니다. 음성 원본은 이 선택만으로 저장하지 않습니다.
+                      </span>
+                    </label>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -898,6 +911,17 @@ export default function MallogHomeKoView(props) {
                   <p className="text-xs text-nm-text-secondary mb-4">
                     결과 텍스트를 기반으로 전용 기록본 초안을 생성한 뒤, 로그인 사용자 계정으로 별도 저장할 수 있습니다.
                   </p>
+                  <label className="mb-4 flex items-start gap-2 text-[11px] leading-relaxed text-nm-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={trainingDataConsent}
+                      onChange={(e) => setTrainingDataConsent(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 accent-nm-accent"
+                    />
+                    <span>
+                      기록본을 직접 수정해 저장할 때 변경 내용을 품질 개선 학습 데이터로 제공합니다.
+                    </span>
+                  </label>
 
                   <div className="flex flex-wrap gap-2">
                     {recordCategories.map((recordCategory) => (
