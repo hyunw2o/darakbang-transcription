@@ -367,6 +367,10 @@ WHISPER_BOUNDARY_PADDING_SECONDS = max(
     0.0,
     min(2.0, float(os.getenv("WHISPER_BOUNDARY_PADDING_SECONDS", "0.35"))),
 )
+WHISPER_INITIAL_PADDING_SECONDS = max(
+    WHISPER_BOUNDARY_PADDING_SECONDS,
+    min(5.0, float(os.getenv("WHISPER_INITIAL_PADDING_SECONDS", "1.25"))),
+)
 WHISPER_CHUNK_CONCURRENCY = max(1, int(os.getenv("WHISPER_CHUNK_CONCURRENCY", "2")))
 
 # 외부 프로세스/LLM 타임아웃
@@ -4651,13 +4655,14 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
     # 1) Whisper 업로드용 저용량 mp3로 전처리
     prepared_path = f"{file_path}_whisper.mp3"
     highpass_freq = "100" if transcription_type == "sermon" else "80"
-    boundary_pad_ms = int(WHISPER_BOUNDARY_PADDING_SECONDS * 1000)
+    initial_pad_ms = int(WHISPER_INITIAL_PADDING_SECONDS * 1000)
+    tail_pad_seconds = max(WHISPER_BOUNDARY_PADDING_SECONDS, WHISPER_INITIAL_PADDING_SECONDS)
     filter_parts = [
         "aresample=async=1:first_pts=0",
-        f"adelay={boundary_pad_ms}:all=1",
+        f"adelay={initial_pad_ms}:all=1",
         f"highpass=f={highpass_freq}",
         "lowpass=f=7600",
-        f"apad=pad_dur={WHISPER_BOUNDARY_PADDING_SECONDS:.2f}",
+        f"apad=pad_dur={tail_pad_seconds:.2f}",
     ]
     filter_expr = ",".join(filter_parts)
 
@@ -4929,6 +4934,18 @@ def whisper_transcribe(
         "This audio may include very fast rap-like delivery. "
         "Recover word boundaries from merged syllables and transcribe every audible word."
     )
+    opening_guard_prompt = (
+        "녹음 시작 부분의 첫 발화, 인사, 기도, 도입 멘트도 본문과 동일하게 중요합니다. "
+        "처음 몇 초의 짧거나 작은 소리도 생략하지 말고 들리는 순서대로 기록하세요."
+        if language == "ko"
+        else
+        "録音冒頭の最初の発話、挨拶、祈り、導入も本文と同じく重要です。"
+        "最初の数秒の短い音声や小さい声も省略せず、聞こえる順に書き起こしてください。"
+        if language == "ja"
+        else
+        "The opening seconds, first utterance, greeting, prayer, and introduction are important. "
+        "Do not omit short or quiet speech at the beginning; transcribe it in chronological order."
+    )
 
     def transcribe_single_chunk(chunk_index: int, chunk_path: str, chunk_duration_sec: float) -> tuple[int, str]:
         print(f"  Whisper transcribing chunk {chunk_index+1}/{len(chunks)}...")
@@ -4941,6 +4958,8 @@ def whisper_transcribe(
         for attempt in range(WHISPER_CHUNK_MAX_RETRIES):
             use_rapid_hint = attempt > 0
             prompt_text = f"{whisper_prompt} {rapid_retry_prompt}" if use_rapid_hint else whisper_prompt
+            if chunk_index == 0:
+                prompt_text = f"{opening_guard_prompt} {prompt_text}"
             try:
                 with open(chunk_path, "rb") as audio_file:
                     response = openai_client.audio.transcriptions.create(
@@ -5065,6 +5084,7 @@ async def gemini_correct_and_structure(
         correction_prompt += (
             "\n\n[Repeat/Drop Guard]\n"
             "- Preserve the transcript from the first line in chronological order.\n"
+            "- Do not remove opening greetings, prayers, introductions, or short initial remarks as unnecessary filler.\n"
             "- Do not generate repeated paragraphs or reuse one section to fill missing text.\n"
             "- If the source contains unclear content, keep a single [unclear] marker instead of inventing or looping text.\n"
             "- If the same paragraph appears 3 or more times by generation error, keep it once."
@@ -5073,6 +5093,7 @@ async def gemini_correct_and_structure(
         correction_prompt += (
             "\n\n[反復・欠落防止]\n"
             "- 文字起こしの最初の行から時系列を保ってください。\n"
+            "- 冒頭の挨拶、祈り、導入、短い発話を不要な前置きとして削除しないでください。\n"
             "- 同じ段落を生成で繰り返したり、一つの区間で不足分を埋めたりしないでください。\n"
             "- 不明瞭な内容は一度だけ[不明瞭]とし、創作やループを避けてください。\n"
             "- 生成エラーで同じ段落が3回以上続く場合は1回だけ残してください。"
@@ -5081,6 +5102,7 @@ async def gemini_correct_and_structure(
         correction_prompt += (
             "\n\n[반복/누락 방지]\n"
             "- 원본 텍스트 첫 줄부터 시간 순서를 유지하라.\n"
+            "- 시작부 인사, 기도, 도입 멘트, 짧은 첫 발화를 불필요한 앞말로 판단해 삭제하지 마라.\n"
             "- 같은 문단을 반복 생성하거나 한 구간을 재사용해 빈 내용을 채우지 마라.\n"
             "- 불명확한 내용은 [불명확]으로 한 번만 표시하고 창작/루프를 피하라.\n"
             "- 생성 오류로 동일 문단이 3회 이상 이어지면 1회만 남겨라."
@@ -5153,6 +5175,8 @@ async def gemini_correct_and_structure(
                     "- Do not add final conclusions unless they are explicitly present in this segment.\n"
                     "- Continue naturally; do not repeat previous or future segments."
                 )
+                if index == 1:
+                    chunk_instruction += "\n- This first segment contains the recording opening; preserve all initial remarks."
             elif language == "ja":
                 chunk_instruction = (
                     f"[分割補正 {index}/{len(chunks)}]\n"
@@ -5162,6 +5186,8 @@ async def gemini_correct_and_structure(
                     "- この区間に明示されていない結論や締め文を追加しないでください。\n"
                     "- 前後の区間を繰り返さないでください。"
                 )
+                if index == 1:
+                    chunk_instruction += "\n- この最初の区間には録音の冒頭が含まれるため、冒頭発話をすべて残してください。"
             else:
                 chunk_instruction = (
                     f"[분할 교정 {index}/{len(chunks)}]\n"
@@ -5171,6 +5197,8 @@ async def gemini_correct_and_structure(
                     "- 이 구간에 명시되지 않은 결론/마무리 문장을 추가하지 마라.\n"
                     "- 앞/뒤 구간 내용을 반복하지 마라."
                 )
+                if index == 1:
+                    chunk_instruction += "\n- 이 첫 구간에는 녹음 시작부가 포함되므로 첫 발화와 도입부를 모두 보존하라."
 
             corrected_chunk = await run_correction_prompt(
                 [correction_prompt, chunk_instruction, f"[{label} {index}/{len(chunks)}]", chunk],
