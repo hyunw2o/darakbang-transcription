@@ -80,6 +80,8 @@ uvicorn main:app --reload
    - `INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS` (기본 0, 로그인 파일은 즉시 queued 응답 후 폴링 처리. 아주 짧은 파일만 인라인 대기시키고 싶으면 소수 초로 조정)
    - `WHISPER_CHUNK_CONCURRENCY` (기본 2, Whisper 청크 병렬 처리 수)
    - `WHISPER_INITIAL_PADDING_SECONDS` (기본 1.25초, 녹음 시작 직후 첫 발화 누락 방지용 시작부 무음 패딩)
+   - `WHISPER_OPENING_GUARD_SECONDS` (기본 45초, 첫 청크 시작부를 별도 재인식해 앞부분 누락을 보완)
+   - `WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS` (기본 20초, 이 길이 이상인 첫 청크에만 시작부 재인식 적용)
    - `GEMINI_CORRECTION_CHUNK_CONCURRENCY` (기본 2, Gemini 교정 청크 병렬 처리 수)
    - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
    - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)

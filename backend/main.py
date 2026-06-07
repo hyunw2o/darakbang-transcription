@@ -371,6 +371,14 @@ WHISPER_INITIAL_PADDING_SECONDS = max(
     WHISPER_BOUNDARY_PADDING_SECONDS,
     min(5.0, float(os.getenv("WHISPER_INITIAL_PADDING_SECONDS", "1.25"))),
 )
+WHISPER_OPENING_GUARD_SECONDS = max(
+    0.0,
+    min(120.0, float(os.getenv("WHISPER_OPENING_GUARD_SECONDS", "45"))),
+)
+WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS = max(
+    0.0,
+    min(120.0, float(os.getenv("WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS", "20"))),
+)
 WHISPER_CHUNK_CONCURRENCY = max(1, int(os.getenv("WHISPER_CHUNK_CONCURRENCY", "2")))
 
 # 외부 프로세스/LLM 타임아웃
@@ -4621,6 +4629,113 @@ def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
     return current_text
 
 
+def _transcript_tokens(text: str) -> list[str]:
+    token_pattern = re.compile(r"[A-Za-z0-9]+|[가-힣]+|[ぁ-ゟ゠-ヿ一-龯]+")
+    return [match.group(0).lower() for match in token_pattern.finditer(text or "")]
+
+
+def _contains_token_sequence(tokens: list[str], sequence: list[str]) -> bool:
+    if not tokens or not sequence or len(sequence) > len(tokens):
+        return False
+    sequence_len = len(sequence)
+    for index in range(0, len(tokens) - sequence_len + 1):
+        if tokens[index:index + sequence_len] == sequence:
+            return True
+    return False
+
+
+def _compact_transcript_for_match(text: str) -> str:
+    return "".join(_transcript_tokens(text))
+
+
+def _merge_opening_guard_text(opening_text: str, main_text: str) -> str:
+    """
+    A short opening-only Whisper pass catches first remarks that the long first chunk may drop.
+    Prefer preserving the opening pass, while trimming exact overlap to avoid obvious duplication.
+    """
+    opening = (opening_text or "").strip()
+    main = (main_text or "").strip()
+    if not opening:
+        return main
+    if not main:
+        return opening
+
+    opening_tokens = _transcript_tokens(opening)
+    if len(opening_tokens) < 4 or len(_compact_transcript_for_match(opening)) < 12:
+        return main
+
+    main_prefix = main[:3000]
+    compact_opening = _compact_transcript_for_match(opening)
+    compact_main_prefix = _compact_transcript_for_match(main_prefix)
+    if compact_opening and compact_opening in compact_main_prefix:
+        return main
+
+    trimmed_main = _trim_duplicate_chunk_prefix(opening, main)
+    if trimmed_main != main:
+        return f"{opening}\n\n{trimmed_main}".strip()
+
+    opening_prefix = opening_tokens[: min(8, len(opening_tokens))]
+    main_prefix_tokens = _transcript_tokens(main_prefix)[:120]
+    if _contains_token_sequence(main_prefix_tokens, opening_prefix):
+        return main
+
+    return f"{opening}\n\n{main}".strip()
+
+
+def _extract_opening_guard_clip(source_path: str, duration_seconds: float) -> str | None:
+    if duration_seconds <= 0:
+        return None
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if not ffmpeg_bin:
+        return None
+
+    opening_path = f"{source_path}_opening_guard.mp3"
+    try:
+        subprocess.run(
+            [
+                ffmpeg_bin,
+                "-y",
+                "-fflags",
+                "+genpts",
+                "-i",
+                source_path,
+                "-ss",
+                "0",
+                "-t",
+                f"{duration_seconds:.3f}",
+                "-map",
+                "0:a:0",
+                "-c:a",
+                "libmp3lame",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                "-b:a",
+                "32k",
+                "-avoid_negative_ts",
+                "make_zero",
+                opening_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+            timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        print(f"Opening guard clip extraction failed: {exc}")
+        try:
+            if os.path.exists(opening_path):
+                os.unlink(opening_path)
+        except Exception:
+            pass
+        return None
+
+    if not os.path.exists(opening_path) or os.path.getsize(opening_path) <= 0:
+        return None
+    return opening_path
+
+
 def _join_whisper_chunk_texts(chunks: list[str]) -> str:
     joined_parts: list[str] = []
     previous_text = ""
@@ -4955,23 +5070,25 @@ def whisper_transcribe(
         best_text = ""
         last_error: Exception | None = None
 
+        def transcribe_audio_path(audio_path: str, prompt_text: str) -> str:
+            with open(audio_path, "rb") as audio_file:
+                response = openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language=language,
+                    prompt=prompt_text,
+                    response_format="text",
+                    timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
+                )
+            return (response or "").strip()
+
         for attempt in range(WHISPER_CHUNK_MAX_RETRIES):
             use_rapid_hint = attempt > 0
             prompt_text = f"{whisper_prompt} {rapid_retry_prompt}" if use_rapid_hint else whisper_prompt
             if chunk_index == 0:
                 prompt_text = f"{opening_guard_prompt} {prompt_text}"
             try:
-                with open(chunk_path, "rb") as audio_file:
-                    response = openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language=language,
-                        prompt=prompt_text,
-                        response_format="text",
-                        timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
-                    )
-
-                chunk_text = (response or "").strip()
+                chunk_text = transcribe_audio_path(chunk_path, prompt_text)
                 if chunk_text:
                     if len(chunk_text) > len(best_text):
                         best_text = chunk_text
@@ -5005,6 +5122,32 @@ def whisper_transcribe(
             ) from last_error
         if not best_text:
             raise RuntimeError(f"Whisper chunk {chunk_index+1}/{len(chunks)} returned no transcript.")
+
+        if (
+            chunk_index == 0
+            and WHISPER_OPENING_GUARD_SECONDS > 0
+            and chunk_duration_sec >= WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS
+        ):
+            guard_duration = min(WHISPER_OPENING_GUARD_SECONDS, chunk_duration_sec)
+            guard_path = _extract_opening_guard_clip(chunk_path, guard_duration)
+            if guard_path:
+                try:
+                    guard_prompt = f"{opening_guard_prompt} {rapid_retry_prompt} {whisper_prompt}"
+                    guard_text = transcribe_audio_path(guard_path, guard_prompt)
+                    merged_text = _merge_opening_guard_text(guard_text, best_text)
+                    if merged_text != best_text:
+                        print(
+                            f"  Chunk 1 opening guard merged: "
+                            f"guard_chars={len(guard_text)}, merged_chars={len(merged_text)}"
+                        )
+                        best_text = merged_text
+                except Exception as exc:
+                    print(f"  Chunk 1 opening guard failed; keeping primary transcript: {exc}")
+                finally:
+                    try:
+                        os.unlink(guard_path)
+                    except Exception:
+                        pass
 
         print(
             f"  Chunk {chunk_index+1}/{len(chunks)} done: "
