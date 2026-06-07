@@ -601,6 +601,9 @@ COMMON_MISTAKES = {
     "레므난트": "렘넌트",
     "렘런트": "렘넌트",
     "램런트": "렘넌트",
+    "레먼트": "렘넌트",
+    "렘먼트": "렘넌트",
+    "렘 난트": "렘넌트",
     "렘넌뜨": "렘넌트",
     "랩넌트": "렘넌트",
     
@@ -611,9 +614,13 @@ COMMON_MISTAKES = {
     "칠이정표": "7이정표",
     "그리스또": "그리스도",
     "그리 스도": "그리스도",
+    "그리 스또": "그리스도",
     "그리스 도": "그리스도",
+    "그리스 토": "그리스도",
     "무교 병": "무교병",
     "무교뱅": "무교병",
+    "무교 벵": "무교병",
+    "무교뼝": "무교병",
     "무교 변": "무교병",
     
     # 영어 용어
@@ -1743,13 +1750,20 @@ GENERAL_CORRECTIONS = {
     "레므난트": "렘넌트",
     "렘런트": "렘넌트",
     "램런트": "렘넌트",
+    "레먼트": "렘넌트",
+    "렘먼트": "렘넌트",
+    "렘 난트": "렘넌트",
     "렘넌뜨": "렘넌트",
     "랩넌트": "렘넌트",
     "그리스또": "그리스도",
     "그리 스도": "그리스도",
+    "그리 스또": "그리스도",
     "그리스 도": "그리스도",
+    "그리스 토": "그리스도",
     "무교 병": "무교병",
     "무교뱅": "무교병",
+    "무교 벵": "무교병",
+    "무교뼝": "무교병",
     "무교 변": "무교병",
     "유초동부": "유초등부",
     "유초 동부": "유초등부",
@@ -2930,16 +2944,17 @@ def _normalize_korean_slurred_church_terms(text: str) -> str:
         return text
 
     corrected = text
-    corrected = re.sub(r"(?:램|렘|랩)\s*(?:넌트|런트|넌뜨|런뜨)", "렘넌트", corrected)
+    corrected = re.sub(r"(?:램|렘|랩|레)\s*(?:넌트|런트|먼트|난트|넌뜨|런뜨)", "렘넌트", corrected)
     corrected = re.sub(r"레\s*므\s*난트", "렘넌트", corrected)
     corrected = re.sub(r"레\s*넌트", "렘넌트", corrected)
 
     corrected = re.sub(r"예수\s*그리스\s*(?:도|또)", "예수 그리스도", corrected)
     corrected = re.sub(r"예수\s*그리\s*스도", "예수 그리스도", corrected)
-    corrected = re.sub(r"그리스\s*(?:도|또)", "그리스도", corrected)
+    corrected = re.sub(r"그리스\s*(?:도|또|토)", "그리스도", corrected)
+    corrected = re.sub(r"그리\s*스\s*(?:도|또|토)", "그리스도", corrected)
     corrected = re.sub(r"그리\s*스도", "그리스도", corrected)
 
-    corrected = re.sub(r"무교\s*(?:병|뱅|벵|변)", "무교병", corrected)
+    corrected = re.sub(r"무교\s*(?:병|뱅|벵|변|뼝)(?:이)?", "무교병", corrected)
     return corrected
 
 

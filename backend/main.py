@@ -4913,6 +4913,29 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
     return chunks
 
 
+def _get_slurred_speech_prompt_hint(language: str) -> str:
+    if language == "en":
+        return (
+            "Slurred, reduced, or merged pronunciation may be present. "
+            "Recover canonical words from sentence context instead of inventing unrelated names or random syllables. "
+            "If a short span is truly unintelligible, mark it as [unclear] once and continue."
+        )
+    if language == "ja":
+        return (
+            "発音が不明瞭、連音、早口、または音がつながって聞こえる場合があります。"
+            "聞こえた音を不自然な文字列として残さず、文脈上もっとも自然な語へ復元してください。"
+            "本当に判別できない短い部分だけ[不明瞭]とし、創作しないでください。"
+        )
+    return (
+        "발음이 뭉개지거나 연음되어 들릴 수 있습니다. "
+        "들린 소리를 그대로 이상한 단어로 만들지 말고, 문장 주제와 앞뒤 문맥에 맞는 정상 단어로 복원하세요. "
+        "받침 탈락, 모음 약화, 빠른 발화, 작은 목소리, 이어 말하기가 있어도 의미 단위로 다시 나누어 기록하세요. "
+        "특히 렘넌트, 그리스도, 무교병, 드로아교회, 기도수첩, 심방, 교역자, 대학부, 유초등부, "
+        "RVS, RUTC, WRC, RRTS, RSTS 같은 도메인 용어는 발음이 조금 달라도 문맥이 맞으면 정확한 표기로 복원하세요. "
+        "정말 판별할 수 없는 짧은 부분만 [불명확]으로 한 번 표시하고, 임의의 이상한 고유명사나 깨진 음절을 만들지 마세요."
+    )
+
+
 def whisper_transcribe(
     file_path: str,
     language: str = "ko",
@@ -5033,21 +5056,23 @@ def whisper_transcribe(
                 f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
             )
 
-    whisper_prompt = f"{custom_names_str}{whisper_prompt} {get_special_term_prompt_hint(language)}"
+    slurred_speech_prompt = _get_slurred_speech_prompt_hint(language)
+    whisper_prompt = f"{custom_names_str}{whisper_prompt} {get_special_term_prompt_hint(language)} {slurred_speech_prompt}"
     chunks = split_audio_file(file_path, transcription_type)
     all_text: list[str] = [""] * len(chunks)
 
     rapid_retry_prompt = (
         "초고속 발화 또는 랩처럼 빠른 한국어 발화가 포함될 수 있습니다. "
-        "붙어 들리는 음절도 단어 경계를 복원하여 누락 없이 전부 기록하세요."
+        "붙어 들리거나 뭉개진 음절도 단어 경계를 복원하여 누락 없이 전부 기록하세요. "
+        "깨진 음절을 임의 단어로 만들지 말고 문맥상 정상 단어를 우선하세요."
         if language == "ko"
         else
         "この音声には非常に速い日本語発話が含まれる可能性があります。"
-        "つながって聞こえる音節も文脈で区切り直し、聞こえる内容を省略せず書き起こしてください。"
+        "つながって聞こえる音節や不明瞭な発音も文脈で区切り直し、聞こえる内容を省略せず書き起こしてください。"
         if language == "ja"
         else
         "This audio may include very fast rap-like delivery. "
-        "Recover word boundaries from merged syllables and transcribe every audible word."
+        "Recover word boundaries from merged or slurred syllables and transcribe every audible word."
     )
     opening_guard_prompt = (
         "녹음 시작 부분의 첫 발화, 인사, 기도, 도입 멘트도 본문과 동일하게 중요합니다. "
@@ -5232,6 +5257,13 @@ async def gemini_correct_and_structure(
             "- If the source contains unclear content, keep a single [unclear] marker instead of inventing or looping text.\n"
             "- If the same paragraph appears 3 or more times by generation error, keep it once."
         )
+        correction_prompt += (
+            "\n\n[Slurred Speech Recovery]\n"
+            "- Some ASR tokens may be distorted by slurred or merged pronunciation.\n"
+            "- Repair distorted fragments only when the surrounding sentence makes the intended word clear.\n"
+            "- Do not convert unclear fragments into unrelated proper nouns or random acronyms.\n"
+            "- Keep truly unintelligible short spans as [unclear] once."
+        )
     elif language == "ja":
         correction_prompt += (
             "\n\n[反復・欠落防止]\n"
@@ -5241,6 +5273,13 @@ async def gemini_correct_and_structure(
             "- 不明瞭な内容は一度だけ[不明瞭]とし、創作やループを避けてください。\n"
             "- 生成エラーで同じ段落が3回以上続く場合は1回だけ残してください。"
         )
+        correction_prompt += (
+            "\n\n[不明瞭発音の復元]\n"
+            "- ASR結果には、発音の崩れ・連音・早口による壊れた語が含まれる場合があります。\n"
+            "- 前後の文脈で意図が明確な場合のみ自然な語へ復元してください。\n"
+            "- 不確かな断片を無関係な固有名詞や略語に変換しないでください。\n"
+            "- 本当に判別できない短い部分だけ[不明瞭]としてください。"
+        )
     else:
         correction_prompt += (
             "\n\n[반복/누락 방지]\n"
@@ -5249,6 +5288,14 @@ async def gemini_correct_and_structure(
             "- 같은 문단을 반복 생성하거나 한 구간을 재사용해 빈 내용을 채우지 마라.\n"
             "- 불명확한 내용은 [불명확]으로 한 번만 표시하고 창작/루프를 피하라.\n"
             "- 생성 오류로 동일 문단이 3회 이상 이어지면 1회만 남겨라."
+        )
+        correction_prompt += (
+            "\n\n[뭉개진 발음 복원]\n"
+            "- 원본 ASR에는 발음 뭉개짐, 연음, 받침 탈락, 작은 목소리 때문에 깨진 단어가 있을 수 있다.\n"
+            "- 깨진 음절을 그대로 두거나 이상한 고유명사로 만들지 말고, 앞뒤 문맥상 명확한 정상 단어로만 복원하라.\n"
+            "- 예배/설교/교회 문맥에서는 렘넌트, 그리스도, 무교병, 드로아교회, 기도수첩, 심방, 교역자, 대학부, 유초등부, "
+            "RVS, RUTC, WRC, RRTS, RSTS 같은 도메인 용어를 우선 검토하라.\n"
+            "- 문맥 확신이 없으면 억지로 치환하지 말고 원문을 유지하거나 짧게 [불명확]으로 표시하라."
         )
 
     model = genai.GenerativeModel(
