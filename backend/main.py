@@ -395,6 +395,10 @@ WHISPER_OPENING_GUARD_SECONDS = max(
     0.0,
     min(120.0, float(os.getenv("WHISPER_OPENING_GUARD_SECONDS", "45"))),
 )
+WHISPER_SOURCE_OPENING_GUARD_SECONDS = max(
+    0.0,
+    min(120.0, float(os.getenv("WHISPER_SOURCE_OPENING_GUARD_SECONDS", "30"))),
+)
 WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS = max(
     0.0,
     min(120.0, float(os.getenv("WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS", "20"))),
@@ -4649,14 +4653,19 @@ def _merge_opening_guard_text(opening_text: str, main_text: str) -> str:
         return opening
 
     opening_tokens = _transcript_tokens(opening)
-    if len(opening_tokens) < 4 or len(_compact_transcript_for_match(opening)) < 12:
+    compact_opening = _compact_transcript_for_match(opening)
+    if not opening_tokens or len(compact_opening) < 3:
         return main
 
     main_prefix = main[:3000]
-    compact_opening = _compact_transcript_for_match(opening)
     compact_main_prefix = _compact_transcript_for_match(main_prefix)
     if compact_opening and compact_opening in compact_main_prefix:
         return main
+
+    # 짧은 인사/첫 단어가 긴 청크에서 누락되는 케이스가 많다.
+    # opening guard가 잡은 짧은 발화는 main 앞부분에 없으면 보존한다.
+    if len(opening_tokens) < 4 or len(compact_opening) < 12:
+        return f"{opening}\n\n{main}".strip()
 
     trimmed_main = _trim_duplicate_chunk_prefix(opening, main)
     if trimmed_main != main:
@@ -4696,11 +4705,11 @@ def _extract_opening_guard_clip(source_path: str, duration_seconds: float) -> st
                 "-c:a",
                 "libmp3lame",
                 "-ar",
-                "16000",
+                str(WHISPER_PREPROCESS_SAMPLE_RATE),
                 "-ac",
                 "1",
                 "-b:a",
-                "32k",
+                WHISPER_PREPROCESS_BITRATE,
                 "-avoid_negative_ts",
                 "make_zero",
                 opening_path,
@@ -5315,6 +5324,33 @@ def whisper_transcribe(
                 finally:
                     try:
                         os.unlink(guard_path)
+                    except Exception:
+                        pass
+
+        if (
+            chunk_index == 0
+            and WHISPER_SOURCE_OPENING_GUARD_SECONDS > 0
+            and chunk_duration_sec >= WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS
+            and os.path.abspath(chunk_path) != os.path.abspath(file_path)
+        ):
+            source_guard_duration = min(WHISPER_SOURCE_OPENING_GUARD_SECONDS, chunk_duration_sec)
+            source_guard_path = _extract_opening_guard_clip(file_path, source_guard_duration)
+            if source_guard_path:
+                try:
+                    source_guard_prompt = f"{opening_guard_prompt} {rapid_retry_prompt} {whisper_prompt}"
+                    source_guard_text = transcribe_audio_path(source_guard_path, source_guard_prompt)
+                    merged_text = _merge_opening_guard_text(source_guard_text, best_text)
+                    if merged_text != best_text:
+                        print(
+                            f"  Chunk 1 source opening guard merged: "
+                            f"guard_chars={len(source_guard_text)}, merged_chars={len(merged_text)}"
+                        )
+                        best_text = merged_text
+                except Exception as exc:
+                    print(f"  Chunk 1 source opening guard failed; keeping current transcript: {exc}")
+                finally:
+                    try:
+                        os.unlink(source_guard_path)
                     except Exception:
                         pass
 
