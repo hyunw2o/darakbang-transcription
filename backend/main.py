@@ -417,6 +417,7 @@ GEMINI_MAX_OUTPUT_TOKENS = max(4096, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "
 GEMINI_CORRECTION_CHUNK_CHARS = max(4000, int(os.getenv("GEMINI_CORRECTION_CHUNK_CHARS", "12000")))
 GEMINI_CORRECTION_CHUNK_CONCURRENCY = max(1, int(os.getenv("GEMINI_CORRECTION_CHUNK_CONCURRENCY", "2")))
 GEMINI_CORRECTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_CORRECTION_MAX_RETRIES", "2")))
+GEMINI_CORRECTION_SKIP_OVER_CHARS = max(0, int(os.getenv("GEMINI_CORRECTION_SKIP_OVER_CHARS", "0")))
 GEMINI_TRANSCRIPTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_TRANSCRIPTION_MAX_RETRIES", "3")))
 
 # OpenAI (Whisper) 설정
@@ -5841,6 +5842,17 @@ def _postprocess_transcript(
     return _normalize_transcript_line_breaks(corrected)
 
 
+def _should_skip_gemini_correction(raw_text: str, correct: bool) -> tuple[bool, str]:
+    if not correct:
+        return True, "correction disabled by request"
+    if (
+        GEMINI_CORRECTION_SKIP_OVER_CHARS > 0
+        and len(raw_text or "") > GEMINI_CORRECTION_SKIP_OVER_CHARS
+    ):
+        return True, f"raw text length {len(raw_text or '')} > {GEMINI_CORRECTION_SKIP_OVER_CHARS}"
+    return False, ""
+
+
 def _build_fine_tuned_correction_messages(
     text: str,
     transcription_type: str,
@@ -6003,6 +6015,7 @@ def _process_transcription_sync(
             try:
                 # 1단계: Whisper로 완전 녹취
                 print(f"[{task_id}] Step 1: Whisper STT...")
+                whisper_started_at = time.perf_counter()
                 raw_text = whisper_transcribe(
                     temp_file_path,
                     language,
@@ -6010,7 +6023,11 @@ def _process_transcription_sync(
                     task_id=task_id,
                     custom_terms=runtime_custom_terms,
                 )
-                print(f"[{task_id}] Whisper done. Raw length: {len(raw_text)} chars")
+                whisper_elapsed = time.perf_counter() - whisper_started_at
+                print(
+                    f"[{task_id}] Whisper done in {whisper_elapsed:.1f}s. "
+                    f"Raw length: {len(raw_text)} chars"
+                )
                 _log_stage_memory(task_id, "after_whisper")
 
                 # 임시 파일 삭제
@@ -6019,31 +6036,42 @@ def _process_transcription_sync(
                     temp_file_path = ""
 
                 # 2단계: Gemini로 교정 + 구조화
-                print(f"[{task_id}] Step 2: Gemini correction...")
-                _touch_task_runtime_state(task_id)
-                try:
-                    corrected_text = asyncio.run(
-                        gemini_correct_and_structure(
-                            raw_text,
-                            task_id,
-                            transcription_type,
-                            language,
-                            correction_mode=correction_mode,
-                            custom_terms=runtime_custom_terms,
-                        )
-                    )
-                    _touch_task_runtime_state(task_id)
-                    print(f"[{task_id}] Gemini done. Corrected length: {len(corrected_text)} chars")
-                    _log_stage_memory(task_id, "after_gemini_correction")
-                except Exception as gemini_error:
-                    if not _is_retryable_gemini_error(gemini_error):
-                        raise
-                    print(
-                        f"[{task_id}] Gemini correction failed after retries; "
-                        f"using Whisper raw transcript with local postprocess: {gemini_error}"
-                    )
+                skip_gemini_correction, skip_reason = _should_skip_gemini_correction(raw_text, correct)
+                if skip_gemini_correction:
+                    print(f"[{task_id}] Skip Gemini correction: {skip_reason}")
                     corrected_text = raw_text
                     engine = "whisper+local-postprocess"
+                else:
+                    print(f"[{task_id}] Step 2: Gemini correction...")
+                    _touch_task_runtime_state(task_id)
+                    gemini_started_at = time.perf_counter()
+                    try:
+                        corrected_text = asyncio.run(
+                            gemini_correct_and_structure(
+                                raw_text,
+                                task_id,
+                                transcription_type,
+                                language,
+                                correction_mode=correction_mode,
+                                custom_terms=runtime_custom_terms,
+                            )
+                        )
+                        _touch_task_runtime_state(task_id)
+                        gemini_elapsed = time.perf_counter() - gemini_started_at
+                        print(
+                            f"[{task_id}] Gemini done in {gemini_elapsed:.1f}s. "
+                            f"Corrected length: {len(corrected_text)} chars"
+                        )
+                        _log_stage_memory(task_id, "after_gemini_correction")
+                    except Exception as gemini_error:
+                        if not _is_retryable_gemini_error(gemini_error):
+                            raise
+                        print(
+                            f"[{task_id}] Gemini correction failed after retries; "
+                            f"using Whisper raw transcript with local postprocess: {gemini_error}"
+                        )
+                        corrected_text = raw_text
+                        engine = "whisper+local-postprocess"
 
                 # 3단계: 규칙 기반 후처리
                 corrected_text = _postprocess_transcript(
@@ -6069,6 +6097,7 @@ def _process_transcription_sync(
                     f"[{task_id}] Whisper pipeline failed, fallback to Gemini-only: {whisper_error}"
                 )
                 engine = "gemini-only-fallback"
+                gemini_fallback_started_at = time.perf_counter()
                 raw_text, corrected_text = _transcribe_with_gemini_only(
                     task_id=task_id,
                     temp_file_path=temp_file_path,
@@ -6077,6 +6106,11 @@ def _process_transcription_sync(
                     language=language,
                     correction_mode=correction_mode,
                     custom_terms=runtime_custom_terms,
+                )
+                print(
+                    f"[{task_id}] Gemini-only fallback done in "
+                    f"{time.perf_counter() - gemini_fallback_started_at:.1f}s. "
+                    f"Raw length: {len(raw_text)} chars, corrected length: {len(corrected_text)} chars"
                 )
                 _log_stage_memory(task_id, "after_gemini_fallback")
 
@@ -6096,6 +6130,7 @@ def _process_transcription_sync(
             print(f"[{task_id}] Gemini-only mode ({reason}, mode={mode})")
             engine = "gemini-only"
 
+            gemini_only_started_at = time.perf_counter()
             raw_text, corrected_text = _transcribe_with_gemini_only(
                 task_id=task_id,
                 temp_file_path=temp_file_path,
@@ -6104,6 +6139,10 @@ def _process_transcription_sync(
                 language=language,
                 correction_mode=correction_mode,
                 custom_terms=runtime_custom_terms,
+            )
+            print(
+                f"[{task_id}] Gemini-only done in {time.perf_counter() - gemini_only_started_at:.1f}s. "
+                f"Raw length: {len(raw_text)} chars, corrected length: {len(corrected_text)} chars"
             )
             _log_stage_memory(task_id, "after_postprocess")
 
