@@ -337,6 +337,28 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 # Whisper 파일 크기 제한 (25MB)
 WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 약간 여유
+OPENAI_TRANSCRIPTION_MODEL = (os.getenv("OPENAI_TRANSCRIPTION_MODEL") or "gpt-4o-transcribe").strip()
+OPENAI_TRANSCRIPTION_FALLBACK_MODELS = _parse_csv_env(
+    "OPENAI_TRANSCRIPTION_FALLBACK_MODELS",
+    ["whisper-1"],
+)
+OPENAI_TRANSCRIPTION_TEMPERATURE = max(
+    0.0,
+    min(1.0, float(os.getenv("OPENAI_TRANSCRIPTION_TEMPERATURE", "0"))),
+)
+WHISPER_PREPROCESS_SAMPLE_RATE = max(
+    16000,
+    min(48000, int(os.getenv("WHISPER_PREPROCESS_SAMPLE_RATE", "24000"))),
+)
+WHISPER_PREPROCESS_BITRATE = (os.getenv("WHISPER_PREPROCESS_BITRATE") or "64k").strip()
+_requested_whisper_lowpass_freq = max(
+    6000,
+    min(20000, int(os.getenv("WHISPER_PREPROCESS_LOWPASS_FREQ", "11000"))),
+)
+WHISPER_PREPROCESS_LOWPASS_FREQ = max(
+    6000,
+    min(_requested_whisper_lowpass_freq, max(6000, WHISPER_PREPROCESS_SAMPLE_RATE // 2 - 500)),
+)
 WHISPER_CHUNK_TIMEOUT_SECONDS = max(30, int(os.getenv("WHISPER_CHUNK_TIMEOUT_SECONDS", "240")))
 WHISPER_CHUNK_MAX_RETRIES = max(1, int(os.getenv("WHISPER_CHUNK_MAX_RETRIES", "2")))
 WHISPER_FALLBACK_TO_GEMINI_ON_ERROR = (
@@ -4720,6 +4742,29 @@ def _join_whisper_chunk_texts(chunks: list[str]) -> str:
     return "\n\n".join(joined_parts)
 
 
+def _get_openai_transcription_model_candidates() -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for model in [OPENAI_TRANSCRIPTION_MODEL, *OPENAI_TRANSCRIPTION_FALLBACK_MODELS]:
+        normalized = str(model or "").strip()
+        key = normalized.lower()
+        if not normalized or key in seen:
+            continue
+        seen.add(key)
+        candidates.append(normalized)
+    return candidates or ["whisper-1"]
+
+
+def _extract_transcription_response_text(response) -> str:
+    if response is None:
+        return ""
+    if isinstance(response, str):
+        return response.strip()
+    if isinstance(response, dict):
+        return str(response.get("text") or "").strip()
+    return str(getattr(response, "text", "") or response or "").strip()
+
+
 def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list[tuple[str, float]]:
     """
     Whisper 전처리 + 청크 분할 (메모리 최적화 버전).
@@ -4735,14 +4780,14 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
 
     # 1) Whisper 업로드용 저용량 mp3로 전처리
     prepared_path = f"{file_path}_whisper.mp3"
-    highpass_freq = "100" if transcription_type == "sermon" else "80"
+    highpass_freq = "90" if transcription_type == "sermon" else "80"
     initial_pad_ms = int(WHISPER_INITIAL_PADDING_SECONDS * 1000)
     tail_pad_seconds = max(WHISPER_BOUNDARY_PADDING_SECONDS, WHISPER_INITIAL_PADDING_SECONDS)
     filter_parts = [
         "aresample=async=1:first_pts=0",
         f"adelay={initial_pad_ms}:all=1",
         f"highpass=f={highpass_freq}",
-        "lowpass=f=7600",
+        f"lowpass=f={WHISPER_PREPROCESS_LOWPASS_FREQ}",
         f"apad=pad_dur={tail_pad_seconds:.2f}",
     ]
     filter_expr = ",".join(filter_parts)
@@ -4760,11 +4805,11 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
                 "-ac",
                 "1",
                 "-ar",
-                "16000",
+                str(WHISPER_PREPROCESS_SAMPLE_RATE),
                 "-af",
                 filter_expr,
                 "-b:a",
-                "32k",
+                WHISPER_PREPROCESS_BITRATE,
                 prepared_path,
             ],
             stdout=subprocess.DEVNULL,
@@ -4823,11 +4868,11 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
                     "-c:a",
                     "libmp3lame",
                     "-ar",
-                    "16000",
+                    str(WHISPER_PREPROCESS_SAMPLE_RATE),
                     "-ac",
                     "1",
                     "-b:a",
-                    "32k",
+                    WHISPER_PREPROCESS_BITRATE,
                     "-avoid_negative_ts",
                     "make_zero",
                     chunk_path,
@@ -5132,6 +5177,8 @@ def whisper_transcribe(
 
     # Whisper의 prompt는 장문 지시보다 짧은 핵심 용어 bias가 더 안정적이다.
     whisper_prompt = _build_compact_whisper_prompt(language, transcription_type, custom_terms)
+    transcription_models = _get_openai_transcription_model_candidates()
+    print(f"  OpenAI transcription models: {', '.join(transcription_models)}")
     chunks = split_audio_file(file_path, transcription_type)
     all_text: list[str] = [""] * len(chunks)
 
@@ -5170,16 +5217,39 @@ def whisper_transcribe(
         last_error: Exception | None = None
 
         def transcribe_audio_path(audio_path: str, prompt_text: str) -> str:
-            with open(audio_path, "rb") as audio_file:
-                response = openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    language=language,
-                    prompt=prompt_text,
-                    response_format="text",
-                    timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
-                )
-            return (response or "").strip()
+            last_error: Exception | None = None
+            for model_index, model_name in enumerate(transcription_models):
+                try:
+                    response_format = "text" if model_name == "whisper-1" else "json"
+                    with open(audio_path, "rb") as audio_file:
+                        response = openai_client.audio.transcriptions.create(
+                            model=model_name,
+                            file=audio_file,
+                            language=language,
+                            prompt=prompt_text,
+                            response_format=response_format,
+                            temperature=OPENAI_TRANSCRIPTION_TEMPERATURE,
+                            timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
+                        )
+                    text = _extract_transcription_response_text(response)
+                    if text:
+                        if model_index > 0:
+                            print(f"  Chunk {chunk_index+1}: transcription fallback succeeded with {model_name}.")
+                        return text
+                    raise RuntimeError(f"{model_name} returned empty text.")
+                except Exception as exc:
+                    last_error = exc
+                    if model_index < len(transcription_models) - 1:
+                        next_model = transcription_models[model_index + 1]
+                        print(
+                            f"  Chunk {chunk_index+1}: {model_name} failed ({exc}); "
+                            f"retrying with {next_model}."
+                        )
+                        continue
+                    break
+            if last_error:
+                raise last_error
+            raise RuntimeError("OpenAI transcription returned no transcript.")
 
         for attempt in range(WHISPER_CHUNK_MAX_RETRIES):
             use_rapid_hint = attempt > 0
