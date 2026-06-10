@@ -54,8 +54,6 @@ from church_terms import (
     ALL_CHURCH_TERMS,
     DARAKBANG_CORE,
     COMMON_MISTAKES,
-    PASTORS,
-    HISTORICAL_PEOPLE,
     print_terms_summary
 )
 
@@ -379,6 +377,10 @@ WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS = max(
     0.0,
     min(120.0, float(os.getenv("WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS", "20"))),
 )
+WHISPER_PROMPT_MAX_CHARS = max(
+    300,
+    min(4000, int(os.getenv("WHISPER_PROMPT_MAX_CHARS", "1200"))),
+)
 WHISPER_CHUNK_CONCURRENCY = max(1, int(os.getenv("WHISPER_CHUNK_CONCURRENCY", "2")))
 
 # 외부 프로세스/LLM 타임아웃
@@ -543,42 +545,6 @@ ALLOWED_AUDIO_CONTENT_TYPES = {
     "audio/x-m4a",
     "video/mp4",
 }
-KO_DAILY_CONTEXT_TERMS = (
-    "안녕하세요, 여보세요, 잠시만요, 다시 말씀해 주세요, 확인 부탁드립니다, 전달 부탁드립니다, "
-    "일정 조율, 비용 문의, 계약 검토, 담당자 연결, 자료 공유, 회의록, 후속 조치"
-)
-KO_DOMAIN_CONTEXT_TERMS = (
-    "경제학(인플레이션, 기준금리, 환율, 공급망, 총수요), "
-    "법(판례, 조문, 약관, 손해배상, 위약금, 합의서), "
-    "정치(국회, 법안, 예산안, 외교, 여론조사), "
-    "IT(API, SDK, CI/CD, 클라우드, Docker, Kubernetes, 데이터베이스, 보안), "
-    "환경(탄소중립, 온실가스, 재생에너지, ESG, 배출권), "
-    "의료(진단, 처방, 약물, CT, MRI, 부작용, 배설물, CDE(Common Data Elements), CD와 문맥 구분), "
-    "인문학(철학, 윤리, 문해력, 서사, 해석), "
-    "교육(교육과정, 평가, 학습목표, 피드백), "
-    "경영/재무(KPI, ROI, 손익계산서, 현금흐름, 영업이익), "
-    "교회/사역(Blessing, 블레싱, 교역자, 부교역자, 대학부, RVS(Remnant Vision School), RUTC(Remnant Unity Training Center))"
-)
-EN_DAILY_CONTEXT_TERMS = (
-    "hello, hi, hold on, could you repeat that, please confirm, please share, "
-    "schedule coordination, cost inquiry, contract review, owner assignment, follow-up action, "
-    "walk us through, circle back, follow up, send it over, let's confirm, let me check"
-)
-EN_DOMAIN_CONTEXT_TERMS = (
-    "economics(inflation, interest rate, exchange rate, supply chain, aggregate demand), "
-    "law(case law, statute, clause, damages, penalty, settlement), "
-    "politics(parliament, bill, budget proposal, diplomacy, polling), "
-    "IT(API, SDK, CI/CD, cloud, Docker, Kubernetes, database, cybersecurity), "
-    "environment(carbon neutrality, greenhouse gas, renewable energy, ESG, emissions trading), "
-    "medicine(diagnosis, prescription, dosage, CT, MRI, side effects, CDE(Common Data Elements), distinguish from CD), "
-    "medical data(CDE, Common Data Elements, CRF, eCRF, CDISC, registry, cohort, case report form), "
-    "humanities(philosophy, ethics, literacy, narrative, interpretation), "
-    "education(curriculum, assessment, learning objective, feedback), "
-    "business/finance(KPI, ROI, P&L, cash flow, operating profit), "
-    "church/ministry(Troas Church, Harvesters Missions Church, Mission Home, Prenatal Mission Home, "
-    "Prayer Journal, Blessing, Immanuel, RVS(Remnant Vision School), RUTC(Remnant Unity Training Center), "
-    "presbytery, deacon, elder, pastoral staff, sermon, fellowship)"
-)
 STRUCTURED_SUMMARY_HEADERS = {
     "요약",
     "주요 내용",
@@ -4936,6 +4902,219 @@ def _get_slurred_speech_prompt_hint(language: str) -> str:
     )
 
 
+def _dedupe_prompt_terms(terms: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for raw_term in terms:
+        term = str(raw_term or "").strip()
+        key = term.lower()
+        if not term or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(term)
+    return deduped
+
+
+def _normalize_whisper_prompt_terms(terms: list[str] | None) -> list[str]:
+    """Whisper에는 사용자 용어집의 설명/오인식 예시를 빼고 정답 표기만 전달한다."""
+    normalized_terms: list[str] = []
+    for raw_term in terms or []:
+        term = str(raw_term or "").strip()
+        if not term:
+            continue
+        # 사용자 용어집은 "정답표기 (뜻; misheard as ...)" 형태로 들어올 수 있다.
+        # ASR prompt에는 오인식 후보를 넣지 않는 편이 더 안정적이다.
+        term = re.sub(r"\s+\([^)]*\)\s*$", "", term).strip()
+        if len(term) > 60:
+            term = re.split(r"\s*[;:]\s*", term, maxsplit=1)[0].strip()
+        if term:
+            normalized_terms.append(term)
+    return _dedupe_prompt_terms(normalized_terms)
+
+
+def _build_prompt_with_budget(
+    prefix: str,
+    terms: list[str],
+    suffix: str,
+    max_chars: int,
+    term_label: str,
+) -> str:
+    selected: list[str] = []
+    for term in _dedupe_prompt_terms(terms):
+        candidate_terms = selected + [term]
+        candidate = f"{prefix} {term_label}: {', '.join(candidate_terms)}. {suffix}".strip()
+        if len(candidate) > max_chars and selected:
+            break
+        selected.append(term)
+    return f"{prefix} {term_label}: {', '.join(selected)}. {suffix}".strip()
+
+
+def _build_compact_whisper_prompt(
+    language: str,
+    transcription_type: str,
+    custom_terms: list[str] | None = None,
+) -> str:
+    custom_terms = _normalize_whisper_prompt_terms(custom_terms)
+    if language == "en":
+        prefix = (
+            "English sermon or lecture audio."
+            if transcription_type == "sermon"
+            else "English phone call audio."
+            if transcription_type == "phonecall"
+            else "English meeting or conversation audio."
+        )
+        terms = [
+            *custom_terms,
+            "Remnant",
+            "Christ",
+            "Gospel",
+            "Bible",
+            "Scripture",
+            "prayer",
+            "Troas Church",
+            "Harvesters Missions Church",
+            "HMC",
+            "HMIS",
+            "HMVS",
+            "WRC",
+            "RRTS",
+            "RVIS",
+            "RUTC",
+            "RTS",
+            "RSTS",
+            "RVS",
+            "RBS",
+            "RPS",
+            "RLS",
+            "RGS",
+            "CVDIP",
+            "Prayer Journal",
+            "Mission Home",
+            "Acts 1:8",
+            "Psalm 23:1",
+            "Romans 8:28",
+        ]
+        suffix = (
+            "Preserve domain terms exactly. Recover slurred or merged pronunciation from context, "
+            "but do not invent unrelated names."
+        )
+        return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "Key terms")
+
+    if language == "ja":
+        prefix = (
+            "日本語の説教または講義音声です。"
+            if transcription_type == "sermon"
+            else "日本語の通話録音です。"
+            if transcription_type == "phonecall"
+            else "日本語の会議または会話録音です。"
+        )
+        terms = [
+            *custom_terms,
+            "レムナント",
+            "キリスト",
+            "福音",
+            "聖書",
+            "祈り",
+            "トロア教会",
+            "HMC",
+            "HMIS",
+            "HMVS",
+            "WRC",
+            "RRTS",
+            "RVIS",
+            "RUTC",
+            "RTS",
+            "RSTS",
+            "RVS",
+            "RBS",
+            "RPS",
+            "RLS",
+            "RGS",
+            "CVDIP",
+        ]
+        suffix = "専門用語を正確に保ち、不明瞭な発音は文脈で自然な語へ復元してください。"
+        return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "重要語")
+
+    prefix = (
+        "한국어 설교 또는 강의 음성입니다."
+        if transcription_type == "sermon"
+        else "한국어 전화 통화 녹음입니다."
+        if transcription_type == "phonecall"
+        else "한국어 회의 또는 대화 녹음입니다."
+    )
+    terms = [
+        *custom_terms,
+        "렘넌트",
+        "그리스도",
+        "예수 그리스도",
+        "무교병",
+        "복음",
+        "언약",
+        "기도",
+        "다락방",
+        "237",
+        "237나라",
+        "5000",
+        "5000종족",
+        "7망대",
+        "7여정",
+        "7이정표",
+        "777",
+        "보좌화",
+        "생활화",
+        "개인화",
+        "제자화",
+        "세계화",
+        "CVDIP",
+        "드로아교회",
+        "하베스터선교교회",
+        "미션홈",
+        "태중 미션홈",
+        "기도수첩",
+        "포럼방",
+        "Blessing",
+        "블레싱",
+        "심방",
+        "교역자",
+        "부교역자",
+        "대학부",
+        "유초등부",
+        "WRC",
+        "RRTS",
+        "RVIS",
+        "RUTC",
+        "RTS",
+        "RSTS",
+        "RVS",
+        "RBS",
+        "RPS",
+        "RLS",
+        "RGS",
+        "HMC",
+        "HMIS",
+        "HMVS",
+        "REA",
+        "TCK",
+        "CCK",
+        "NCK",
+        "Heavenly",
+        "Thronely",
+        "Eternally",
+        "류광수",
+        "이주현",
+        "네피림",
+        "앉은뱅이",
+        "수련회",
+        "노회",
+        "성회",
+    ]
+    suffix = (
+        "핵심 용어는 정확한 표기로 유지하세요. 발음이 뭉개지거나 연음되어도 문맥상 맞는 정상 단어로 복원하고, "
+        "이상한 고유명사나 깨진 음절을 만들지 마세요."
+    )
+    return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "핵심 용어")
+
+
 def whisper_transcribe(
     file_path: str,
     language: str = "ko",
@@ -4948,116 +5127,11 @@ def whisper_transcribe(
     25MB 초과 시 자동 분할 처리 + 청크 재시도/타임아웃 보호.
     """
     
-    custom_names_str = ""
-    if language == "ko":
-        names = list(PASTORS) + list(HISTORICAL_PEOPLE)
-        if custom_terms:
-            names.extend(custom_terms)
-        seen = set()
-        unique_names = [n for n in names if not (n in seen or seen.add(n))]
-        custom_names_str = ", ".join(unique_names) + ", "
-    elif language in {"en", "ja"}:
-        if custom_terms:
-            seen = set()
-            unique_names = [n for n in custom_terms if not (n in seen or seen.add(n))]
-            custom_names_str = ", ".join(unique_names) + ", "
-
     if openai_client is None:
         raise RuntimeError("Whisper client is not configured.")
 
-    # Whisper prompt: 언어별 + 유형별 컨텍스트 힌트
-    # 음질이 낮을 때 올바른 단어를 추정하는 데 도움이 되는 역할
-    if language == "en":
-        # ===== 영어 프롬프트 =====
-        if transcription_type == "sermon":
-            whisper_prompt = (
-                "This is a sermon or lecture recording. "
-                "Infer unclear words from context. "
-                "A single speaker may talk very fast for a long stretch; preserve word boundaries and do not drop content. "
-                "Bible, Scripture, Gospel, salvation, grace, faith, prayer, blessing, congregation, "
-                "sermon, worship, fellowship, testimony, discipleship, ministry, mission, "
-                "Troas Church, Harvesters Missions Church, HMC, HMIS, HMVS, RRTS, RVIS, RUTC(Remnant Unity Training Center), RTS, RSTS, RBS, RVS(Remnant Vision School), RPS, RLS, RGS, "
-                "Mission Home, Prenatal Mission Home, Prayer Journal, Immanuel, Blessing, "
-                "Acts 1:8, Psalm 23:1, Romans 8:28"
-            )
-        elif transcription_type == "phonecall":
-            whisper_prompt = (
-                "This is a phone call recording with two speakers. "
-                "Audio quality may be low. Infer unclear words from context. "
-                "Recover fast reduced speech, confirmations, scheduling language, and practical everyday phrases accurately. "
-                "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
-                "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
-                "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
-                "blood pressure, blood sugar, CT, MRI, EEG, ECG, prescription, dosage, side effects, "
-                f"{EN_DAILY_CONTEXT_TERMS}, {EN_DOMAIN_CONTEXT_TERMS}"
-            )
-        else:
-            whisper_prompt = (
-                "This is a meeting or conversation recording with multiple speakers. "
-                "Audio may have echo or overlapping voices. Infer unclear words from context. "
-                "Multiple speakers may alternate quickly in a meeting, forum, or discussion; preserve turn changes and recover specialized terms from context. "
-                "hypertension, diabetes, epilepsy, seizure, stroke, pneumonia, asthma, arthritis, "
-                "acetaminophen, ibuprofen, metformin, amoxicillin, omeprazole, insulin, "
-                "levetiracetam, carbamazepine, valproate, lamotrigine, phenytoin, topiramate, "
-                "blood pressure, CT, MRI, EEG, prescription, dosage, side effects, "
-                "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, profit margin, "
-                f"{EN_DAILY_CONTEXT_TERMS}, {EN_DOMAIN_CONTEXT_TERMS}"
-            )
-    elif language == "ja":
-        if transcription_type == "sermon":
-            whisper_prompt = (
-                "これは日本語の説教または講義音声です。"
-                "不明瞭な語は文脈から復元し、内容を省略せずに全文を書き起こしてください。"
-                "一人の話者が長く速く話しても語境界を復元してください。"
-                "聖書, 福音, 救い, 恵み, 信仰, 祈り, 祝福, 説教, 礼拝, 宣教, "
-                "Acts 1:8, Psalm 23:1, Romans 8:28"
-            )
-        elif transcription_type == "phonecall":
-            whisper_prompt = (
-                "これは日本語の通話録音です。二人の話者が会話します。"
-                "音質が低くても文脈から単語を復元し、日常表現や予定調整、確認表現を正確に書き起こしてください。"
-                "hypertension, diabetes, epilepsy, seizure, stroke, CT, MRI, EEG, prescription, dosage, side effects"
-            )
-        else:
-            whisper_prompt = (
-                "これは日本語の会議または会話録音です。複数の話者が交互に発言します。"
-                "重なりや反響があっても文脈から用語を復元し、発言の切れ目を保って書き起こしてください。"
-                "KPI, ROI, OKR, project, milestone, sprint, deadline, budget, revenue, operating profit"
-            )
-    else:
-        # ===== 한국어 프롬프트 =====
-        if transcription_type == "sermon":
-            whisper_prompt = "다락방, 렘넌트, 그리스도, 예수 그리스도, 무교병, 237, 5000종족, 7망대, 7여정, 7이정표, CVDIP, 류광수, 이주현, 드로아교회, 하베스터선교교회, 미션홈, 태중 미션홈, 기도수첩, HMC, HMIS, HMVS, RRTS, RVIS, RUTC(Remnant Unity Training Center), RTS, RSTS, RBS, RVS(Remnant Vision School), RPS, RLS, RGS, RVS(Remnant Vision School, 드로아교회 유아유치 학교), 앗수르, 네피림, 바벨탑, 앉은뱅이, 뉴에이지, 프리메이슨, REA, 알리(무하마드 알리, 알리익스프레스), TCK, CCK, NCK, 성회, 전도대회, 수련회, 수련의, 노회, 노예, 유초등부, 유초동부, 대학부, 교역자, 교육자, 부교역자, 부교육자, Blessing, 블레싱, 배설물, 신방, 심방, 쉬고와, 기도, 보좌화, 생활화, 개인화, 제자화, 세계화, Heavenly, Thronely, Eternally, 록펠러, 카네기, 워너메이커, 존 워너메이커, 쉬버, 마틴 루터, 디모데, CDE(Common Data Elements), CD, 올해(연도), 오래(기간), 결재(승인), 결제(지불), 낫다(회복), 낳다(출산), 낮다(높이 반대), 안/않, 되/돼, 웬/왠지, 요것도=이것도, 독립 추임새 요=삭제, 렘런트/램넌트/레므난트=렘넌트, 그리스또/그리 스도=그리스도, 무교 병/무교뱅=무교병, 드로에게 교회/드로우게 교회=드로아교회, 베드로에게는(조사)=유지, 알리/REA 문맥 구분(일반 인명·브랜드는 알리 유지, 약어 맥락에서만 REA), 수련의/수련회 문맥 구분(의료 인력 vs 교회 집회), 노회/노예 문맥 구분(교단 회의 vs 일반 의미), 교역자/교육자 문맥 구분(목회·사역 맥락=교역자, 학교·수업 맥락=교육자), 부교역자/부교육자 문맥 구분(목회 보직 맥락=부교역자), 신방/심방 문맥 구분(교회 방문 사역 맥락=심방), 쉬고와/기도 문맥 구분(예배·마무리 안내 맥락=기도), RBS/RVS 문맥 구분(Remnant Vision School/비전스쿨 맥락=RVS), 디모데/D 모델 문맥 구분(성경 인물 맥락=디모데), CDE/CD 문맥 구분(의료정보 표준 약어 맥락= CDE, 일반 맥락= CD), 초고속 발화(120BPM+), 랩처럼 빠른 단독 화자, 음절 경계 복원, 조사/어미 유지"
-        elif transcription_type == "phonecall":
-            whisper_prompt = (
-                "전화 통화 녹음입니다. 두 명의 화자가 대화합니다. "
-                "음질이 낮거나 불명확한 부분은 문맥에 맞게 추정하고, 발음 그대로가 아닌 문맥상 올바른 단어를 우선 선택하세요. "
-                "한 화자가 매우 빠르게(대략 120BPM 이상, 랩처럼) 말해도 음절 경계를 문맥으로 복원하고 누락 없이 기록하세요. "
-                "'렘넌트/렘런트, 그리스도/그리스또, 무교병/무교 병, 올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 요것도/이것도, Blessing/블레싱, 배설물, 대학부, RBS/RVS(Remnant Vision School 맥락=RVS), RUTC(Remnant Unity Training Center), 디모데/D 모델, CDE/CD(Common Data Elements)'은 문맥으로 구분하세요. "
-                "독립된 추임새 '요'는 삭제하고, 구어 표현 '요것도'는 문맥상 '이것도'로 복원하세요. "
-                "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
-                "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
-                "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
-                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, 앉은뱅이, "
-                f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
-            )
-        else:
-            whisper_prompt = (
-                "회의 또는 대화 녹음입니다. 여러 참석자가 있습니다. "
-                "음질이 낮거나 겹치는 목소리가 있을 수 있으며, 문맥에 맞게 추정하세요. "
-                "특정 화자가 매우 빠르게(대략 120BPM 이상, 랩처럼) 말해도 음절 경계를 문맥으로 복원하고 누락 없이 기록하세요. "
-                "'렘넌트/렘런트, 그리스도/그리스또, 무교병/무교 병, 올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 요것도/이것도, Blessing/블레싱, 배설물, 대학부, RBS/RVS(Remnant Vision School 맥락=RVS), RUTC(Remnant Unity Training Center), CDE/CD(Common Data Elements)'는 문맥으로 구분하세요. "
-                "독립된 추임새 '요'는 삭제하고, 구어 표현 '요것도'는 문맥상 '이것도'로 복원하세요. "
-                "고혈압, 당뇨병, 심근경색, 갑상선, 위염, 폐렴, 천식, 관절염, 디스크, 우울증, 불면증, "
-                "뇌전증, 간질, 발작, 항경련제, 레비티라세탐, 카바마제핀, 발프로산, 라모트리진, "
-                "타이레놀, 아세트아미노펜, 이부프로펜, 메트포르민, 아목시실린, 오메프라졸, 인슐린, "
-                "혈압, 혈당, CT, MRI, EEG, 내시경, 혈액검사, 심전도, 처방, 복용, 부작용, 합병증, 앉은뱅이, "
-                "KPI, ROI, OKR, 프로젝트, 마일스톤, 스프린트, 데드라인, 예산, 매출, 영업이익, "
-                f"{KO_DAILY_CONTEXT_TERMS}, {KO_DOMAIN_CONTEXT_TERMS}"
-            )
-
-    slurred_speech_prompt = _get_slurred_speech_prompt_hint(language)
-    whisper_prompt = f"{custom_names_str}{whisper_prompt} {get_special_term_prompt_hint(language)} {slurred_speech_prompt}"
+    # Whisper의 prompt는 장문 지시보다 짧은 핵심 용어 bias가 더 안정적이다.
+    whisper_prompt = _build_compact_whisper_prompt(language, transcription_type, custom_terms)
     chunks = split_audio_file(file_path, transcription_type)
     all_text: list[str] = [""] * len(chunks)
 

@@ -82,6 +82,7 @@ uvicorn main:app --reload
    - `WHISPER_INITIAL_PADDING_SECONDS` (기본 1.25초, 녹음 시작 직후 첫 발화 누락 방지용 시작부 무음 패딩)
    - `WHISPER_OPENING_GUARD_SECONDS` (기본 45초, 첫 청크 시작부를 별도 재인식해 앞부분 누락을 보완)
    - `WHISPER_OPENING_GUARD_MIN_AUDIO_SECONDS` (기본 20초, 이 길이 이상인 첫 청크에만 시작부 재인식 적용)
+   - `WHISPER_PROMPT_MAX_CHARS` (기본 1200자, Whisper에는 짧은 핵심 용어 힌트만 전달)
    - `GEMINI_CORRECTION_CHUNK_CONCURRENCY` (기본 2, Gemini 교정 청크 병렬 처리 수)
    - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
    - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)
