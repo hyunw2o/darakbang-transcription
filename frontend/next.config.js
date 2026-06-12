@@ -3,7 +3,14 @@ const nextConfig = {
   reactStrictMode: true,
   async headers() {
     const isProduction = process.env.NODE_ENV === 'production'
-    const scriptSrc = ["'self'", "'unsafe-inline'"]
+    const scriptSrc = [
+      "'self'",
+      "'unsafe-inline'",
+      'https://pagead2.googlesyndication.com',
+      'https://pagead2.googleadservices.com',
+      'https://tpc.googlesyndication.com',
+      'https://www.googletagservices.com',
+    ]
     if (!isProduction) {
       scriptSrc.push("'unsafe-eval'")
     }
@@ -29,6 +36,7 @@ const nextConfig = {
       "font-src 'self' data: https:",
       "media-src 'self' data: blob: https:",
       `connect-src ${connectSrc.join(' ')}`,
+      "frame-src 'self' https://googleads.g.doubleclick.net https://tpc.googlesyndication.com",
       "object-src 'none'",
       "frame-ancestors 'none'",
       "base-uri 'self'",
