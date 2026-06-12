@@ -26,6 +26,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import NmPressable from "./components/NmPressable";
 import FadeInView from "./components/FadeInView";
 import Banner from "./components/Banner";
+import AdMobBanner from "./components/AdMobBanner";
 import SegmentButton from "./components/SegmentButton";
 import SocialAuthButton from "./components/SocialAuthButton";
 import AppleIapSubscriptionCard from "./components/AppleIapSubscriptionCard";
@@ -839,6 +840,10 @@ function App() {
     : (copy.planLabels?.[displayUsagePlan] || displayUsagePlan);
   const usageSettingsTitle = copy.settingsUsageTitle;
   const usageSettingsHint = copy.settingsUsageHint;
+  const shouldShowMobileAds =
+    activeTab === "transcribe" &&
+    (isGuestMode || Boolean(effectiveUsage)) &&
+    isFreeUsagePlan;
 
   const handleCreateGlossaryTerm = useCallback(async () => {
     if (!isLoggedIn || !authToken) {
@@ -3050,6 +3055,11 @@ function App() {
             </ScrollView>
           ) : null}
 
+          <AdMobBanner
+            visible={shouldShowMobileAds}
+            style={[styles.adMobBannerSlot, { backgroundColor: activeTheme.bg }]}
+          />
+
           {activeTab === "history" ? (
             <ScrollView contentContainerStyle={styles.scrollContent} nestedScrollEnabled>
               <FadeInView key="history">
@@ -3884,6 +3894,14 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 22,
     gap: 16,
+  },
+  adMobBannerSlot: {
+    minHeight: 58,
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   authScrollContent: {
     flexGrow: 1,
