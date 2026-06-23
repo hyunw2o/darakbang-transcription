@@ -195,6 +195,7 @@ export default function MallogHomeKoView(props) {
   const navItems = authToken
     ? [
         { label: '요금제', href: UPGRADE_CONTACT_URL },
+        { label: '사용 가이드', href: '/guides' },
         { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
         { label: '회사 소개', href: OURS_URL, external: true },
@@ -203,6 +204,7 @@ export default function MallogHomeKoView(props) {
         { label: '기능', href: '#features' },
         { label: '결과 예시', href: '#preview' },
         { label: '요금제', href: '#pricing' },
+        { label: '사용 가이드', href: '/guides' },
         { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
       ]

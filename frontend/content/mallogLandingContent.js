@@ -143,6 +143,31 @@ export const KO_MALLOG_LANDING_CONTENT = {
       },
     ],
   },
+  resources: {
+    eyebrow: '사용 가이드',
+    title: '정확도를 높이는 녹음과 검수 방법',
+    description:
+      '처음 사용하는 사람도 파일 준비, 변환 유형 선택, 결과 검수까지 스스로 확인할 수 있도록 실전 가이드를 제공합니다.',
+    ctaLabel: '전체 가이드 보기',
+    href: '/guides',
+    cards: [
+      {
+        title: '설교 녹취 정리',
+        body: '본문, 핵심 메시지, 적용 포인트, 주보용 요약으로 설교 기록을 정리하는 방법입니다.',
+        href: '/guides/sermon-transcription',
+      },
+      {
+        title: '회의록 작성',
+        body: '안건, 결정사항, 담당자, 후속 조치를 놓치지 않는 회의 녹음 검수 흐름입니다.',
+        href: '/guides/meeting-minutes',
+      },
+      {
+        title: '녹음 품질 체크',
+        body: '앞부분 누락, 소음, 겹치는 발화, 특수 용어 오인식을 줄이는 녹음 전 체크리스트입니다.',
+        href: '/guides/recording-quality',
+      },
+    ],
+  },
   stats: {
     title: '신뢰 지표',
     description: '실측 가능한 수치만 표시합니다. 값이 없으면 이 영역은 보이지 않습니다.',
@@ -341,6 +366,31 @@ export const EN_MALLOG_LANDING_CONTENT = {
       {
         title: 'Call / Consultation',
         body: 'Preserve speaker turns, conversation flow, and key notes so the next follow-up starts from a usable record.',
+      },
+    ],
+  },
+  resources: {
+    eyebrow: 'User Guides',
+    title: 'Improve recording quality and transcript review',
+    description:
+      'Practical guides help new users prepare audio, choose the right workflow, and review AI-generated text responsibly.',
+    ctaLabel: 'View all guides',
+    href: '/en/guides',
+    cards: [
+      {
+        title: 'Sermon transcription',
+        body: 'How to organize sermons into scripture, core message, application points, and bulletin-ready notes.',
+        href: '/en/guides/sermon-transcription',
+      },
+      {
+        title: 'Meeting minutes',
+        body: 'How to review agenda, decisions, owners, and follow-up tasks from meeting recordings.',
+        href: '/en/guides/meeting-minutes',
+      },
+      {
+        title: 'Recording quality',
+        body: 'A checklist for reducing missed starts, noise, overlapping speech, and domain-term errors.',
+        href: '/en/guides/recording-quality',
       },
     ],
   },

@@ -297,6 +297,41 @@ export default function MallogLandingSections({
         </div>
       </section>
 
+      {content.resources ? (
+        <section id="guides" className="landing-anchor-offset space-y-7">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <SectionHeader
+              eyebrow={content.resources.eyebrow}
+              title={content.resources.title}
+              description={content.resources.description}
+              localeTextClass={localeTextClass}
+            />
+            <Link
+              href={content.resources.href}
+              className="inline-flex min-h-[44px] w-fit items-center rounded-lg border-[0.5px] border-black/[0.14] bg-white px-4 text-sm font-semibold text-[#1A1916] transition duration-200 hover:-translate-y-[1px] hover:border-[#2D5BE3]/45 dark:border-white/[0.14] dark:bg-[#1A1916] dark:text-[#F0EDE8]"
+            >
+              {content.resources.ctaLabel}
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {content.resources.cards.map((card, index) => (
+              <Link
+                key={card.href}
+                href={card.href}
+                className="landing-reveal rounded-lg border-[0.5px] border-black/[0.1] bg-white p-5 transition duration-300 hover:-translate-y-1 hover:border-[#2D5BE3]/45 dark:border-white/[0.1] dark:bg-[#1A1916]"
+                style={{ animationDelay: `${index * 80}ms` }}
+              >
+                <h3 className={`text-lg font-semibold text-[#1A1916] dark:text-[#F0EDE8] ${localeTextClass}`}>{card.title}</h3>
+                <p className={`mt-3 text-sm leading-7 text-[#6B6860] dark:text-[#B7B2A8] ${localeTextClass}`}>{card.body}</p>
+                <span className="mt-5 inline-flex text-sm font-semibold text-[#2D5BE3]">
+                  {locale === 'kr' ? '자세히 보기' : 'Read more'}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {hasStats ? (
         <section id="stats" className="landing-anchor-offset space-y-7">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
