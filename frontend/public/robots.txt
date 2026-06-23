@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://mallog24.com/sitemap.xml
+Sitemap: https://www.mallog24.com/sitemap.xml

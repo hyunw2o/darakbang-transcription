@@ -1,4 +1,4 @@
-export const SITE_BASE_URL = 'https://mallog24.com'
+export const SITE_BASE_URL = 'https://www.mallog24.com'
 export const LEGAL_DOC_VERSION = 'v2026.06.23'
 export const LEGAL_DOC_DATE_KO = '2026년 6월 23일'
 export const LEGAL_DOC_DATE_EN = 'June 23, 2026'
