@@ -105,6 +105,22 @@ def run_special_term_sample() -> None:
         "-c",
         (
             "import sys; "
+            "sys.path.insert(0, 'backend'); "
+            "from church_terms import correct_text, get_gemini_correction_prompt; "
+            "ko=correct_text('이거를 확인하고 이게 맞으면 이건 그대로 둡니다. 승경이와 주현도 그대로 기록합니다.', "
+            "transcription_type='sermon', language='ko'); "
+            "prompt=get_gemini_correction_prompt(); "
+            "assert '이것을' in ko and '이것이' in ko and '이것은' in ko, ko; "
+            "assert '승경이' in ko and '주현도' in ko and '장승경' not in ko and '이주현' not in ko, ko; "
+            "assert '승경이→장승경이' in prompt and '주현→이주현이' in prompt, prompt; "
+            "print('ko-colloquial-and-name-preservation-ok')"
+        ),
+    ])
+    run_command([
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
             "from datetime import datetime, timedelta; "
             "sys.path.insert(0, 'backend'); "
             "from main import _build_usage_snapshot, PAID_PLAN_TIER, USAGE_FREE_PLAN; "

@@ -723,13 +723,6 @@ COMMON_MISTAKES = {
     "알 지 에스": "RGS",
     "알지에스": "RGS",
     "RLTS": "RRTS",
-    "김근이": "김건희",
-    "김소현": "김소영",
-    "이지훈": "이주현",
-    "이지호": "이주현",
-    "장현승": "장한샘",
-    "이혜나": "이예나",
-    "애나": "예나",
     "두구": "투구",
     "렘피림": "네피림",
     "레피림": "네피림",
@@ -1521,9 +1514,22 @@ def _build_name_correction_instruction(custom_terms: list[str] = None, language:
     names_str = ", ".join(unique_names)
     
     if language == "ko":
-        return f"\n\n[인명 및 고유명사 최우선 교정]\n- 다음 목록에 있는 이름이나 고유명사와 발음이 유사한 단어가 인식되면, STT 결과를 무시하고 반드시 아래의 정확한 표기로 교정하라:\n  {names_str}\n"
+        return (
+            "\n\n[인명 및 고유명사 보존 규칙]\n"
+            "- 인명은 들린 범위를 그대로 보존하라. 성이나 직함을 추정해서 붙이지 마라.\n"
+            "- 부분 이름/별칭/애매한 호칭을 아래 목록의 정식 이름으로 강제 확장하지 마라.\n"
+            "- 예: '승경이'를 '장승경이'로, '주현'을 '이주현이'로, '위 목사님'을 '류광수 목사님'으로 바꾸지 마라.\n"
+            "- 단, 원문에 성과 이름 또는 명확한 정식 호칭이 함께 들린 경우에는 띄어쓰기와 존칭만 자연스럽게 정리하라.\n"
+            f"- 참고 가능한 기존 고유명사 목록(강제 치환 목록 아님): {names_str}\n"
+        )
     else:
-        return f"\n\n[Proper Nouns Priority Correction]\n- If you hear words that sound similar to the names or proper nouns in the following list, you MUST correct them to these exact spellings:\n  {names_str}\n"
+        return (
+            "\n\n[Proper Noun Preservation]\n"
+            "- Preserve personal names as heard. Do not infer or add a family name, title, or full official name.\n"
+            "- Do not force partial names or ambiguous titles into the names below.\n"
+            "- Use the following only as non-binding context when the full name is clearly present:\n"
+            f"  {names_str}\n"
+        )
 
 def get_gemini_prompt(custom_terms: list[str] = None):
     """
@@ -1571,6 +1577,7 @@ RVS는 Remnant Vision School, RUTC는 Remnant Unity Training Center로 해석하
    - '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 절대 교회명으로 바꾸지 마라.
    - 발음이 비슷한 단어 중 문맥에 맞는 것을 선택하라.
 7. 구어체 표현은 뜻을 유지하되 자연스러운 문장으로 다듬어라.
+   - 예: '이거를'→'이것을', '이게'→'이것이', '이건'→'이것은'처럼 지시어는 문어체로 정리하라.
 8. 비속어/속어: '인마', '야' 등 거친 표현만 생략하라.
 9. 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 누락 없이 기록하라.
    - 음절이 붙어 들리면 단어 경계를 문맥으로 복원하라.
@@ -1685,7 +1692,8 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
   '베드로에게는/우리에게는'처럼 조사(에게/에게는/에게서) 용법은 유지하고 교회명으로 치환하지 마라.
   올해/오래, 결재/결제, 낫다/낳다/낮다, 안/않, 되/돼, 웬/왠(특히 왠지), 3오늘/삼오늘/세오늘/사모늘, 포럼방/포럼망, 알리/REA, 수련의/수련회, 노회/노예, 유초등부/유초동부, 교역자/교육자, 부교역자/부교육자, 신방/심방, 쉬고와/기도, 요것도/이것도, Blessing/블레싱, 배설물, 대학부, 대위/대희, 임마누엘/임만, 죄책감/최책감, 네피림/레피림, RBS/RVS(Remnant Vision School 맥락=RVS), RUTC(Remnant Unity Training Center), 디모데/D 모델, CDE/CD(Common Data Elements)는 기계적으로 치환하지 말고 문맥으로 구분
   (연도/시점=올해, 기간/오랜 시간=오래 / 승인=결재, 지불=결제 / 회복=낫다, 출산=낳다, 높이 반대=낮다 / 숫자 의미면 3오늘 / 모임 공간 의미면 포럼방 / '알리'는 인명·브랜드·일반 고유명사면 유지, 선교 약어를 철자로 말한 맥락일 때만 REA / 의료 인력 맥락=수련의, 교회 집회 맥락=수련회 / 교단 회의 맥락=노회 / 교회 부서 맥락=유초등부·대학부 / 목회·사역 맥락=교역자·부교역자 / 학교·수업 맥락=교육자·부교육자 / 교회 방문 사역 맥락=심방 / 예배 마무리·기도 안내 맥락=기도 / 독립된 추임새 '요,'는 삭제, '요것도'는 '이것도' / 영어 찬양·축복 맥락=Blessing / 의료·배변·검체 맥락=배설물 / 의료정보 표준 맥락=CD 대신 CDE(Common Data Elements))
-- 인명 교정: 김근이→김건희, 김소현→김소영, 이지훈/이지호→이주현, 장현승→장한샘
+- 인명은 들린 범위를 보존하고, 성/직함/정식 이름을 추정해 추가하지 마라.
+  예: 승경이→장승경이, 주현→이주현이, 위 목사님→류광수 목사님처럼 확장하지 마라.
 - 성경 구절은 반드시 "책약어장:절" 형식으로 표기하라. (예: 행1:8, 시23:1, 롬8:28)
 
 [추임새 제거]
@@ -1708,6 +1716,7 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 - 문장 중간에서 임의 줄바꿈하지 말고, 문단 경계에서만 줄바꿈하라.
 - 한국어 부분만 출력. 외국어 통역 부분은 제외.
 - 구어체는 뜻을 유지하되 자연스러운 문장으로 다듬어라.
+  예: 이거를→이것을, 이게→이것이, 이건→이것은, 그거를→그것을, 그게→그것이
 
 [출력 예시]
 성경말씀 롬16:23이다. 같이 합독하시겠다. 롬16:23 나와 온 교회를 돌보아 주는 가이오도 너희에게 문안하고 이 성의 재무관 에라스도와 형제 구아도도 너희에게 문안하느니라.
@@ -2962,6 +2971,43 @@ def _normalize_korean_slurred_church_terms(text: str) -> str:
     return corrected
 
 
+def _normalize_korean_colloquial_demonstratives(text: str) -> str:
+    """안전한 지시대명사 구어체를 문어체로 정리한다."""
+    import re
+
+    if not text:
+        return text
+
+    replacements = [
+        (r"(?<![가-힣])이\s*거\s*(?:를|을)(?![가-힣])", "이것을"),
+        (r"(?<![가-힣])이\s*걸(?![가-힣])", "이것을"),
+        (r"(?<![가-힣])이\s*게(?![가-힣])", "이것이"),
+        (r"(?<![가-힣])이\s*거\s*(?:가|이)(?![가-힣])", "이것이"),
+        (r"(?<![가-힣])이\s*건(?![가-힣])", "이것은"),
+        (r"(?<![가-힣])이\s*거\s*(?:는|은)(?![가-힣])", "이것은"),
+        (r"(?<![가-힣])이\s*거\s*도(?![가-힣])", "이것도"),
+        (r"(?<![가-힣])이\s*거\s*에(?![가-힣])", "이것에"),
+        (r"(?<![가-힣])이\s*거\s*에서(?![가-힣])", "이것에서"),
+        (r"(?<![가-힣])이\s*거\s*로(?![가-힣])", "이것으로"),
+        (r"(?<![가-힣])이\s*걸\s*로(?![가-힣])", "이것으로"),
+        (r"(?<![가-힣])그\s*거\s*(?:를|을)(?![가-힣])", "그것을"),
+        (r"(?<![가-힣])그\s*걸(?![가-힣])", "그것을"),
+        (r"(?<![가-힣])그\s*게(?![가-힣])", "그것이"),
+        (r"(?<![가-힣])그\s*거\s*(?:가|이)(?![가-힣])", "그것이"),
+        (r"(?<![가-힣])그\s*건(?![가-힣])", "그것은"),
+        (r"(?<![가-힣])그\s*거\s*(?:는|은)(?![가-힣])", "그것은"),
+        (r"(?<![가-힣])그\s*거\s*도(?![가-힣])", "그것도"),
+        (r"(?<![가-힣])그\s*거\s*에(?![가-힣])", "그것에"),
+        (r"(?<![가-힣])그\s*거\s*에서(?![가-힣])", "그것에서"),
+        (r"(?<![가-힣])그\s*거\s*로(?![가-힣])", "그것으로"),
+        (r"(?<![가-힣])그\s*걸\s*로(?![가-힣])", "그것으로"),
+    ]
+    corrected = text
+    for pattern, replacement in replacements:
+        corrected = re.sub(pattern, replacement, corrected)
+    return corrected
+
+
 def _normalize_contextual_homophones(text: str) -> str:
     """
     문맥 기반 혼동어 교정:
@@ -3400,6 +3446,7 @@ def correct_text(
 
         # 문맥 기반 혼동어 보정
         corrected = _normalize_korean_slurred_church_terms(corrected)
+        corrected = _normalize_korean_colloquial_demonstratives(corrected)
         corrected = _normalize_contextual_homophones(corrected)
 
         # 교회명 보정은 '교회' 문맥에서만 수행 (예: 드로에게 교회 → 드로아교회)

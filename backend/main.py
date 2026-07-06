@@ -377,11 +377,11 @@ PREFER_WHISPER_FOR_LONG_AUDIO = (
 )
 WHISPER_SEGMENT_SECONDS = max(
     60,
-    int(os.getenv("WHISPER_SEGMENT_SECONDS", "360")),
+    int(os.getenv("WHISPER_SEGMENT_SECONDS", "240")),
 )
 WHISPER_CHUNK_OVERLAP_SECONDS = max(
     0,
-    min(30, int(os.getenv("WHISPER_CHUNK_OVERLAP_SECONDS", "4"))),
+    min(30, int(os.getenv("WHISPER_CHUNK_OVERLAP_SECONDS", "8"))),
 )
 WHISPER_BOUNDARY_PADDING_SECONDS = max(
     0.0,
@@ -408,13 +408,17 @@ WHISPER_PROMPT_MAX_CHARS = max(
     min(4000, int(os.getenv("WHISPER_PROMPT_MAX_CHARS", "1200"))),
 )
 WHISPER_CHUNK_CONCURRENCY = max(1, int(os.getenv("WHISPER_CHUNK_CONCURRENCY", "2")))
+WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE = max(
+    0.0,
+    float(os.getenv("WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE", "60")),
+)
 
 # 외부 프로세스/LLM 타임아웃
 FFMPEG_PROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("FFMPEG_PROCESS_TIMEOUT_SECONDS", "300")))
 FFPROBE_PROCESS_TIMEOUT_SECONDS = max(10, int(os.getenv("FFPROBE_PROCESS_TIMEOUT_SECONDS", "30")))
 GEMINI_REQUEST_TIMEOUT_SECONDS = max(60, int(os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "600")))
 GEMINI_MAX_OUTPUT_TOKENS = max(4096, int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "32768")))
-GEMINI_CORRECTION_CHUNK_CHARS = max(4000, int(os.getenv("GEMINI_CORRECTION_CHUNK_CHARS", "12000")))
+GEMINI_CORRECTION_CHUNK_CHARS = max(4000, int(os.getenv("GEMINI_CORRECTION_CHUNK_CHARS", "8000")))
 GEMINI_CORRECTION_CHUNK_CONCURRENCY = max(1, int(os.getenv("GEMINI_CORRECTION_CHUNK_CONCURRENCY", "2")))
 GEMINI_CORRECTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_CORRECTION_MAX_RETRIES", "2")))
 GEMINI_CORRECTION_SKIP_OVER_CHARS = max(0, int(os.getenv("GEMINI_CORRECTION_SKIP_OVER_CHARS", "0")))
@@ -4592,6 +4596,46 @@ def _is_suspiciously_short_correction(source_text: str, corrected_text: str) -> 
     return ratio < 0.42
 
 
+def _estimate_transcript_content_units(text: str) -> int:
+    normalized = re.sub(r"\s+", " ", (text or "").replace("\r\n", "\n").replace("\r", "\n")).strip()
+    if not normalized:
+        return 0
+
+    sentence_like_parts = [
+        part.strip()
+        for part in re.split(r"(?:[.!?。！？]+|\n+)", normalized)
+        if len(_compact_transcript_for_match(part)) >= 12
+    ]
+    if len(sentence_like_parts) >= 2:
+        return len(sentence_like_parts)
+
+    token_count = len(_transcript_tokens(normalized))
+    if token_count <= 0:
+        return 0
+    return max(1, token_count // 18)
+
+
+def _is_suspiciously_incomplete_correction(source_text: str, corrected_text: str) -> bool:
+    if _is_suspiciously_short_correction(source_text, corrected_text):
+        return True
+
+    source_len = _compact_transcript_length(source_text)
+    corrected_len = _compact_transcript_length(corrected_text)
+    if source_len < 1200 or corrected_len <= 0:
+        return False
+
+    source_units = _estimate_transcript_content_units(source_text)
+    corrected_units = _estimate_transcript_content_units(corrected_text)
+    if source_units < 10 or corrected_units <= 0:
+        return False
+
+    unit_ratio = corrected_units / max(1, source_units)
+    length_ratio = corrected_len / max(1, source_len)
+    if unit_ratio < 0.45:
+        return True
+    return unit_ratio < 0.65 and length_ratio < 0.78
+
+
 def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
     """
     Overlapped audio chunks can produce a repeated boundary phrase.
@@ -4773,6 +4817,18 @@ def _extract_transcription_response_text(response) -> str:
     if isinstance(response, dict):
         return str(response.get("text") or "").strip()
     return str(getattr(response, "text", "") or response or "").strip()
+
+
+def _is_sparse_whisper_chunk(chunk_duration_sec: float, text: str) -> bool:
+    if WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE <= 0:
+        return False
+    if chunk_duration_sec < 90:
+        return False
+    compact_len = _compact_transcript_length(text)
+    if compact_len <= 0:
+        return True
+    chars_per_minute = compact_len / max(1.0, chunk_duration_sec / 60.0)
+    return chars_per_minute < WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE
 
 
 def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list[tuple[str, float]]:
@@ -5155,8 +5211,6 @@ def _build_compact_whisper_prompt(
         "Heavenly",
         "Thronely",
         "Eternally",
-        "류광수",
-        "이주현",
         "네피림",
         "앉은뱅이",
         "수련회",
@@ -5165,7 +5219,7 @@ def _build_compact_whisper_prompt(
     ]
     suffix = (
         "핵심 용어는 정확한 표기로 유지하세요. 발음이 뭉개지거나 연음되어도 문맥상 맞는 정상 단어로 복원하고, "
-        "이상한 고유명사나 깨진 음절을 만들지 마세요."
+        "이상한 고유명사나 깨진 음절을 만들지 마세요. 부분 인명이나 애매한 호칭에 성/직함을 추정해 붙이지 마세요."
     )
     return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "핵심 용어")
 
@@ -5274,8 +5328,18 @@ def whisper_transcribe(
                 else:
                     raise RuntimeError("Whisper returned empty text.")
 
-                if chunk_duration_sec >= 45 and len(chunk_text) < 25 and attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
-                    print(f"  Chunk {chunk_index+1}: sparse transcript detected, retrying with rapid-speech hint...")
+                if (
+                    (
+                        chunk_duration_sec >= 45
+                        and len(chunk_text) < 25
+                    )
+                    or _is_sparse_whisper_chunk(chunk_duration_sec, chunk_text)
+                ) and attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
+                    print(
+                        f"  Chunk {chunk_index+1}: sparse transcript detected "
+                        f"(duration={chunk_duration_sec:.1f}s, chars={len(chunk_text)}), "
+                        "retrying with rapid-speech hint..."
+                    )
                     continue
 
                 last_error = None
@@ -5478,6 +5542,12 @@ async def gemini_correct_and_structure(
             "RVS, RUTC, WRC, RRTS, RSTS 같은 도메인 용어를 우선 검토하라.\n"
             "- 문맥 확신이 없으면 억지로 치환하지 말고 원문을 유지하거나 짧게 [불명확]으로 표시하라."
         )
+        correction_prompt += (
+            "\n\n[문어체 정리와 인명 보존]\n"
+            "- 의미를 바꾸지 않는 범위에서 구어체 지시어를 문어체로 정리하라: 이거를→이것을, 이게→이것이, 이건→이것은, 그거를→그것을, 그게→그것이.\n"
+            "- 인명은 들린 범위 그대로 보존하라. 성, 직함, 정식 이름을 추정해 추가하지 마라.\n"
+            "- 금지 예: 승경이→장승경이, 주현→이주현이, 위 목사님→류광수 목사님처럼 바꾸지 마라."
+        )
 
     model = genai.GenerativeModel(
         target_model,
@@ -5575,11 +5645,11 @@ async def gemini_correct_and_structure(
                 [correction_prompt, chunk_instruction, f"[{label} {index}/{len(chunks)}]", chunk],
                 f"chunk {index}/{len(chunks)}",
             )
-            if _is_suspiciously_short_correction(chunk, corrected_chunk):
+            if _is_suspiciously_incomplete_correction(chunk, corrected_chunk):
                 source_len = _compact_transcript_length(chunk)
                 corrected_len = _compact_transcript_length(corrected_chunk)
                 print(
-                    f"[{task_id}] Gemini correction chunk {index}/{len(chunks)} looks truncated "
+                    f"[{task_id}] Gemini correction chunk {index}/{len(chunks)} looks incomplete "
                     f"({corrected_len}/{source_len} compact chars). Keeping raw chunk."
                 )
                 corrected_chunk = chunk.strip()
@@ -5610,11 +5680,11 @@ async def gemini_correct_and_structure(
         return ""
 
     corrected_single = await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
-    if _is_suspiciously_short_correction(chunks[0], corrected_single):
+    if _is_suspiciously_incomplete_correction(chunks[0], corrected_single):
         source_len = _compact_transcript_length(chunks[0])
         corrected_len = _compact_transcript_length(corrected_single)
         print(
-            f"[{task_id}] Gemini correction single result looks truncated "
+            f"[{task_id}] Gemini correction single result looks incomplete "
             f"({corrected_len}/{source_len} compact chars). Keeping raw transcript."
         )
         return chunks[0].strip()
