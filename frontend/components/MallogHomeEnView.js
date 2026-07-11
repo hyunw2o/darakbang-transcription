@@ -10,6 +10,10 @@ import StepIndicator from './StepIndicator'
 import UserGlossaryPanel from './UserGlossaryPanel'
 import { EN_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsToHourMinute } from '../utils/format'
+import {
+  getTranscriptionProgressText,
+  normalizeTranscriptionProgress,
+} from '../utils/transcriptionProgress'
 
 function FooterInlineRow({ items, className = '' }) {
   const visibleItems = items.filter(Boolean)
@@ -110,6 +114,7 @@ export default function MallogHomeEnView(props) {
     pendingDeleteTaskId,
     pendingDeleteAll,
     currentStep,
+    processingProgress,
     dragOver,
     showHistory,
     setShowHistory,
@@ -215,6 +220,11 @@ export default function MallogHomeEnView(props) {
   ]
 
   const activeTranscriptText = result ? (transcriptEditText || result.corrected_text || result.raw_text || '') : ''
+  const normalizedProcessingProgress = normalizeTranscriptionProgress(
+    processingProgress,
+    currentStep <= 1 ? 'uploading' : currentStep === 2 ? 'queued' : 'correcting_text'
+  )
+  const processingStatusText = getTranscriptionProgressText(normalizedProcessingProgress, 'en')
   const isAuthPage = authPageMode === 'recover'
   const isRecoverMode = authMode === 'recover'
   const isResetPasswordMode = authMode === 'reset_password'
@@ -730,22 +740,24 @@ export default function MallogHomeEnView(props) {
                 <div className="mallog-processing-inner">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-nm-text-primary">Transcription in progress</p>
-                    <span className="rounded-full border border-[color:var(--nm-border)] px-2.5 py-1 text-[11px] font-semibold text-nm-text-secondary">
-                      {currentStep}/3
+                    <span className="border border-[color:var(--nm-border)] px-2.5 py-1 text-[11px] font-semibold text-nm-text-secondary">
+                      {normalizedProcessingProgress.percent}%
                     </span>
                   </div>
-                  <StepIndicator currentStep={currentStep} locale="en" />
+                  <StepIndicator
+                    currentStep={currentStep}
+                    processingProgress={normalizedProcessingProgress}
+                    locale="en"
+                  />
                 </div>
                 <div className="mallog-processing-progress mt-4">
                   <div
                     className="mallog-processing-progress-fill"
-                    style={{ width: currentStep === 1 ? '20%' : currentStep === 2 ? '55%' : '85%' }}
+                    style={{ width: `${normalizedProcessingProgress.percent}%` }}
                   />
                 </div>
-                <p className="text-center text-xs text-nm-text-secondary mt-3">
-                  {currentStep === 1 && 'Uploading file...'}
-                  {currentStep === 2 && 'AI is recognizing speech...'}
-                  {currentStep === 3 && 'Refining and structuring text...'}
+                <p className="mt-3 text-center text-xs leading-5 text-nm-text-secondary" role="status" aria-live="polite">
+                  {processingStatusText}
                 </p>
               </div>
             )}

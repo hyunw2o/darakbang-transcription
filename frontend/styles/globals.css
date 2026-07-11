@@ -433,14 +433,17 @@ body {
 }
 
 .mallog-processing-inner {
-  max-width: 720px;
+  max-width: 920px;
   margin: 0 auto;
 }
 
 .mallog-step-indicator {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .mallog-step-item {
@@ -448,10 +451,9 @@ body {
   min-width: 0;
   align-items: center;
   gap: 10px;
-  border: 0.5px solid var(--nm-border);
-  border-radius: 8px;
-  background: var(--nm-surface-soft);
-  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--nm-border);
+  background: transparent;
+  padding: 10px 4px;
   transition:
     border-color var(--nm-transition) var(--nm-ease),
     background var(--nm-transition) var(--nm-ease),
@@ -459,13 +461,14 @@ body {
 }
 
 .mallog-step-item.is-completed {
-  border-color: color-mix(in oklab, #22c55e 42%, var(--nm-border));
-  background: color-mix(in oklab, #22c55e 9%, var(--nm-surface));
+  border-bottom-color: color-mix(in oklab, #22c55e 32%, var(--nm-border));
 }
 
 .mallog-step-item.is-active {
-  border-color: color-mix(in oklab, var(--nm-accent) 48%, var(--nm-border));
+  border-left: 2px solid var(--nm-accent);
+  border-bottom-color: color-mix(in oklab, var(--nm-accent) 38%, var(--nm-border));
   background: color-mix(in oklab, var(--nm-accent) 9%, var(--nm-surface));
+  padding-left: 10px;
 }
 
 .mallog-step-dot {
@@ -505,24 +508,18 @@ body {
 }
 
 .mallog-step-label {
-  overflow: hidden;
   color: var(--nm-text-primary);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mallog-step-caption {
   margin-top: 2px;
-  overflow: hidden;
   color: var(--nm-text-secondary);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mallog-step-item.is-completed .mallog-step-label {

@@ -3,6 +3,10 @@ import { getAudioDurationSecondsInBrowser } from '../utils/audio'
 import { buildDocxBlob } from '../utils/docx'
 import { sanitizeFileName, triggerBlobDownload } from '../utils/format'
 import { apiFetch, safeReadJson } from '../utils/network'
+import {
+  EMPTY_TRANSCRIPTION_PROGRESS,
+  normalizeTranscriptionProgress,
+} from '../utils/transcriptionProgress'
 
 const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const GUEST_MONTHLY_LIMIT_SECONDS = 1800
@@ -178,6 +182,7 @@ export default function useMallogTranscription({
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState('')
   const [pendingDeleteAll, setPendingDeleteAll] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
+  const [processingProgress, setProcessingProgress] = useState(EMPTY_TRANSCRIPTION_PROGRESS)
   const [dragOver, setDragOver] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showRecords, setShowRecords] = useState(false)
@@ -377,6 +382,7 @@ export default function useMallogTranscription({
     activeTaskIdRef.current = ''
     setLoading(false)
     setCurrentStep(0)
+    setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
     setError(message)
     setNotice(`${messages.taskIdLabel}: ${taskId}`)
   }, [messages.taskIdLabel, setError, setNotice, stopPolling])
@@ -405,6 +411,7 @@ export default function useMallogTranscription({
     clearPendingDeleteAll()
     setLoading(false)
     setCurrentStep(0)
+    setProcessingProgress(EMPTY_TRANSCRIPTION_PROGRESS)
     setResult(null)
     setFile(null)
     setFileDurationSeconds(0)
@@ -821,6 +828,7 @@ export default function useMallogTranscription({
     pollStartTime.current = Date.now()
     pollFailureCountRef.current = 0
     setCurrentStep(2)
+    setProcessingProgress(normalizeTranscriptionProgress(null, 'queued'))
 
     pollInterval.current = window.setInterval(async () => {
       try {
@@ -835,6 +843,7 @@ export default function useMallogTranscription({
           activeTaskIdRef.current = ''
           setLoading(false)
           setCurrentStep(0)
+          setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
           setError(messages.processingSlow)
           setNotice(`${messages.taskIdLabel}: ${taskId}`)
           return
@@ -882,6 +891,11 @@ export default function useMallogTranscription({
         pollFailureCountRef.current = 0
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
+        setProcessingProgress(normalizeTranscriptionProgress(
+          data.progress,
+          data.status === 'processing' ? 'transcribing' : data.status
+        ))
+
         if (data.status === 'queued') {
           setCurrentStep(2)
         } else if (data.status === 'completed') {
@@ -908,6 +922,7 @@ export default function useMallogTranscription({
           setError(data.error || messages.transcribeFailed)
           setLoading(false)
           setCurrentStep(0)
+          setProcessingProgress(normalizeTranscriptionProgress(data.progress, 'error'))
         } else if (data.status === 'processing') {
           setCurrentStep(3)
         } else if (data.status === 'not_found') {
@@ -964,6 +979,7 @@ export default function useMallogTranscription({
     setError(null)
     setNotice(null)
     setCurrentStep(1)
+    setProcessingProgress(normalizeTranscriptionProgress(null, 'uploading'))
 
     try {
       const formData = new FormData()
@@ -986,12 +1002,14 @@ export default function useMallogTranscription({
 
       if (data.status === 'queued') {
         setCurrentStep(2)
+        setProcessingProgress(normalizeTranscriptionProgress(data.progress, 'queued'))
         startPolling(data.task_id, submitEpoch)
       } else {
         if (submitEpoch !== resultEpochRef.current) return
         setResult(data)
         setLoading(false)
         setCurrentStep(0)
+        setProcessingProgress(normalizeTranscriptionProgress(data.progress, 'completed'))
         if (authToken) {
           fetchUsage()
         } else {
@@ -1002,6 +1020,7 @@ export default function useMallogTranscription({
       setError(error?.message || messages.transcribeFailed)
       setLoading(false)
       setCurrentStep(0)
+      setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
     }
   }, [apiUrl, authToken, fetchGuestUsage, fetchUsage, file, fileDurationSeconds, getTranscriptionHeaders, invalidatePollingSession, language, messages.guestTranscribeHint, messages.quotaExceeded, messages.selectFile, messages.transcribeFailed, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
 
@@ -1559,6 +1578,7 @@ export default function useMallogTranscription({
     pendingDeleteTaskId,
     pendingDeleteAll,
     currentStep,
+    processingProgress,
     dragOver,
     showHistory,
     setShowHistory,

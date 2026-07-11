@@ -191,6 +191,7 @@ export default function MallogHomePageContainer({
     pendingDeleteTaskId,
     pendingDeleteAll,
     currentStep,
+    processingProgress,
     dragOver,
     showHistory,
     setShowHistory,
@@ -485,6 +486,7 @@ export default function MallogHomePageContainer({
       pendingDeleteTaskId={pendingDeleteTaskId}
       pendingDeleteAll={pendingDeleteAll}
       currentStep={currentStep}
+      processingProgress={processingProgress}
       dragOver={dragOver}
       showHistory={showHistory}
       setShowHistory={setShowHistory}

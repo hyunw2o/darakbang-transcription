@@ -1,32 +1,31 @@
-const STEP_LABELS = {
-  kr: [
-    { label: '업로드', caption: '파일 전송', num: 1 },
-    { label: '음성 인식', caption: 'AI 전사', num: 2 },
-    { label: '교정', caption: '문서 정리', num: 3 },
-  ],
-  en: [
-    { label: 'Upload', caption: 'Transfer', num: 1 },
-    { label: 'Speech', caption: 'AI transcript', num: 2 },
-    { label: 'Refine', caption: 'Structure', num: 3 },
-  ],
-}
+import {
+  normalizeTranscriptionProgress,
+  resolveProcessStepIndex,
+  TRANSCRIPTION_PROCESS_STEPS,
+} from '../utils/transcriptionProgress'
 
-export default function StepIndicator({ currentStep, locale = 'kr' }) {
-  const steps = STEP_LABELS[locale] || STEP_LABELS.kr
-  const boundedStep = Math.max(1, Math.min(steps.length, Number(currentStep) || 1))
+export default function StepIndicator({ currentStep, processingProgress, locale = 'kr' }) {
+  const normalizedLocale = locale === 'en' ? 'en' : 'ko'
+  const steps = TRANSCRIPTION_PROCESS_STEPS[normalizedLocale]
+  const progress = normalizeTranscriptionProgress(
+    processingProgress,
+    Number(currentStep) <= 1 ? 'uploading' : Number(currentStep) === 2 ? 'queued' : 'correcting_text'
+  )
+  const activeIndex = resolveProcessStepIndex(progress.stage, currentStep, normalizedLocale)
+  const allCompleted = progress.stage === 'completed'
 
   return (
-    <div
+    <ol
       className="mallog-step-indicator"
-      aria-label={locale === 'en' ? 'Transcription progress' : '변환 진행 상태'}
+      aria-label={normalizedLocale === 'en' ? 'Detailed transcription progress' : '상세 변환 진행 상태'}
     >
-      {steps.map((step) => {
-        const isCompleted = boundedStep > step.num
-        const isActive = boundedStep === step.num
+      {steps.map((step, index) => {
+        const isCompleted = allCompleted || activeIndex > index
+        const isActive = !allCompleted && activeIndex === index
 
         return (
-          <div
-            key={step.num}
+          <li
+            key={step.id}
             className={`mallog-step-item ${
               isCompleted ? 'is-completed' : isActive ? 'is-active' : 'is-waiting'
             }`}
@@ -40,16 +39,16 @@ export default function StepIndicator({ currentStep, locale = 'kr' }) {
               ) : isActive ? (
                 <span className="mallog-step-pulse" />
               ) : (
-                step.num
+                index + 1
               )}
             </div>
             <div className="min-w-0">
               <p className="mallog-step-label">{step.label}</p>
               <p className="mallog-step-caption">{step.caption}</p>
             </div>
-          </div>
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }
