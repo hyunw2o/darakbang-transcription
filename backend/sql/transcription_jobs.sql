@@ -25,6 +25,8 @@ create table if not exists public.transcription_jobs (
   darakbang_optimized boolean not null default false,
   engine text,
   content_style text,
+  progress jsonb not null default '{"stage":"queued","percent":5}'::jsonb,
+  chunk_manifest jsonb not null default '[]'::jsonb,
   error text
 );
 
@@ -50,6 +52,8 @@ alter table if exists public.transcription_jobs
   add column if not exists darakbang_optimized boolean not null default false,
   add column if not exists engine text,
   add column if not exists content_style text,
+  add column if not exists progress jsonb default '{"stage":"queued","percent":5}'::jsonb,
+  add column if not exists chunk_manifest jsonb default '[]'::jsonb,
   add column if not exists error text;
 
 do $$
@@ -95,6 +99,14 @@ update public.transcription_jobs
 set darakbang_optimized = coalesce(darakbang_optimized, false)
 where darakbang_optimized is null;
 
+update public.transcription_jobs
+set progress = coalesce(progress, '{"stage":"queued","percent":5}'::jsonb)
+where progress is null;
+
+update public.transcription_jobs
+set chunk_manifest = coalesce(chunk_manifest, '[]'::jsonb)
+where chunk_manifest is null;
+
 alter table if exists public.transcription_jobs
   alter column owner_key set not null,
   alter column is_guest set default false,
@@ -110,7 +122,11 @@ alter table if exists public.transcription_jobs
   alter column characters set default 0,
   alter column characters set not null,
   alter column darakbang_optimized set default false,
-  alter column darakbang_optimized set not null;
+  alter column darakbang_optimized set not null,
+  alter column progress set default '{"stage":"queued","percent":5}'::jsonb,
+  alter column progress set not null,
+  alter column chunk_manifest set default '[]'::jsonb,
+  alter column chunk_manifest set not null;
 
 create index if not exists idx_transcription_jobs_owner_created_at
   on public.transcription_jobs (owner_key, created_at desc);

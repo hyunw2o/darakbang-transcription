@@ -570,6 +570,7 @@ else:
 task_status = {}
 task_owner = {}
 task_updated_at: dict[str, float] = {}
+task_progress: dict[str, dict] = {}
 mock_checkout_sessions: dict[str, dict] = {}
 portone_checkout_sessions: dict[str, dict] = {}
 transcription_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTIONS)
@@ -598,6 +599,7 @@ APP_REVIEW_DEMO_EMAILS = {
 }
 TRANSCRIPTION_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
+TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE = True
 USAGE_SCOPE_VALIDATED = False
 USAGE_TRIAL_COLUMNS_AVAILABLE = True
 BILLING_SCOPE_VALIDATED = False
@@ -705,6 +707,7 @@ def _cleanup_stale_task_states() -> None:
         task_status.pop(task_id, None)
         task_owner.pop(task_id, None)
         task_updated_at.pop(task_id, None)
+        task_progress.pop(task_id, None)
 
 
 def _set_task_runtime_state(task_id: str, status: str, owner_id: str | None = None) -> None:
@@ -724,6 +727,82 @@ def _clear_task_runtime_state(task_id: str) -> None:
     task_status.pop(task_id, None)
     task_owner.pop(task_id, None)
     task_updated_at.pop(task_id, None)
+    task_progress.pop(task_id, None)
+
+
+TRANSCRIPTION_PROGRESS_BASE_PERCENT = {
+    "queued": 5,
+    "loading_glossary": 8,
+    "preparing_audio": 10,
+    "detecting_silence": 14,
+    "splitting_audio": 18,
+    "validating_coverage": 23,
+    "transcribing": 25,
+    "reviewing_confidence": 67,
+    "retranscribing": 70,
+    "merging_transcript": 80,
+    "correcting_text": 84,
+    "finalizing_text": 94,
+    "saving_result": 97,
+    "completed": 100,
+    "error": 100,
+}
+
+
+def _build_transcription_progress(stage: str, payload: dict | None = None) -> dict:
+    normalized_stage = str(stage or "processing").strip() or "processing"
+    details = dict(payload or {})
+    details.pop("chunk_manifest", None)
+    current_chunk = max(0, int(details.get("current_chunk") or 0))
+    total_chunks = max(0, int(details.get("total_chunks") or 0))
+    percent = int(TRANSCRIPTION_PROGRESS_BASE_PERCENT.get(normalized_stage, 5))
+    if total_chunks > 0 and normalized_stage == "transcribing":
+        percent = 25 + round(40 * min(current_chunk, total_chunks) / total_chunks)
+    elif total_chunks > 0 and normalized_stage == "retranscribing":
+        percent = 70 + round(8 * min(current_chunk, total_chunks) / total_chunks)
+    progress = {
+        "stage": normalized_stage,
+        "percent": max(0, min(100, percent)),
+        "updated_at": datetime.now().isoformat(),
+    }
+    for key in (
+        "current_chunk",
+        "total_chunks",
+        "retried_chunks",
+        "retry_reasons",
+        "silence_count",
+        "source_duration",
+    ):
+        if key in details:
+            progress[key] = details[key]
+    return progress
+
+
+def _set_task_pipeline_progress(
+    task_id: str,
+    owner_key: str,
+    stage: str,
+    payload: dict | None = None,
+    *,
+    user_id: str | None,
+    is_guest: bool,
+) -> dict:
+    details = dict(payload or {})
+    progress = _build_transcription_progress(stage, details)
+    task_progress[task_id] = progress
+    _touch_task_runtime_state(task_id)
+    job_patch: dict = {"progress": progress}
+    chunk_manifest = details.get("chunk_manifest")
+    if isinstance(chunk_manifest, list):
+        job_patch["chunk_manifest"] = chunk_manifest
+    _upsert_transcription_job(
+        task_id,
+        owner_key,
+        job_patch,
+        user_id=user_id,
+        is_guest=is_guest,
+    )
+    return progress
 
 
 def _cleanup_guest_state() -> None:
@@ -2249,7 +2328,7 @@ def _upsert_transcription_job(
     user_id: str | None,
     is_guest: bool,
 ) -> bool:
-    global TRANSCRIPTION_JOBS_SCOPE_VALIDATED
+    global TRANSCRIPTION_JOBS_SCOPE_VALIDATED, TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE
     if not task_id or not owner_key or not patch:
         return False
     if not _ensure_transcription_jobs_scope_ready():
@@ -2259,6 +2338,13 @@ def _upsert_transcription_job(
     payload.pop("task_id", None)
     payload.pop("owner_key", None)
     payload.pop("user_id", None)
+    if payload.get("status") == "queued" and "progress" not in payload:
+        payload["progress"] = _build_transcription_progress("queued")
+    if not TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE:
+        payload.pop("progress", None)
+        payload.pop("chunk_manifest", None)
+    if not payload:
+        return False
     payload["updated_at"] = datetime.now().isoformat()
 
     try:
@@ -2300,6 +2386,32 @@ def _upsert_transcription_job(
         return True
     except Exception as e:
         error_text = str(e).lower()
+        optional_progress_error = (
+            any(column_name in error_text for column_name in ("progress", "chunk_manifest"))
+            and (
+                "column" in error_text
+                or "schema cache" in error_text
+                or "pgrst204" in error_text
+            )
+        )
+        if optional_progress_error and TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE:
+            TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE = False
+            reduced_patch = dict(patch)
+            reduced_patch.pop("progress", None)
+            reduced_patch.pop("chunk_manifest", None)
+            print(
+                "Warning: transcription job progress columns are not ready; "
+                "continuing with legacy job state until transcription_jobs.sql is applied."
+            )
+            if reduced_patch:
+                return _upsert_transcription_job(
+                    task_id,
+                    owner_key,
+                    reduced_patch,
+                    user_id=user_id,
+                    is_guest=is_guest,
+                )
+            return False
         if "column" in error_text and any(
             column_name in error_text
             for column_name in (
@@ -2388,9 +2500,27 @@ def _claim_transcription_job(task_id: str, worker_id: str) -> dict | None:
     return None
 
 
+def _coerce_job_json(value, fallback):
+    if isinstance(value, type(fallback)):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, type(fallback)):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return fallback
+
+
 def _build_transcription_status_response(row: dict, task_id: str, runtime_status: str | None = None) -> dict:
     row_status = str(row.get("status") or runtime_status or "")
     normalized_type = str(row.get("transcription_type") or "conversation")
+    progress = task_progress.get(task_id) or _coerce_job_json(row.get("progress"), {}) or {}
+    if not progress:
+        fallback_stage = row_status if row_status in {"queued", "completed", "error"} else "processing"
+        progress = _build_transcription_progress(fallback_stage)
+    chunk_manifest = _coerce_job_json(row.get("chunk_manifest"), [])
 
     if row_status == "completed":
         corrected_text = str(row.get("corrected_text") or "")
@@ -2413,6 +2543,8 @@ def _build_transcription_status_response(row: dict, task_id: str, runtime_status
             "transcription_type": normalized_type,
             "content_style": content_style,
             "error": row.get("error"),
+            "progress": progress,
+            "chunk_manifest": chunk_manifest,
         }
 
     return {
@@ -2421,6 +2553,8 @@ def _build_transcription_status_response(row: dict, task_id: str, runtime_status
         "error": row.get("error"),
         "created_at": row.get("created_at"),
         "transcription_type": normalized_type,
+        "progress": progress,
+        "chunk_manifest": chunk_manifest,
     }
 
 
@@ -2433,6 +2567,8 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool
     payload = dict(patch)
     payload.pop("task_id", None)
     payload.pop("user_id", None)
+    payload.pop("progress", None)
+    payload.pop("chunk_manifest", None)
     if not payload:
         return False
 
@@ -5200,7 +5336,11 @@ def split_audio_file(
         raise RuntimeError("ffmpeg/ffprobe is required to safely split long audio without gaps.")
 
     # 1) Whisper 업로드용 저용량 mp3로 전처리
-    _notify_pipeline_progress(progress_callback, "preparing_audio")
+    _notify_pipeline_progress(
+        progress_callback,
+        "preparing_audio",
+        source_duration=round(source_duration, 3),
+    )
     prepared_path = f"{file_path}_whisper.mp3"
     highpass_freq = "90" if transcription_type == "sermon" else "80"
     initial_pad_ms = int(WHISPER_INITIAL_PADDING_SECONDS * 1000)
@@ -5272,13 +5412,24 @@ def split_audio_file(
             progress_callback,
             "validating_coverage",
             total_chunks=1,
+            source_duration=round(source_duration, 3),
             chunk_manifest=_chunk_manifest([chunk]),
         )
         return [chunk]
 
     # 2) 문장 사이 무음에 가까운 위치를 우선하여 원본 시간축을 계획한다.
-    _notify_pipeline_progress(progress_callback, "detecting_silence")
+    _notify_pipeline_progress(
+        progress_callback,
+        "detecting_silence",
+        source_duration=round(source_duration, 3),
+    )
     silence_intervals = _detect_silence_intervals(file_path, source_duration, ffmpeg_bin)
+    _notify_pipeline_progress(
+        progress_callback,
+        "detecting_silence",
+        silence_count=len(silence_intervals),
+        source_duration=round(source_duration, 3),
+    )
     overlap_seconds = min(
         WHISPER_CHUNK_OVERLAP_SECONDS,
         max(0, WHISPER_SEGMENT_MAX_SECONDS // 4),
@@ -5303,6 +5454,7 @@ def split_audio_file(
         progress_callback,
         "splitting_audio",
         total_chunks=len(plans),
+        source_duration=round(source_duration, 3),
         chunk_manifest=[plan.to_manifest() for plan in plans],
     )
     chunks: list[dict] = []
@@ -5421,6 +5573,7 @@ def split_audio_file(
         progress_callback,
         "validating_coverage",
         total_chunks=len(chunks),
+        source_duration=round(source_duration, 3),
         covered_seconds=round(source_duration, 3),
         source_seconds=round(source_duration, 3),
         chunk_manifest=_chunk_manifest(chunks),
@@ -6620,14 +6773,21 @@ def _process_transcription_sync(
     corrected_text = ""
     engine = "gemini-only"
     persisted_user_id = None if is_guest else user_id
-    try:
-        runtime_custom_terms = _merge_custom_terms(
-            custom_terms,
-            [] if is_guest else _fetch_active_user_glossary_prompt_terms(user_id),
+
+    def report_pipeline_progress(stage: str, payload: dict | None = None) -> None:
+        _set_task_pipeline_progress(
+            task_id,
+            user_id,
+            stage,
+            payload,
+            user_id=persisted_user_id,
+            is_guest=is_guest,
         )
-        if runtime_custom_terms:
-            print(f"[{task_id}] Custom/user glossary terms loaded: {len(runtime_custom_terms)}")
+
+    try:
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
+        initial_progress = _build_transcription_progress("loading_glossary")
+        task_progress[task_id] = initial_progress
         _upsert_transcription_job(task_id, user_id, {
             "status": "processing",
             "language": language,
@@ -6636,6 +6796,7 @@ def _process_transcription_sync(
             "corrected_text": "",
             "characters": 0,
             "error": None,
+            "progress": initial_progress,
         }, user_id=persisted_user_id, is_guest=is_guest)
         if not is_guest:
             _upsert_transcription_state(task_id, user_id, {
@@ -6647,6 +6808,12 @@ def _process_transcription_sync(
                 "characters": 0,
                 "error": None,
             })
+        runtime_custom_terms = _merge_custom_terms(
+            custom_terms,
+            [] if is_guest else _fetch_active_user_glossary_prompt_terms(user_id),
+        )
+        if runtime_custom_terms:
+            print(f"[{task_id}] Custom/user glossary terms loaded: {len(runtime_custom_terms)}")
         _log_stage_memory(task_id, "start")
 
         use_whisper_pipeline = _should_use_whisper_pipeline()
@@ -6676,6 +6843,7 @@ def _process_transcription_sync(
                     transcription_type,
                     task_id=task_id,
                     custom_terms=runtime_custom_terms,
+                    progress_callback=report_pipeline_progress,
                 )
                 whisper_elapsed = time.perf_counter() - whisper_started_at
                 print(
@@ -6697,6 +6865,7 @@ def _process_transcription_sync(
                     engine = "whisper+local-postprocess"
                 else:
                     print(f"[{task_id}] Step 2: Gemini correction...")
+                    report_pipeline_progress("correcting_text")
                     _touch_task_runtime_state(task_id)
                     gemini_started_at = time.perf_counter()
                     try:
@@ -6728,6 +6897,7 @@ def _process_transcription_sync(
                         engine = "whisper+local-postprocess"
 
                 # 3단계: 규칙 기반 후처리
+                report_pipeline_progress("finalizing_text")
                 corrected_text = _postprocess_transcript(
                     corrected_text,
                     transcription_type,
@@ -6751,6 +6921,7 @@ def _process_transcription_sync(
                     f"[{task_id}] Whisper pipeline failed, fallback to Gemini-only: {whisper_error}"
                 )
                 engine = "gemini-only-fallback"
+                report_pipeline_progress("transcribing")
                 gemini_fallback_started_at = time.perf_counter()
                 raw_text, corrected_text = _transcribe_with_gemini_only(
                     task_id=task_id,
@@ -6784,6 +6955,7 @@ def _process_transcription_sync(
             print(f"[{task_id}] Gemini-only mode ({reason}, mode={mode})")
             engine = "gemini-only"
 
+            report_pipeline_progress("transcribing")
             gemini_only_started_at = time.perf_counter()
             raw_text, corrected_text = _transcribe_with_gemini_only(
                 task_id=task_id,
@@ -6800,6 +6972,7 @@ def _process_transcription_sync(
             )
             _log_stage_memory(task_id, "after_postprocess")
 
+        report_pipeline_progress("finalizing_text")
         corrected_text, fine_tuned_applied = _apply_fine_tuned_correction_if_enabled(
             corrected_text,
             task_id,
@@ -6813,7 +6986,9 @@ def _process_transcription_sync(
             _log_stage_memory(task_id, "after_fine_tuned_correction")
 
         # 결과 저장
+        report_pipeline_progress("saving_result")
         created_at = datetime.now().isoformat()
+        completed_progress = _build_transcription_progress("completed")
 
         completed_payload = {
             "task_id": task_id,
@@ -6832,6 +7007,7 @@ def _process_transcription_sync(
                 language=language,
             ),
             "error": None,
+            "progress": completed_progress,
         }
 
         if is_guest:
@@ -6856,6 +7032,7 @@ def _process_transcription_sync(
         import traceback
         traceback.print_exc()
         safe_error = _sanitize_transcription_error(e)
+        error_progress = _build_transcription_progress("error")
         error_payload = {
             "task_id": task_id,
             "status": "error",
@@ -6866,8 +7043,10 @@ def _process_transcription_sync(
             "raw_text": "",
             "corrected_text": "",
             "characters": 0,
+            "progress": error_progress,
         }
         _set_task_runtime_state(task_id, "error", owner_id=user_id)
+        task_progress[task_id] = error_progress
         try:
             if is_guest:
                 _set_guest_task_result(task_id, user_id, error_payload)
@@ -7004,6 +7183,8 @@ async def transcribe_audio(
 
         task_id = str(uuid.uuid4())
         _set_task_runtime_state(task_id, "queued", owner_id=user_id)
+        queued_progress = _build_transcription_progress("queued")
+        task_progress[task_id] = queued_progress
         job_state_persisted = _upsert_transcription_job(task_id, user_id, {
             "status": "queued",
             "created_at": datetime.now().isoformat(),
@@ -7017,6 +7198,7 @@ async def transcribe_audio(
             "correction_mode": normalized_correction_mode,
             "audio_seconds": audio_seconds,
             "error": None,
+            "progress": queued_progress,
         }, user_id=None if is_guest else user_id, is_guest=is_guest)
         state_persisted = False
         if not is_guest:
@@ -7139,6 +7321,7 @@ async def transcribe_audio(
                     "quota": usage_snapshot,
                     "guest": is_guest,
                     "processing_mode": "worker_queue",
+                    "progress": queued_progress,
                 }
             except Exception as worker_queue_error:
                 print(
@@ -7173,6 +7356,7 @@ async def transcribe_audio(
             "audio_seconds": audio_seconds,
             "quota": usage_snapshot,
             "guest": is_guest,
+            "progress": queued_progress,
         }
 
     except HTTPException:
@@ -7225,6 +7409,7 @@ async def get_task_status(
                     "status": "error",
                     "error": TASK_STUCK_ERROR_MESSAGE,
                     "transcription_type": "conversation",
+                    "progress": _build_transcription_progress("error"),
                 }
             runtime_status = status
 
@@ -7250,6 +7435,7 @@ async def get_task_status(
                 "error": TASK_STUCK_ERROR_MESSAGE,
                 "created_at": job_row.get("created_at"),
                 "transcription_type": job_row.get("transcription_type", "conversation"),
+                "progress": _build_transcription_progress("error"),
             }
 
         if job_status == "completed":
@@ -7263,7 +7449,11 @@ async def get_task_status(
                 _clear_task_runtime_state(task_id)
             return guest_result
         if runtime_status in {"queued", "processing"}:
-            return {"task_id": task_id, "status": runtime_status}
+            return {
+                "task_id": task_id,
+                "status": runtime_status,
+                "progress": task_progress.get(task_id) or _build_transcription_progress(runtime_status),
+            }
         return {"task_id": task_id, "status": "not_found"}
 
     query = (
@@ -7292,6 +7482,7 @@ async def get_task_status(
                 "error": TASK_STUCK_ERROR_MESSAGE,
                 "created_at": row.get("created_at"),
                 "transcription_type": row.get("transcription_type", "conversation"),
+                "progress": _build_transcription_progress("error"),
             }
 
         if row_status == "completed":
@@ -7299,7 +7490,11 @@ async def get_task_status(
         return _build_transcription_status_response(row, task_id, runtime_status=runtime_status)
 
     if runtime_status in {"queued", "processing"}:
-        return {"task_id": task_id, "status": runtime_status}
+        return {
+            "task_id": task_id,
+            "status": runtime_status,
+            "progress": task_progress.get(task_id) or _build_transcription_progress(runtime_status),
+        }
 
     return {"task_id": task_id, "status": "not_found"}
 
