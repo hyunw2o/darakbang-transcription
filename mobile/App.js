@@ -83,15 +83,77 @@ const RECORDING_OPTIONS = {
   isMeteringEnabled: true,
 };
 const RECORDING_WAVEFORM_BARS = [0.2, 0.48, 0.74, 0.52, 0.96, 0.64, 0.84, 0.38, 0.7, 0.3, 0.9, 0.5];
-const PROCESSING_STEP_KEYS = ["uploaded", "recognized", "structured", "saved"];
-const TASK_PHASE_STEP_INDEX = {
+const PROCESSING_STEP_KEYS = [
+  "uploaded",
+  "jobReady",
+  "audioPrepared",
+  "silenceSplit",
+  "timelineChecked",
+  "recognized",
+  "confidenceReviewed",
+  "timestampMerged",
+  "structured",
+  "saved",
+];
+const PROCESSING_STAGE_STEP_INDEX = {
   uploading: 0,
   queued: 1,
-  waiting: 1,
-  processing: 2,
-  historyLoading: 3,
-  done: PROCESSING_STEP_KEYS.length,
+  loading_glossary: 1,
+  preparing_audio: 2,
+  detecting_silence: 3,
+  splitting_audio: 3,
+  validating_coverage: 4,
+  transcribing: 5,
+  reviewing_confidence: 6,
+  retranscribing: 6,
+  merging_transcript: 7,
+  correcting_text: 8,
+  finalizing_text: 8,
+  saving_result: 9,
+  completed: PROCESSING_STEP_KEYS.length,
 };
+const PROCESSING_STAGE_PERCENT = {
+  uploading: 2,
+  queued: 5,
+  loading_glossary: 8,
+  preparing_audio: 10,
+  detecting_silence: 14,
+  splitting_audio: 18,
+  validating_coverage: 23,
+  transcribing: 25,
+  reviewing_confidence: 67,
+  retranscribing: 70,
+  merging_transcript: 80,
+  correcting_text: 84,
+  finalizing_text: 94,
+  saving_result: 97,
+  completed: 100,
+  error: 100,
+};
+const EMPTY_PROCESSING_PROGRESS = Object.freeze({ stage: "idle", percent: 0 });
+
+function normalizeProcessingProgress(value, fallbackStage = "queued") {
+  const source = value && typeof value === "object" ? value : {};
+  const stage = String(source.stage || fallbackStage || "queued");
+  const numericPercent = Number(source.percent);
+  return {
+    ...source,
+    stage,
+    percent: Number.isFinite(numericPercent)
+      ? Math.max(0, Math.min(100, Math.round(numericPercent)))
+      : PROCESSING_STAGE_PERCENT[stage] ?? PROCESSING_STAGE_PERCENT[fallbackStage] ?? 5,
+  };
+}
+
+function resolveProcessingDetail(copy, progress) {
+  const detail = copy.processingDetails?.[progress.stage] || copy.processingSubcopy;
+  const currentChunk = Number(progress.current_chunk) || 0;
+  const totalChunks = Number(progress.total_chunks) || 0;
+  if (!totalChunks || !["transcribing", "retranscribing"].includes(progress.stage)) {
+    return detail;
+  }
+  return `${detail} (${Math.min(currentChunk, totalChunks)}/${totalChunks})`;
+}
 
 function buildRecordedAudioName() {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
@@ -410,6 +472,7 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [taskPhase, setTaskPhase] = useState("idle");
   const [taskStateText, setTaskStateText] = useState("");
+  const [processingProgress, setProcessingProgress] = useState(EMPTY_PROCESSING_PROGRESS);
   const [result, setResult] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
@@ -1224,13 +1287,15 @@ function App() {
     }
   };
 
-  const startPollingTask = (taskId, expectedResultEpoch) => {
+  const startPollingTask = (taskId, expectedResultEpoch, initialProgress = null) => {
     stopPolling();
     const pollToken = pollTokenRef.current;
     activeTaskIdRef.current = taskId;
     pollStartedAtRef.current = Date.now();
     setTaskPhase("queued");
-    setTaskStateText(copy.taskState.waiting);
+    const queuedProgress = normalizeProcessingProgress(initialProgress, "queued");
+    setProcessingProgress(queuedProgress);
+    setTaskStateText(resolveProcessingDetail(copy, queuedProgress));
 
     pollRef.current = setInterval(async () => {
       try {
@@ -1243,6 +1308,7 @@ function App() {
           setSubmitting(false);
           setTaskPhase("idle");
           setTaskStateText("");
+          setProcessingProgress(normalizeProcessingProgress(null, "error"));
           setError(copy.errors.transcribeLongRunning);
           setNotice(`${copy.taskId}: ${taskId}`);
           return;
@@ -1254,15 +1320,18 @@ function App() {
         );
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
 
+        const fallbackStage = data.status === "processing" ? "transcribing" : data.status;
+        const nextProgress = normalizeProcessingProgress(data.progress, fallbackStage);
+        setProcessingProgress(nextProgress);
+        setTaskStateText(resolveProcessingDetail(copy, nextProgress));
+
         if (data.status === "queued") {
           setTaskPhase("queued");
-          setTaskStateText(copy.taskState.queued);
           return;
         }
 
         if (data.status === "processing") {
           setTaskPhase("processing");
-          setTaskStateText(copy.taskState.processing);
           return;
         }
 
@@ -1271,7 +1340,6 @@ function App() {
           activeTaskIdRef.current = "";
           setSubmitting(false);
           setTaskPhase("done");
-          setTaskStateText(copy.taskState.done);
           if (expectedResultEpoch !== resultEpochRef.current) return;
           setResult(data);
           setNotice(copy.notices.transcribeDone);
@@ -1290,6 +1358,7 @@ function App() {
           setSubmitting(false);
           setTaskPhase("idle");
           setTaskStateText("");
+          setProcessingProgress(normalizeProcessingProgress(data.progress, "error"));
           setError(data.error || copy.errors.transcribeError);
           return;
         }
@@ -1300,6 +1369,7 @@ function App() {
           setSubmitting(false);
           setTaskPhase("idle");
           setTaskStateText("");
+          setProcessingProgress(normalizeProcessingProgress(null, "error"));
           setError(copy.errors.taskNotFound);
         }
       } catch (e) {
@@ -1309,6 +1379,7 @@ function App() {
         setSubmitting(false);
         setTaskPhase("idle");
         setTaskStateText("");
+        setProcessingProgress(normalizeProcessingProgress(null, "error"));
         setError(e.message || copy.errors.statusFailed);
       }
     }, STATUS_POLL_INTERVAL_MS);
@@ -1326,7 +1397,9 @@ function App() {
     const submitEpoch = resetResultWorkspace(true);
     setSubmitting(true);
     setTaskPhase("uploading");
-    setTaskStateText(copy.taskState.uploading);
+    const uploadProgress = normalizeProcessingProgress(null, "uploading");
+    setProcessingProgress(uploadProgress);
+    setTaskStateText(resolveProcessingDetail(copy, uploadProgress));
 
     try {
       const body = new FormData();
@@ -1354,12 +1427,14 @@ function App() {
       }
 
       if (data.status === "queued" && data.task_id) {
-        startPollingTask(data.task_id, submitEpoch);
+        startPollingTask(data.task_id, submitEpoch, data.progress);
       } else if (data.status === "completed") {
         if (submitEpoch !== resultEpochRef.current) return;
         setSubmitting(false);
         setTaskPhase("done");
-        setTaskStateText(copy.taskState.done);
+        const completedProgress = normalizeProcessingProgress(data.progress, "completed");
+        setProcessingProgress(completedProgress);
+        setTaskStateText(resolveProcessingDetail(copy, completedProgress));
         if (data.language) {
           setTranscriptionLanguage(String(data.language).toLowerCase());
         }
@@ -1374,12 +1449,14 @@ function App() {
         setSubmitting(false);
         setTaskPhase("idle");
         setTaskStateText("");
+        setProcessingProgress(EMPTY_PROCESSING_PROGRESS);
         setNotice(data.message || copy.notices.requestAccepted);
       }
     } catch (e) {
       setSubmitting(false);
       setTaskPhase("idle");
       setTaskStateText("");
+      setProcessingProgress(normalizeProcessingProgress(null, "error"));
       setError(e.message || copy.errors.transcribeFailed);
     }
   };
@@ -1540,11 +1617,32 @@ function App() {
       copy,
     });
   }, [activeTranscriptText, copy, result, transcriptionType]);
+  const taskPhaseFallbackStage = taskPhase === "uploading"
+    ? "uploading"
+    : ["queued", "waiting"].includes(taskPhase)
+      ? "queued"
+      : taskPhase === "done"
+        ? "completed"
+        : "transcribing";
+  const normalizedProcessingProgress = normalizeProcessingProgress(
+    processingProgress.stage === "idle" ? null : processingProgress,
+    taskPhaseFallbackStage
+  );
   const processingStepIndex = Math.max(
     0,
-    Math.min(PROCESSING_STEP_KEYS.length, TASK_PHASE_STEP_INDEX[taskPhase] ?? 0)
+    Math.min(
+      PROCESSING_STEP_KEYS.length,
+      PROCESSING_STAGE_STEP_INDEX[normalizedProcessingProgress.stage] ?? 0
+    )
   );
-  const showProcessingSteps = submitting && activeTab === "transcribe";
+  const processingDetailText = resolveProcessingDetail(copy, normalizedProcessingProgress);
+  const showProcessingSteps = submitting && activeTab === "transcribe" && taskPhase !== "historyLoading";
+
+  useEffect(() => {
+    if (!submitting && taskPhase === "idle") {
+      setProcessingProgress(EMPTY_PROCESSING_PROGRESS);
+    }
+  }, [submitting, taskPhase]);
 
   useEffect(() => {
     setTranscriptEditText(transcriptSourceText);
@@ -2122,10 +2220,9 @@ function App() {
 
   const renderProcessingSteps = () => {
     if (!showProcessingSteps) return null;
-    const progressWidth = taskPhase === "done"
-      ? "100%"
-      : `${Math.min(100, Math.max(12, ((processingStepIndex + 0.45) / PROCESSING_STEP_KEYS.length) * 100))}%`;
+    const progressWidth = `${normalizedProcessingProgress.percent}%`;
     const activeTypeLabel = copy.transcriptionTypes?.[transcriptionType] || transcriptionType;
+    const allCompleted = normalizedProcessingProgress.stage === "completed";
 
     return (
       <View style={[styles.processingPanel, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
@@ -2136,15 +2233,15 @@ function App() {
           <View style={styles.processingHeaderText}>
             <Text style={[styles.processingTitle, { color: activeTheme.textPrimary }]}>{copy.processingTitle}</Text>
             <Text style={[styles.processingSubcopy, { color: activeTheme.textSecondary }]}>
-              {activeTypeLabel} · {taskStateText || copy.processingSubcopy}
+              {activeTypeLabel} · {normalizedProcessingProgress.percent}%
             </Text>
           </View>
         </View>
 
         <View style={styles.processingStepList}>
           {PROCESSING_STEP_KEYS.map((stepKey, index) => {
-            const done = taskPhase === "done" || index < processingStepIndex;
-            const active = taskPhase !== "done" && index === processingStepIndex;
+            const done = allCompleted || index < processingStepIndex;
+            const active = !allCompleted && index === processingStepIndex;
             return (
               <View key={stepKey} style={styles.processingStepRow}>
                 <View
@@ -2179,6 +2276,12 @@ function App() {
         <View style={[styles.processingProgressTrack, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
           <View style={[styles.processingProgressFill, { backgroundColor: activeTheme.accent, width: progressWidth }]} />
         </View>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.processingDetailText, { color: activeTheme.textSecondary }]}
+        >
+          {processingDetailText || taskStateText || copy.processingSubcopy}
+        </Text>
       </View>
     );
   };
@@ -4515,6 +4618,12 @@ const styles = StyleSheet.create({
   processingProgressFill: {
     height: "100%",
     borderRadius: 999,
+  },
+  processingDetailText: {
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "700",
+    textAlign: "center",
   },
   usageMetaGrid: {
     flexDirection: "row",
