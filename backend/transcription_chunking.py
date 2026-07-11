@@ -138,7 +138,7 @@ def trim_fuzzy_overlap(
     current_text: str,
     *,
     max_tokens: int = 100,
-    min_tokens: int = 4,
+    min_tokens: int = 3,
     similarity_threshold: float = 0.82,
 ) -> str:
     """Trim an overlapped prefix even when adjacent ASR passes differ slightly."""

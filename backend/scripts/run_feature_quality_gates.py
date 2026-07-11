@@ -80,6 +80,21 @@ def run_special_term_sample() -> None:
         (
             "import sys; "
             "sys.path.insert(0, 'backend'); "
+            "from main import _extract_transcription_logprob_stats, _is_low_confidence_transcription, _join_whisper_chunk_results; "
+            "stats=_extract_transcription_logprob_stats({'logprobs':[{'logprob':-0.01},{'logprob':-1.2},{'logprob':-0.02}]}); "
+            "assert _is_low_confidence_transcription(stats); "
+            "joined=_join_whisper_chunk_results([{'start':0,'end':102},{'start':78,'end':180}], "
+            "[{'text':'오늘 우리는 렘넌트의 언약을 확인합니다.'},{'text':'렘넌트의 언약을 확인합니다. 그리고 세계복음화를 시작합니다.'}]); "
+            "assert joined.count('렘넌트의 언약을 확인합니다') == 1 and '세계복음화' in joined; "
+            "print('selective-retry-and-time-merge-ok')"
+        ),
+    ])
+    run_command([
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "sys.path.insert(0, 'backend'); "
             "from church_terms import _normalize_special_term_rules; "
             "text=_normalize_special_term_rules('RVH, NRDC, H M C, R V I S, C V D I P.'); "
             "assert 'RVS' in text and 'RUTC' in text and 'HMC' in text and 'RVIS' in text and 'CVDIP' in text; "

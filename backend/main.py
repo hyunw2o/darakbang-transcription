@@ -439,6 +439,31 @@ WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE = max(
     0.0,
     float(os.getenv("WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE", "60")),
 )
+WHISPER_INCLUDE_LOGPROBS = (
+    os.getenv("WHISPER_INCLUDE_LOGPROBS", "true").strip().lower() == "true"
+)
+WHISPER_LOW_CONFIDENCE_LOGPROB = min(
+    0.0,
+    float(os.getenv("WHISPER_LOW_CONFIDENCE_LOGPROB", "-1.0")),
+)
+WHISPER_LOW_CONFIDENCE_TOKEN_RATIO = max(
+    0.0,
+    min(1.0, float(os.getenv("WHISPER_LOW_CONFIDENCE_TOKEN_RATIO", "0.05"))),
+)
+WHISPER_LOW_AVERAGE_LOGPROB = min(
+    0.0,
+    float(os.getenv("WHISPER_LOW_AVERAGE_LOGPROB", "-0.45")),
+)
+WHISPER_SELECTIVE_RETRY_ENABLED = (
+    os.getenv("WHISPER_SELECTIVE_RETRY_ENABLED", "true").strip().lower() == "true"
+)
+WHISPER_TIMESTAMP_AUDIT_ENABLED = (
+    os.getenv("WHISPER_TIMESTAMP_AUDIT_ENABLED", "true").strip().lower() == "true"
+)
+WHISPER_PREVIOUS_CONTEXT_CHARS = max(
+    100,
+    min(1200, int(os.getenv("WHISPER_PREVIOUS_CONTEXT_CHARS", "600"))),
+)
 
 # 외부 프로세스/LLM 타임아웃
 FFMPEG_PROCESS_TIMEOUT_SECONDS = max(30, int(os.getenv("FFMPEG_PROCESS_TIMEOUT_SECONDS", "300")))
@@ -4805,6 +4830,64 @@ def _extract_opening_guard_clip(source_path: str, duration_seconds: float) -> st
     return opening_path
 
 
+def _transcribe_with_whisper_timestamp_audit(
+    audio_path: str,
+    language: str,
+    prompt_text: str,
+) -> dict | None:
+    if not WHISPER_TIMESTAMP_AUDIT_ENABLED or openai_client is None:
+        return None
+    try:
+        with open(audio_path, "rb") as audio_file:
+            response = openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language=language,
+                prompt=(prompt_text or "")[-1000:],
+                response_format="verbose_json",
+                timestamp_granularities=["segment"],
+                temperature=0,
+                timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
+            )
+    except Exception as exc:
+        print(f"  Whisper timestamp audit failed: {exc}")
+        return None
+
+    data = _response_to_mapping(response)
+    text = _extract_transcription_response_text(response)
+    segments: list[dict] = []
+    segment_logprobs: list[float] = []
+    for segment in data.get("segments") or []:
+        segment_data = segment if isinstance(segment, dict) else _response_to_mapping(segment)
+        try:
+            start = float(segment_data.get("start") or 0.0)
+            end = float(segment_data.get("end") or start)
+        except (TypeError, ValueError):
+            continue
+        segment_text = str(segment_data.get("text") or "").strip()
+        avg_logprob = segment_data.get("avg_logprob")
+        try:
+            avg_logprob_value = float(avg_logprob)
+            segment_logprobs.append(avg_logprob_value)
+        except (TypeError, ValueError):
+            avg_logprob_value = None
+        segments.append({
+            "start": start,
+            "end": end,
+            "text": segment_text,
+            "avg_logprob": avg_logprob_value,
+        })
+    return {
+        "text": text,
+        "segments": segments,
+        "average_logprob": (
+            sum(segment_logprobs) / len(segment_logprobs)
+            if segment_logprobs
+            else None
+        ),
+    }
+
+
 def _join_whisper_chunk_texts(chunks: list[str]) -> str:
     joined_parts: list[str] = []
     previous_text = ""
@@ -4820,6 +4903,35 @@ def _join_whisper_chunk_texts(chunks: list[str]) -> str:
         previous_text = f"{previous_text}\n\n{current}".strip()
         if len(previous_text) > 3000:
             previous_text = previous_text[-3000:]
+    return "\n\n".join(joined_parts)
+
+
+def _join_whisper_chunk_results(chunks: list[dict], results: list[dict]) -> str:
+    joined_parts: list[str] = []
+    previous_text = ""
+    previous_end = 0.0
+    for chunk, result in zip(chunks, results):
+        current = str(result.get("text") or "").strip()
+        if not current:
+            continue
+
+        current_start = float(chunk.get("start") or 0.0)
+        has_time_overlap = bool(joined_parts) and current_start < previous_end - 0.01
+        if has_time_overlap:
+            exact_trimmed = _trim_duplicate_chunk_prefix(previous_text, current)
+            if exact_trimmed == current:
+                current = trim_fuzzy_overlap(previous_text, current)
+            else:
+                current = exact_trimmed
+        current = current.strip()
+        if not current:
+            previous_end = max(previous_end, float(chunk.get("end") or previous_end))
+            continue
+        joined_parts.append(current)
+        previous_text = f"{previous_text}\n\n{current}".strip()
+        if len(previous_text) > 5000:
+            previous_text = previous_text[-5000:]
+        previous_end = max(previous_end, float(chunk.get("end") or previous_end))
     return "\n\n".join(joined_parts)
 
 
@@ -4844,6 +4956,131 @@ def _extract_transcription_response_text(response) -> str:
     if isinstance(response, dict):
         return str(response.get("text") or "").strip()
     return str(getattr(response, "text", "") or response or "").strip()
+
+
+def _response_to_mapping(response) -> dict:
+    if response is None:
+        return {}
+    if isinstance(response, dict):
+        return response
+    if hasattr(response, "model_dump"):
+        try:
+            dumped = response.model_dump()
+            return dumped if isinstance(dumped, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _extract_transcription_logprob_stats(response) -> dict:
+    response_data = _response_to_mapping(response)
+    entries = response_data.get("logprobs") or getattr(response, "logprobs", None) or []
+    values: list[float] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            raw_value = entry.get("logprob")
+        else:
+            raw_value = getattr(entry, "logprob", None)
+        try:
+            values.append(float(raw_value))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return {
+            "average_logprob": None,
+            "minimum_logprob": None,
+            "low_confidence_ratio": None,
+            "logprob_count": 0,
+        }
+    low_count = sum(1 for value in values if value < WHISPER_LOW_CONFIDENCE_LOGPROB)
+    return {
+        "average_logprob": sum(values) / len(values),
+        "minimum_logprob": min(values),
+        "low_confidence_ratio": low_count / len(values),
+        "logprob_count": len(values),
+    }
+
+
+def _is_low_confidence_transcription(result: dict) -> bool:
+    low_ratio = result.get("low_confidence_ratio")
+    average = result.get("average_logprob")
+    if low_ratio is not None and float(low_ratio) >= WHISPER_LOW_CONFIDENCE_TOKEN_RATIO:
+        return True
+    if average is not None and float(average) < WHISPER_LOW_AVERAGE_LOGPROB:
+        return True
+    return False
+
+
+def _looks_like_cut_off_transcript(text: str, *, is_last_chunk: bool) -> bool:
+    normalized = (text or "").strip()
+    if not normalized or is_last_chunk:
+        return False
+    if normalized.endswith((".", "!", "?", "。", "！", "？", '"', "'", "다.", "요.")):
+        return False
+    return len(_transcript_tokens(normalized)) >= 8
+
+
+def _transcription_retry_reasons(result: dict, chunk: dict, total_chunks: int) -> list[str]:
+    text = str(result.get("text") or "")
+    reasons: list[str] = []
+    chunk_duration = float(chunk.get("duration") or 0.0)
+    if (
+        chunk_duration >= 45
+        and _compact_transcript_length(text) < 25
+    ) or _is_sparse_whisper_chunk(chunk_duration, text):
+        reasons.append("sparse")
+    if _is_low_confidence_transcription(result):
+        reasons.append("low_confidence")
+    if _looks_like_cut_off_transcript(
+        text,
+        is_last_chunk=int(chunk.get("index") or 0) >= total_chunks - 1,
+    ):
+        reasons.append("cut_off_boundary")
+    return reasons
+
+
+def _prefer_retry_transcription(primary: dict, retry: dict) -> dict:
+    primary_text = str(primary.get("text") or "")
+    retry_text = str(retry.get("text") or "")
+    if not primary_text:
+        return retry
+    if not retry_text:
+        return primary
+
+    primary_len = _compact_transcript_length(primary_text)
+    retry_len = _compact_transcript_length(retry_text)
+    primary_low = _is_low_confidence_transcription(primary)
+    retry_low = _is_low_confidence_transcription(retry)
+    if primary_low and not retry_low and retry_len >= max(8, int(primary_len * 0.65)):
+        return retry
+
+    primary_ratio = primary.get("low_confidence_ratio")
+    retry_ratio = retry.get("low_confidence_ratio")
+    primary_average = primary.get("average_logprob")
+    retry_average = retry.get("average_logprob")
+    confidence_improved = (
+        primary_ratio is not None
+        and retry_ratio is not None
+        and float(retry_ratio) + 0.02 < float(primary_ratio)
+    ) or (
+        primary_average is not None
+        and retry_average is not None
+        and float(retry_average) > float(primary_average) + 0.15
+    )
+    if confidence_improved and retry_len >= max(8, int(primary_len * 0.75)):
+        return retry
+    if retry_len > primary_len * 1.15 and not retry_low:
+        return retry
+    return primary
+
+
+def _format_review_timestamp(seconds: float) -> str:
+    total_seconds = max(0, int(round(float(seconds))))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds_part = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds_part:02d}"
+    return f"{minutes:02d}:{seconds_part:02d}"
 
 
 def _is_sparse_whisper_chunk(chunk_duration_sec: float, text: str) -> bool:
@@ -5431,6 +5668,7 @@ def whisper_transcribe(
     transcription_type: str = "sermon",
     task_id: str | None = None,
     custom_terms: list[str] = None,
+    progress_callback=None,
 ) -> str:
     """
     OpenAI Whisper API로 오디오 → 텍스트 변환.
@@ -5444,8 +5682,8 @@ def whisper_transcribe(
     whisper_prompt = _build_compact_whisper_prompt(language, transcription_type, custom_terms)
     transcription_models = _get_openai_transcription_model_candidates()
     print(f"  OpenAI transcription models: {', '.join(transcription_models)}")
-    chunks = split_audio_file(file_path, transcription_type)
-    all_text: list[str] = [""] * len(chunks)
+    chunks = split_audio_file(file_path, transcription_type, progress_callback=progress_callback)
+    all_results: list[dict] = [{} for _ in chunks]
 
     rapid_retry_prompt = (
         "초고속 발화 또는 랩처럼 빠른 한국어 발화가 포함될 수 있습니다. "
@@ -5473,48 +5711,70 @@ def whisper_transcribe(
         "Do not omit short or quiet speech at the beginning; transcribe it in chronological order."
     )
 
-    def transcribe_single_chunk(chunk_index: int, chunk_path: str, chunk_duration_sec: float) -> tuple[int, str]:
+    def transcribe_audio_path(chunk_index: int, audio_path: str, prompt_text: str) -> dict:
+        last_error: Exception | None = None
+        for model_index, model_name in enumerate(transcription_models):
+            try:
+                response_format = "text" if model_name == "whisper-1" else "json"
+                request_kwargs = {
+                    "model": model_name,
+                    "language": language,
+                    "prompt": prompt_text,
+                    "response_format": response_format,
+                    "temperature": OPENAI_TRANSCRIPTION_TEMPERATURE,
+                    "timeout": WHISPER_CHUNK_TIMEOUT_SECONDS,
+                }
+                normalized_model = model_name.strip().lower()
+                if (
+                    WHISPER_INCLUDE_LOGPROBS
+                    and response_format == "json"
+                    and normalized_model in {
+                        "gpt-4o-transcribe",
+                        "gpt-4o-mini-transcribe",
+                        "gpt-4o-mini-transcribe-2025-12-15",
+                    }
+                ):
+                    request_kwargs["include"] = ["logprobs"]
+                with open(audio_path, "rb") as audio_file:
+                    response = openai_client.audio.transcriptions.create(
+                        file=audio_file,
+                        **request_kwargs,
+                    )
+                text = _extract_transcription_response_text(response)
+                if not text:
+                    raise RuntimeError(f"{model_name} returned empty text.")
+                if model_index > 0:
+                    print(f"  Chunk {chunk_index+1}: transcription fallback succeeded with {model_name}.")
+                return {
+                    "text": text,
+                    "model": model_name,
+                    **_extract_transcription_logprob_stats(response),
+                    "timestamp_segments": [],
+                    "needs_review": False,
+                }
+            except Exception as exc:
+                last_error = exc
+                if model_index < len(transcription_models) - 1:
+                    next_model = transcription_models[model_index + 1]
+                    print(
+                        f"  Chunk {chunk_index+1}: {model_name} failed ({exc}); "
+                        f"retrying with {next_model}."
+                    )
+                    continue
+                break
+        if last_error:
+            raise last_error
+        raise RuntimeError("OpenAI transcription returned no transcript.")
+
+    def transcribe_single_chunk(chunk_index: int, chunk: dict) -> tuple[int, dict]:
+        chunk_path = str(chunk["path"])
+        chunk_duration_sec = float(chunk.get("duration") or 0.0)
         print(f"  Whisper transcribing chunk {chunk_index+1}/{len(chunks)}...")
         if task_id:
             _touch_task_runtime_state(task_id)
 
-        best_text = ""
+        best_result: dict = {}
         last_error: Exception | None = None
-
-        def transcribe_audio_path(audio_path: str, prompt_text: str) -> str:
-            last_error: Exception | None = None
-            for model_index, model_name in enumerate(transcription_models):
-                try:
-                    response_format = "text" if model_name == "whisper-1" else "json"
-                    with open(audio_path, "rb") as audio_file:
-                        response = openai_client.audio.transcriptions.create(
-                            model=model_name,
-                            file=audio_file,
-                            language=language,
-                            prompt=prompt_text,
-                            response_format=response_format,
-                            temperature=OPENAI_TRANSCRIPTION_TEMPERATURE,
-                            timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
-                        )
-                    text = _extract_transcription_response_text(response)
-                    if text:
-                        if model_index > 0:
-                            print(f"  Chunk {chunk_index+1}: transcription fallback succeeded with {model_name}.")
-                        return text
-                    raise RuntimeError(f"{model_name} returned empty text.")
-                except Exception as exc:
-                    last_error = exc
-                    if model_index < len(transcription_models) - 1:
-                        next_model = transcription_models[model_index + 1]
-                        print(
-                            f"  Chunk {chunk_index+1}: {model_name} failed ({exc}); "
-                            f"retrying with {next_model}."
-                        )
-                        continue
-                    break
-            if last_error:
-                raise last_error
-            raise RuntimeError("OpenAI transcription returned no transcript.")
 
         for attempt in range(WHISPER_CHUNK_MAX_RETRIES):
             use_rapid_hint = attempt > 0
@@ -5522,10 +5782,10 @@ def whisper_transcribe(
             if chunk_index == 0:
                 prompt_text = f"{opening_guard_prompt} {prompt_text}"
             try:
-                chunk_text = transcribe_audio_path(chunk_path, prompt_text)
+                chunk_result = transcribe_audio_path(chunk_index, chunk_path, prompt_text)
+                chunk_text = str(chunk_result.get("text") or "")
                 if chunk_text:
-                    if len(chunk_text) > len(best_text):
-                        best_text = chunk_text
+                    best_result = _prefer_retry_transcription(best_result, chunk_result) if best_result else chunk_result
                 else:
                     raise RuntimeError("Whisper returned empty text.")
 
@@ -5560,6 +5820,7 @@ def whisper_transcribe(
                 if task_id:
                     _touch_task_runtime_state(task_id)
 
+        best_text = str(best_result.get("text") or "")
         if not best_text and last_error:
             raise RuntimeError(
                 f"Whisper chunk {chunk_index+1}/{len(chunks)} failed after {WHISPER_CHUNK_MAX_RETRIES} attempts: {last_error}"
@@ -5577,7 +5838,8 @@ def whisper_transcribe(
             if guard_path:
                 try:
                     guard_prompt = f"{opening_guard_prompt} {rapid_retry_prompt} {whisper_prompt}"
-                    guard_text = transcribe_audio_path(guard_path, guard_prompt)
+                    guard_result = transcribe_audio_path(chunk_index, guard_path, guard_prompt)
+                    guard_text = str(guard_result.get("text") or "")
                     merged_text = _merge_opening_guard_text(guard_text, best_text)
                     if merged_text != best_text:
                         print(
@@ -5585,6 +5847,7 @@ def whisper_transcribe(
                             f"guard_chars={len(guard_text)}, merged_chars={len(merged_text)}"
                         )
                         best_text = merged_text
+                        best_result["text"] = merged_text
                 except Exception as exc:
                     print(f"  Chunk 1 opening guard failed; keeping primary transcript: {exc}")
                 finally:
@@ -5604,7 +5867,8 @@ def whisper_transcribe(
             if source_guard_path:
                 try:
                     source_guard_prompt = f"{opening_guard_prompt} {rapid_retry_prompt} {whisper_prompt}"
-                    source_guard_text = transcribe_audio_path(source_guard_path, source_guard_prompt)
+                    source_guard_result = transcribe_audio_path(chunk_index, source_guard_path, source_guard_prompt)
+                    source_guard_text = str(source_guard_result.get("text") or "")
                     merged_text = _merge_opening_guard_text(source_guard_text, best_text)
                     if merged_text != best_text:
                         print(
@@ -5612,6 +5876,7 @@ def whisper_transcribe(
                             f"guard_chars={len(source_guard_text)}, merged_chars={len(merged_text)}"
                         )
                         best_text = merged_text
+                        best_result["text"] = merged_text
                 except Exception as exc:
                     print(f"  Chunk 1 source opening guard failed; keeping current transcript: {exc}")
                 finally:
@@ -5624,42 +5889,153 @@ def whisper_transcribe(
             f"  Chunk {chunk_index+1}/{len(chunks)} done: "
             f"duration={chunk_duration_sec:.1f}s, chars={len(best_text)}"
         )
-        return chunk_index, best_text
+        return chunk_index, best_result
 
-    worker_count = min(WHISPER_CHUNK_CONCURRENCY, max(1, len(chunks)))
-    if worker_count <= 1 or len(chunks) <= 1:
-        for index, chunk in enumerate(chunks):
-            chunk_path = str(chunk["path"])
-            chunk_duration_sec = float(chunk.get("duration") or 0.0)
-            try:
-                _, chunk_text = transcribe_single_chunk(index, chunk_path, chunk_duration_sec)
-                all_text[index] = chunk_text
-            finally:
-                if chunk_path != file_path and os.path.exists(chunk_path):
+    _notify_pipeline_progress(
+        progress_callback,
+        "transcribing",
+        current_chunk=0,
+        total_chunks=len(chunks),
+        chunk_manifest=_chunk_manifest(chunks),
+    )
+    try:
+        worker_count = min(WHISPER_CHUNK_CONCURRENCY, max(1, len(chunks)))
+        if worker_count <= 1 or len(chunks) <= 1:
+            for index, chunk in enumerate(chunks):
+                _, chunk_result = transcribe_single_chunk(index, chunk)
+                all_results[index] = chunk_result
+                chunk["status"] = "transcribed"
+                _notify_pipeline_progress(
+                    progress_callback,
+                    "transcribing",
+                    current_chunk=index + 1,
+                    total_chunks=len(chunks),
+                    chunk_manifest=_chunk_manifest(chunks),
+                )
+        else:
+            print(f"  Whisper chunk concurrency enabled: {worker_count} workers")
+            completed_chunks = 0
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                future_map = {
+                    executor.submit(transcribe_single_chunk, index, chunk): index
+                    for index, chunk in enumerate(chunks)
+                }
+                for future in as_completed(future_map):
+                    index = future_map[future]
+                    _, chunk_result = future.result()
+                    all_results[index] = chunk_result
+                    chunks[index]["status"] = "transcribed"
+                    completed_chunks += 1
+                    _notify_pipeline_progress(
+                        progress_callback,
+                        "transcribing",
+                        current_chunk=completed_chunks,
+                        total_chunks=len(chunks),
+                        chunk_manifest=_chunk_manifest(chunks),
+                    )
+
+        _notify_pipeline_progress(
+            progress_callback,
+            "reviewing_confidence",
+            total_chunks=len(chunks),
+            chunk_manifest=_chunk_manifest(chunks),
+        )
+        low_confidence_indexes: list[int] = []
+        if WHISPER_SELECTIVE_RETRY_ENABLED:
+            for index, (chunk, result) in enumerate(zip(chunks, all_results)):
+                reasons = _transcription_retry_reasons(result, chunk, len(chunks))
+                if not reasons:
+                    continue
+                low_confidence_indexes.append(index)
+                chunks[index]["status"] = "retrying"
+                previous_context = ""
+                if index > 0:
+                    previous_context = str(all_results[index - 1].get("text") or "").strip()
+                    previous_context = previous_context[-WHISPER_PREVIOUS_CONTEXT_CHARS:]
+                context_label = (
+                    "직전 구간 전사"
+                    if language == "ko"
+                    else "直前区間の文字起こし"
+                    if language == "ja"
+                    else "Previous segment transcript"
+                )
+                retry_prompt = f"{whisper_prompt} {rapid_retry_prompt}"
+                if previous_context:
+                    retry_prompt = f"{retry_prompt}\n{context_label}: {previous_context}"
+                retry_prompt = retry_prompt[-WHISPER_PROMPT_MAX_CHARS:]
+                _notify_pipeline_progress(
+                    progress_callback,
+                    "retranscribing",
+                    current_chunk=index + 1,
+                    total_chunks=len(chunks),
+                    retry_reasons=reasons,
+                    chunk_manifest=_chunk_manifest(chunks),
+                )
+                try:
+                    retry_result = transcribe_audio_path(index, str(chunk["path"]), retry_prompt)
+                    chosen = _prefer_retry_transcription(result, retry_result)
+                except Exception as exc:
+                    print(f"  Chunk {index+1}: selective retry failed; keeping primary transcript: {exc}")
+                    chosen = result
+
+                unresolved_reasons = _transcription_retry_reasons(chosen, chunk, len(chunks))
+                if unresolved_reasons and WHISPER_TIMESTAMP_AUDIT_ENABLED:
+                    audit = _transcribe_with_whisper_timestamp_audit(
+                        str(chunk["path"]),
+                        language,
+                        retry_prompt,
+                    )
+                    if audit:
+                        offset = float(chunk.get("start") or 0.0)
+                        chosen["timestamp_segments"] = [
+                            {
+                                **segment,
+                                "start": round(offset + float(segment.get("start") or 0.0), 3),
+                                "end": round(offset + float(segment.get("end") or 0.0), 3),
+                            }
+                            for segment in audit.get("segments") or []
+                        ]
+                        audit_text = str(audit.get("text") or "")
+                        chosen_len = _compact_transcript_length(str(chosen.get("text") or ""))
+                        audit_len = _compact_transcript_length(audit_text)
+                        if audit_len > max(20, int(chosen_len * 1.25)):
+                            chosen = {
+                                **chosen,
+                                "text": audit_text,
+                                "model": "whisper-1-timestamp-audit",
+                                "average_logprob": audit.get("average_logprob"),
+                                "low_confidence_ratio": None,
+                            }
+                            unresolved_reasons = _transcription_retry_reasons(chosen, chunk, len(chunks))
+
+                if unresolved_reasons:
+                    chosen["needs_review"] = True
+                    review_label = "확인 필요" if language == "ko" else "要確認" if language == "ja" else "Review needed"
+                    marker = f"[{review_label} {_format_review_timestamp(float(chunk.get('core_start') or 0.0))}]"
+                    chosen_text = str(chosen.get("text") or "").strip()
+                    if marker not in chosen_text:
+                        chosen["text"] = f"{marker}\n{chosen_text}".strip()
+                    chunks[index]["status"] = "needs_review"
+                else:
+                    chunks[index]["status"] = "verified"
+                all_results[index] = chosen
+
+        _notify_pipeline_progress(
+            progress_callback,
+            "merging_transcript",
+            total_chunks=len(chunks),
+            retried_chunks=len(low_confidence_indexes),
+            chunk_manifest=_chunk_manifest(chunks),
+        )
+        return _join_whisper_chunk_results(chunks, all_results)
+    finally:
+        for chunk in chunks:
+            chunk_path = str(chunk.get("path") or "")
+            if chunk_path and chunk_path != file_path and os.path.exists(chunk_path):
+                try:
                     os.unlink(chunk_path)
-        return _join_whisper_chunk_texts(all_text)
-
-    print(f"  Whisper chunk concurrency enabled: {worker_count} workers")
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        future_map = {
-            executor.submit(
-                transcribe_single_chunk,
-                index,
-                str(chunk["path"]),
-                float(chunk.get("duration") or 0.0),
-            ): (index, str(chunk["path"]))
-            for index, chunk in enumerate(chunks)
-        }
-        for future in as_completed(future_map):
-            index, chunk_path = future_map[future]
-            try:
-                _, chunk_text = future.result()
-                all_text[index] = chunk_text
-            finally:
-                if chunk_path != file_path and os.path.exists(chunk_path):
-                    os.unlink(chunk_path)
-
-    return _join_whisper_chunk_texts(all_text)
+                except Exception:
+                    pass
 
 
 async def gemini_correct_and_structure(
