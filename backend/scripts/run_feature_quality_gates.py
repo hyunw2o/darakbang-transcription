@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_FILES = [
     "backend/main.py",
     "backend/church_terms.py",
+    "backend/transcription_chunking.py",
     "backend/worker.py",
     "backend/scripts/export_correction_finetune_dataset.py",
     "backend/scripts/manage_correction_finetune.py",
@@ -58,6 +59,21 @@ def run_main_import() -> None:
 
 
 def run_special_term_sample() -> None:
+    run_command([
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "sys.path.insert(0, 'backend'); "
+            "from transcription_chunking import build_silence_aware_chunk_plan, find_coverage_gaps; "
+            "plans=build_silence_aware_chunk_plan(3600, [(89.5,90.5),(179.5,180.5)], "
+            "target_seconds=90, min_seconds=60, max_seconds=120, overlap_seconds=12); "
+            "assert not find_coverage_gaps(plans, 3600, tolerance=0.1); "
+            "assert max(plan.duration for plan in plans) <= 120.001; "
+            "assert plans[0].core_start == 0 and plans[-1].core_end == 3600; "
+            "print('silence-aware-chunk-coverage-ok', len(plans))"
+        ),
+    ])
     run_command([
         sys.executable,
         "-c",

@@ -31,6 +31,13 @@ import shutil
 import resource
 from collections import defaultdict, deque
 
+from transcription_chunking import (
+    AudioChunkPlan,
+    build_silence_aware_chunk_plan,
+    find_coverage_gaps,
+    trim_fuzzy_overlap,
+)
+
 try:
     import stripe
 except Exception:
@@ -377,11 +384,31 @@ PREFER_WHISPER_FOR_LONG_AUDIO = (
 )
 WHISPER_SEGMENT_SECONDS = max(
     60,
-    int(os.getenv("WHISPER_SEGMENT_SECONDS", "240")),
+    min(90, int(os.getenv("WHISPER_SEGMENT_SECONDS", "90"))),
+)
+WHISPER_SEGMENT_MIN_SECONDS = max(
+    30,
+    min(WHISPER_SEGMENT_SECONDS, int(os.getenv("WHISPER_SEGMENT_MIN_SECONDS", "60"))),
+)
+WHISPER_SEGMENT_MAX_SECONDS = max(
+    WHISPER_SEGMENT_SECONDS,
+    min(120, int(os.getenv("WHISPER_SEGMENT_MAX_SECONDS", "120"))),
 )
 WHISPER_CHUNK_OVERLAP_SECONDS = max(
     0,
-    min(30, int(os.getenv("WHISPER_CHUNK_OVERLAP_SECONDS", "8"))),
+    min(30, int(os.getenv("WHISPER_CHUNK_OVERLAP_SECONDS", "12"))),
+)
+WHISPER_SILENCE_THRESHOLD_DB = max(
+    -60.0,
+    min(-15.0, float(os.getenv("WHISPER_SILENCE_THRESHOLD_DB", "-36"))),
+)
+WHISPER_SILENCE_MIN_SECONDS = max(
+    0.15,
+    min(2.0, float(os.getenv("WHISPER_SILENCE_MIN_SECONDS", "0.45"))),
+)
+WHISPER_COVERAGE_TOLERANCE_SECONDS = max(
+    0.01,
+    min(0.1, float(os.getenv("WHISPER_COVERAGE_TOLERANCE_SECONDS", "0.1"))),
 )
 WHISPER_BOUNDARY_PADDING_SECONDS = max(
     0.0,
@@ -4831,20 +4858,112 @@ def _is_sparse_whisper_chunk(chunk_duration_sec: float, text: str) -> bool:
     return chars_per_minute < WHISPER_CHUNK_LOW_DENSITY_CHARS_PER_MINUTE
 
 
-def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list[tuple[str, float]]:
+def _notify_pipeline_progress(progress_callback, stage: str, **payload) -> None:
+    if not progress_callback:
+        return
+    try:
+        progress_callback(stage, payload)
+    except Exception as exc:
+        print(f"Pipeline progress callback failed at {stage}: {exc}")
+
+
+def _detect_silence_intervals(
+    audio_path: str,
+    duration_seconds: float,
+    ffmpeg_bin: str,
+) -> list[tuple[float, float]]:
+    try:
+        completed = subprocess.run(
+            [
+                ffmpeg_bin,
+                "-hide_banner",
+                "-nostats",
+                "-i",
+                audio_path,
+                "-af",
+                (
+                    f"silencedetect=noise={WHISPER_SILENCE_THRESHOLD_DB:.1f}dB:"
+                    f"d={WHISPER_SILENCE_MIN_SECONDS:.3f}"
+                ),
+                "-f",
+                "null",
+                "-",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        print(f"Silence detection failed; fixed target boundaries will be used: {exc}")
+        return []
+
+    timestamp_pattern = r"(-?\d+(?:\.\d+)?)"
+    start_pattern = re.compile(rf"silence_start:\s*{timestamp_pattern}")
+    end_pattern = re.compile(rf"silence_end:\s*{timestamp_pattern}")
+    intervals: list[tuple[float, float]] = []
+    pending_start: float | None = None
+    for line in (completed.stderr or "").splitlines():
+        start_match = start_pattern.search(line)
+        if start_match:
+            pending_start = max(0.0, float(start_match.group(1)))
+            continue
+        end_match = end_pattern.search(line)
+        if end_match and pending_start is not None:
+            silence_end = min(duration_seconds, max(pending_start, float(end_match.group(1))))
+            intervals.append((pending_start, silence_end))
+            pending_start = None
+    if pending_start is not None and pending_start < duration_seconds:
+        intervals.append((pending_start, duration_seconds))
+    return intervals
+
+
+def _chunk_manifest(chunks: list[dict], status: str | None = None) -> list[dict]:
+    manifest: list[dict] = []
+    for chunk in chunks:
+        manifest.append({
+            "index": int(chunk.get("index") or 0),
+            "start": round(float(chunk.get("start") or 0.0), 3),
+            "end": round(float(chunk.get("end") or 0.0), 3),
+            "core_start": round(float(chunk.get("core_start") or 0.0), 3),
+            "core_end": round(float(chunk.get("core_end") or 0.0), 3),
+            "duration": round(float(chunk.get("duration") or 0.0), 3),
+            "status": status or str(chunk.get("status") or "pending"),
+        })
+    return manifest
+
+
+def split_audio_file(
+    file_path: str,
+    transcription_type: str = "sermon",
+    progress_callback=None,
+) -> list[dict]:
     """
     Whisper 전처리 + 청크 분할 (메모리 최적화 버전).
     ffmpeg/ffprobe 기반으로 디스크 처리하여 대용량 오디오에서도
     Python 프로세스 메모리 사용량을 최소화한다.
-    반환값: [(chunk_path, duration_sec), ...]
+    반환값은 원본 시간축의 시작/끝을 포함한 청크 메타데이터 목록이다.
     """
     ffmpeg_bin = shutil.which("ffmpeg")
     ffprobe_bin = shutil.which("ffprobe")
+    source_duration = _extract_duration_with_ffprobe(file_path)
     if not ffmpeg_bin or not ffprobe_bin:
-        print("ffmpeg/ffprobe not found. Falling back to original file without preprocessing.")
-        return [(file_path, _extract_duration_with_ffprobe(file_path))]
+        if source_duration <= WHISPER_SEGMENT_MAX_SECONDS and os.path.getsize(file_path) <= WHISPER_MAX_SIZE:
+            return [{
+                "index": 0,
+                "path": file_path,
+                "start": 0.0,
+                "end": source_duration,
+                "core_start": 0.0,
+                "core_end": source_duration,
+                "duration": source_duration,
+                "status": "pending",
+            }]
+        raise RuntimeError("ffmpeg/ffprobe is required to safely split long audio without gaps.")
 
     # 1) Whisper 업로드용 저용량 mp3로 전처리
+    _notify_pipeline_progress(progress_callback, "preparing_audio")
     prepared_path = f"{file_path}_whisper.mp3"
     highpass_freq = "90" if transcription_type == "sermon" else "80"
     initial_pad_ms = int(WHISPER_INITIAL_PADDING_SECONDS * 1000)
@@ -4884,86 +5003,153 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
             timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
         )
     except Exception as exc:
-        print(f"ffmpeg preprocessing failed, using original file: {exc}")
-        return [(file_path, _extract_duration_with_ffprobe(file_path))]
+        if source_duration <= WHISPER_SEGMENT_MAX_SECONDS and os.path.getsize(file_path) <= WHISPER_MAX_SIZE:
+            print(f"ffmpeg preprocessing failed, using short original file: {exc}")
+            return [{
+                "index": 0,
+                "path": file_path,
+                "start": 0.0,
+                "end": source_duration,
+                "core_start": 0.0,
+                "core_end": source_duration,
+                "duration": source_duration,
+                "status": "pending",
+            }]
+        raise RuntimeError(f"Long-audio preprocessing failed: {exc}") from exc
 
     prepared_size = os.path.getsize(prepared_path) if os.path.exists(prepared_path) else 0
     prepared_duration = _extract_duration_with_ffprobe(prepared_path)
-    if prepared_size <= WHISPER_MAX_SIZE and prepared_duration <= WHISPER_SEGMENT_SECONDS:
-        return [(prepared_path, prepared_duration)]
+    if prepared_size <= WHISPER_MAX_SIZE and source_duration <= WHISPER_SEGMENT_SECONDS:
+        chunk = {
+            "index": 0,
+            "path": prepared_path,
+            "start": 0.0,
+            "end": source_duration,
+            "core_start": 0.0,
+            "core_end": source_duration,
+            "duration": source_duration,
+            "actual_duration": prepared_duration,
+            "status": "pending",
+        }
+        _notify_pipeline_progress(
+            progress_callback,
+            "validating_coverage",
+            total_chunks=1,
+            chunk_manifest=_chunk_manifest([chunk]),
+        )
+        return [chunk]
 
-    # 2) 경계 누락을 줄이기 위해 앞뒤가 조금 겹치도록 정확한 시간 구간을 추출한다.
-    # ffmpeg segment muxer는 MP3 프레임/타임스탬프 경계에 따라 첫 단어나 중간 단어가 흔들릴 수 있다.
+    # 2) 문장 사이 무음에 가까운 위치를 우선하여 원본 시간축을 계획한다.
+    _notify_pipeline_progress(progress_callback, "detecting_silence")
+    silence_intervals = _detect_silence_intervals(file_path, source_duration, ffmpeg_bin)
     overlap_seconds = min(
         WHISPER_CHUNK_OVERLAP_SECONDS,
-        max(0, WHISPER_SEGMENT_SECONDS // 4),
+        max(0, WHISPER_SEGMENT_MAX_SECONDS // 4),
     )
-    chunk_paths: list[str] = []
-    chunk_index = 0
-    segment_start = 0.0
+    plans = build_silence_aware_chunk_plan(
+        source_duration,
+        silence_intervals,
+        target_seconds=WHISPER_SEGMENT_SECONDS,
+        min_seconds=WHISPER_SEGMENT_MIN_SECONDS,
+        max_seconds=WHISPER_SEGMENT_MAX_SECONDS,
+        overlap_seconds=overlap_seconds,
+    )
+    coverage_gaps = find_coverage_gaps(
+        plans,
+        source_duration,
+        tolerance=WHISPER_COVERAGE_TOLERANCE_SECONDS,
+    )
+    if coverage_gaps:
+        raise RuntimeError(f"Audio chunk plan does not cover the source timeline: {coverage_gaps}")
+
+    _notify_pipeline_progress(
+        progress_callback,
+        "splitting_audio",
+        total_chunks=len(plans),
+        chunk_manifest=[plan.to_manifest() for plan in plans],
+    )
+    chunks: list[dict] = []
+    created_paths: list[str] = []
     try:
-        while segment_start < prepared_duration:
-            remaining_duration = prepared_duration - segment_start
-            min_tail_seconds = max(1.0, WHISPER_BOUNDARY_PADDING_SECONDS + 0.5)
-            if chunk_index > 0 and remaining_duration <= min_tail_seconds:
-                break
-
-            chunk_start = max(0.0, segment_start - overlap_seconds)
-            nominal_end = min(prepared_duration, segment_start + WHISPER_SEGMENT_SECONDS)
-            chunk_end = min(
-                prepared_duration,
-                nominal_end + (overlap_seconds if nominal_end < prepared_duration else 0),
+        for plan in plans:
+            prepared_start = 0.0 if plan.extract_start <= 0 else plan.extract_start + WHISPER_INITIAL_PADDING_SECONDS
+            prepared_end = (
+                prepared_duration
+                if plan.extract_end >= source_duration
+                else plan.extract_end + WHISPER_INITIAL_PADDING_SECONDS
             )
-            chunk_duration = max(0.1, chunk_end - chunk_start)
-            chunk_path = f"{prepared_path}_chunk_{chunk_index:03d}.mp3"
+            requested_duration = max(0.1, prepared_end - prepared_start)
+            chunk_path = f"{prepared_path}_chunk_{plan.index:03d}.mp3"
 
-            subprocess.run(
-                [
-                    ffmpeg_bin,
-                    "-y",
-                    "-fflags",
-                    "+genpts",
-                    "-i",
-                    prepared_path,
-                    "-ss",
-                    f"{chunk_start:.3f}",
-                    "-t",
-                    f"{chunk_duration:.3f}",
-                    "-map",
-                    "0:a:0",
-                    "-c:a",
-                    "libmp3lame",
-                    "-ar",
-                    str(WHISPER_PREPROCESS_SAMPLE_RATE),
-                    "-ac",
-                    "1",
-                    "-b:a",
-                    WHISPER_PREPROCESS_BITRATE,
-                    "-avoid_negative_ts",
-                    "make_zero",
-                    chunk_path,
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=True,
-                timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
-            )
-            chunk_paths.append(chunk_path)
-            chunk_index += 1
-            if chunk_end >= prepared_duration - 0.05:
-                break
-            segment_start += WHISPER_SEGMENT_SECONDS
+            for extraction_attempt in range(2):
+                subprocess.run(
+                    [
+                        ffmpeg_bin,
+                        "-y",
+                        "-fflags",
+                        "+genpts",
+                        "-i",
+                        prepared_path,
+                        "-ss",
+                        f"{prepared_start:.3f}",
+                        "-t",
+                        f"{requested_duration:.3f}",
+                        "-map",
+                        "0:a:0",
+                        "-c:a",
+                        "libmp3lame",
+                        "-ar",
+                        str(WHISPER_PREPROCESS_SAMPLE_RATE),
+                        "-ac",
+                        "1",
+                        "-b:a",
+                        WHISPER_PREPROCESS_BITRATE,
+                        "-avoid_negative_ts",
+                        "make_zero",
+                        chunk_path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True,
+                    timeout=FFMPEG_PROCESS_TIMEOUT_SECONDS,
+                )
+                actual_duration = _extract_duration_with_ffprobe(chunk_path)
+                if actual_duration + WHISPER_COVERAGE_TOLERANCE_SECONDS >= requested_duration:
+                    break
+                if extraction_attempt == 0:
+                    requested_duration = min(prepared_duration - prepared_start, requested_duration + 0.25)
+                    continue
+                raise RuntimeError(
+                    f"Chunk {plan.index + 1} extraction is shorter than requested "
+                    f"({actual_duration:.3f}s < {requested_duration:.3f}s)."
+                )
+
+            if os.path.getsize(chunk_path) > WHISPER_MAX_SIZE:
+                raise RuntimeError(f"Chunk {plan.index + 1} still exceeds the transcription upload limit.")
+            created_paths.append(chunk_path)
+            chunks.append({
+                "index": plan.index,
+                "path": chunk_path,
+                "start": plan.extract_start,
+                "end": plan.extract_end,
+                "core_start": plan.core_start,
+                "core_end": plan.core_end,
+                "duration": plan.duration,
+                "actual_duration": actual_duration,
+                "status": "pending",
+            })
     except Exception as exc:
-        print(f"ffmpeg overlapped chunk extraction failed, using prepared file: {exc}")
-        for created in chunk_paths:
+        for created in created_paths:
             try:
                 os.unlink(created)
             except Exception:
                 pass
-        return [(prepared_path, prepared_duration)]
-
-    if not chunk_paths:
-        return [(prepared_path, prepared_duration)]
+        try:
+            if os.path.exists(prepared_path):
+                os.unlink(prepared_path)
+        except Exception:
+            pass
+        raise RuntimeError(f"Safe audio chunk extraction failed: {exc}") from exc
 
     # 분할 성공 시 중간 파일 삭제
     try:
@@ -4971,22 +5157,37 @@ def split_audio_file(file_path: str, transcription_type: str = "sermon") -> list
     except Exception:
         pass
 
-    chunks: list[tuple[str, float]] = []
-    for chunk_path in chunk_paths:
-        chunk_size = os.path.getsize(chunk_path)
-        if chunk_size > WHISPER_MAX_SIZE:
-            # 극단 케이스: 여전히 제한 초과면 안전하게 단일 파일 폴백
-            print(f"Chunk still exceeds Whisper limit ({chunk_path}). Falling back to original file.")
-            for created in chunk_paths:
-                try:
-                    os.unlink(created)
-                except Exception:
-                    pass
-            return [(file_path, _extract_duration_with_ffprobe(file_path))]
+    extracted_plans = [
+        AudioChunkPlan(
+            index=int(chunk["index"]),
+            core_start=float(chunk["core_start"]),
+            core_end=float(chunk["core_end"]),
+            extract_start=float(chunk["start"]),
+            extract_end=float(chunk["end"]),
+        )
+        for chunk in chunks
+    ]
+    coverage_gaps = find_coverage_gaps(
+        extracted_plans,
+        source_duration,
+        tolerance=WHISPER_COVERAGE_TOLERANCE_SECONDS,
+    )
+    if coverage_gaps:
+        for chunk in chunks:
+            try:
+                os.unlink(str(chunk["path"]))
+            except Exception:
+                pass
+        raise RuntimeError(f"Extracted chunks leave uncovered audio ranges: {coverage_gaps}")
 
-        chunk_duration = _extract_duration_with_ffprobe(chunk_path)
-        chunks.append((chunk_path, chunk_duration))
-
+    _notify_pipeline_progress(
+        progress_callback,
+        "validating_coverage",
+        total_chunks=len(chunks),
+        covered_seconds=round(source_duration, 3),
+        source_seconds=round(source_duration, 3),
+        chunk_manifest=_chunk_manifest(chunks),
+    )
     return chunks
 
 
@@ -5427,7 +5628,9 @@ def whisper_transcribe(
 
     worker_count = min(WHISPER_CHUNK_CONCURRENCY, max(1, len(chunks)))
     if worker_count <= 1 or len(chunks) <= 1:
-        for index, (chunk_path, chunk_duration_sec) in enumerate(chunks):
+        for index, chunk in enumerate(chunks):
+            chunk_path = str(chunk["path"])
+            chunk_duration_sec = float(chunk.get("duration") or 0.0)
             try:
                 _, chunk_text = transcribe_single_chunk(index, chunk_path, chunk_duration_sec)
                 all_text[index] = chunk_text
@@ -5439,8 +5642,13 @@ def whisper_transcribe(
     print(f"  Whisper chunk concurrency enabled: {worker_count} workers")
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         future_map = {
-            executor.submit(transcribe_single_chunk, index, chunk_path, chunk_duration_sec): (index, chunk_path)
-            for index, (chunk_path, chunk_duration_sec) in enumerate(chunks)
+            executor.submit(
+                transcribe_single_chunk,
+                index,
+                str(chunk["path"]),
+                float(chunk.get("duration") or 0.0),
+            ): (index, str(chunk["path"]))
+            for index, chunk in enumerate(chunks)
         }
         for future in as_completed(future_map):
             index, chunk_path = future_map[future]
