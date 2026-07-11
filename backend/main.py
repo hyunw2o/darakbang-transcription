@@ -2518,7 +2518,7 @@ def _build_transcription_status_response(row: dict, task_id: str, runtime_status
     normalized_type = str(row.get("transcription_type") or "conversation")
     progress = task_progress.get(task_id) or _coerce_job_json(row.get("progress"), {}) or {}
     if not progress:
-        fallback_stage = row_status if row_status in {"queued", "completed", "error"} else "processing"
+        fallback_stage = row_status if row_status in {"queued", "completed", "error"} else "transcribing"
         progress = _build_transcription_progress(fallback_stage)
     chunk_manifest = _coerce_job_json(row.get("chunk_manifest"), [])
 

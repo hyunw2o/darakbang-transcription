@@ -87,6 +87,8 @@ def run_special_term_sample() -> None:
             "assert progress['percent'] == 45; "
             "status=_build_transcription_status_response({'status':'processing','progress':progress,'chunk_manifest':[{'index':0}]}, 't1'); "
             "assert status['progress']['stage'] == 'transcribing' and len(status['chunk_manifest']) == 1; "
+            "fallback_status=_build_transcription_status_response({'status':'processing'}, 't2'); "
+            "assert fallback_status['progress']['stage'] == 'transcribing'; "
             "joined=_join_whisper_chunk_results([{'start':0,'end':102},{'start':78,'end':180}], "
             "[{'text':'오늘 우리는 렘넌트의 언약을 확인합니다.'},{'text':'렘넌트의 언약을 확인합니다. 그리고 세계복음화를 시작합니다.'}]); "
             "assert joined.count('렘넌트의 언약을 확인합니다') == 1 and '세계복음화' in joined; "
