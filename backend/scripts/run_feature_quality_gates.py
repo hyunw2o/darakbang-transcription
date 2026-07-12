@@ -80,7 +80,7 @@ def run_special_term_sample() -> None:
         (
             "import sys; "
             "sys.path.insert(0, 'backend'); "
-            "from main import _build_transcription_progress, _build_transcription_status_response, _collapse_pathological_repeats, _contains_pathological_repeats, _extract_transcription_logprob_stats, _is_low_confidence_transcription, _join_whisper_chunk_results, _prefer_retry_transcription, _transcription_retry_reasons; "
+            "from main import _build_compact_whisper_prompt, _build_gemini_only_system_instruction, _build_transcription_progress, _build_transcription_status_response, _collapse_pathological_repeats, _contains_pathological_repeats, _extract_transcription_logprob_stats, _is_low_confidence_transcription, _join_whisper_chunk_results, _prefer_retry_transcription, _transcription_retry_reasons; "
             "stats=_extract_transcription_logprob_stats({'logprobs':[{'logprob':-0.01},{'logprob':-1.2},{'logprob':-0.02}]}); "
             "assert _is_low_confidence_transcription(stats); "
             "progress=_build_transcription_progress('transcribing', {'current_chunk':2,'total_chunks':4}); "
@@ -107,6 +107,10 @@ def run_special_term_sample() -> None:
             "assert 'pathological_repeat' in reasons, reasons; "
             "clean={'text':'요즘 우리 장로님도 있고 함께 예배드리는 성도들도 있습니다. 오늘의 말씀을 확인합니다.'}; "
             "assert _prefer_retry_transcription({'text':loop}, clean) is clean; "
+            "whisper_prompt=_build_compact_whisper_prompt('ko','sermon'); "
+            "assert '장노님→장로님' in whisper_prompt and '두음법칙' in whisper_prompt and 'RVS' in whisper_prompt, whisper_prompt; "
+            "gemini_audio_prompt=_build_gemini_only_system_instruction('ko','sermon'); "
+            "assert '장노님→장로님' in gemini_audio_prompt and '원노트' in gemini_audio_prompt, gemini_audio_prompt; "
             "print('selective-retry-time-merge-and-repeat-guard-ok')"
         ),
     ])
@@ -158,15 +162,22 @@ def run_special_term_sample() -> None:
         (
             "import sys; "
             "sys.path.insert(0, 'backend'); "
-            "from church_terms import correct_text, get_gemini_correction_prompt; "
+            "from church_terms import correct_text, get_correction_prompt_by_type, get_gemini_correction_prompt; "
             "ko=correct_text('이거를 확인하고 이게 맞으면 이건 그대로 둡니다. 승경이와 주현도 그대로 기록합니다. 우리 장노님도 계십니다.', "
             "transcription_type='sermon', language='ko'); "
             "prompt=get_gemini_correction_prompt(); "
             "assert '이것을' in ko and '이것이' in ko and '이것은' in ko, ko; "
             "assert '승경이' in ko and '주현도' in ko and '장승경' not in ko and '이주현' not in ko, ko; "
             "assert '장로님' in ko and '장노님' not in ko, ko; "
+            "phonology=correct_text('성녕의 능녁으로 협녁하고 동닙합니다. 어냐글 붙잡고 보그믈 전하며 말쓰믈 확인합니다. 력사와 리유, 령혼과 륙신, 률법과 례배입니다.', transcription_type='sermon', language='ko'); "
+            "expected_terms=['성령의','능력으로','협력하고','독립합니다','언약을','복음을','말씀을','역사와','이유','영혼과','육신','율법과','예배입니다']; "
+            "assert all(term in phonology for term in expected_terms), phonology; "
+            "protected=correct_text('리더 류광수 노회 원노트', transcription_type='sermon', language='ko'); "
+            "assert protected == '리더 류광수 노회 원노트', protected; "
+            "phonology_prompt=get_correction_prompt_by_type('sermon','ko'); "
+            "assert '장노님→장로님' in phonology_prompt and '리더, 류광수' in phonology_prompt, phonology_prompt; "
             "assert '승경이→장승경이' in prompt and '주현→이주현이' in prompt, prompt; "
-            "print('ko-colloquial-and-name-preservation-ok')"
+            "print('ko-colloquial-name-and-phonology-ok')"
         ),
     ])
     run_command([

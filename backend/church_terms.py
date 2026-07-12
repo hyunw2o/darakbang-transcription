@@ -1582,7 +1582,7 @@ RVS는 Remnant Vision School, RUTC는 Remnant Unity Training Center로 해석하
 9. 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 누락 없이 기록하라.
    - 음절이 붙어 들리면 단어 경계를 문맥으로 복원하라.
    - 짧은 기능어(은/는/이/가/을/를/에/에서/에게/에게는)와 어미를 임의로 삭제하지 마라.
-   - 통역이 없는 구간에서 한 사람이 길게 연속 발화하면 단일 화자로 간주하고 문장을 이어서 복원하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
+   - 통역이 없는 구간에서 한 사람이 길게 연속 발화하면 단일 화자로 간주하고 문장을 이어서 복원하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + get_korean_phonological_recovery_prompt()
 
 
 def get_gemini_content_prompt(custom_terms: list[str] = None):
@@ -1639,6 +1639,17 @@ def get_gemini_content_prompt(custom_terms: list[str] = None):
 6. 매우 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 음절 단위로 끊어 문맥을 복원하고 누락 없이 기록하라.
 7. 통역이 없는 단독 화자 구간은 문장을 짧게 끊어 요약하지 말고, 원문 흐름대로 연결해 기록하라.
 8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
+
+def get_korean_phonological_recovery_prompt() -> str:
+    """한국어 음운 변이를 표준 표기로 복원하되 고유명사 과교정을 막는 공통 지침."""
+    return """
+
+[한국어 음운 변화와 표준 표기]
+- 비음화·유음화·연음·두음법칙 때문에 소리대로 적힌 단어는 문맥상 의도가 명확할 때 표준 맞춤법으로 복원하라.
+- 예: 장노님→장로님, 성녕→성령, 능녁→능력, 협녁→협력, 동닙→독립, 범뉼→법률, 어냐글→언약을, 보그믈→복음을, 말쓰믈→말씀을, 력사→역사, 리유→이유, 령혼→영혼.
+- 모든 ㄹ·ㄴ·ㅇ을 일괄 치환하지 마라. 리더, 류광수, 노회, 원노트 같은 정상 외래어·고유명사·표기는 그대로 유지하라.
+"""
+
 
 def get_gemini_correction_prompt(custom_terms: list[str] = None):
     """
@@ -1735,7 +1746,7 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 기도하시겠습니다.
 하나님께 감사드립니다.
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + get_korean_phonological_recovery_prompt()
 
 
 # ===== 일반 한국어 교정 (모든 유형 공통) =====
@@ -1756,7 +1767,6 @@ GENERAL_CORRECTIONS = {
     "포럼 망": "포럼방",
     "요것도": "이것도",
     "요 것도": "이것도",
-    "장노": "장로",
     "램넌트": "렘넌트",
     "레넌트": "렘넌트",
     "레므난트": "렘넌트",
@@ -1942,7 +1952,7 @@ def get_phonecall_correction_prompt(custom_terms: list[str] = None):
 2. 참석 인원: 5명 확정
 3. 자료 공유: 회의 전날까지
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + get_korean_phonological_recovery_prompt()
 
 
 def get_conversation_correction_prompt(custom_terms: list[str] = None):
@@ -2078,7 +2088,7 @@ def get_conversation_correction_prompt(custom_terms: list[str] = None):
 1. 담당: 이대리 - 온라인 마케팅 세부 계획 수립 (2주 내)
 2. 담당: 박과장 - 오프라인 매장 분석 보고서 작성 (1주 내)
 
-위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
+위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + get_korean_phonological_recovery_prompt()
 
 
 # ===== 영어 교정 프롬프트 =====
@@ -2972,6 +2982,98 @@ def _normalize_korean_slurred_church_terms(text: str) -> str:
     return corrected
 
 
+def _normalize_korean_phonological_variants(text: str) -> str:
+    """소리대로 적힌 확실한 음운 변이만 표준 표기로 복원한다."""
+    import re
+
+    if not text:
+        return text
+
+    # 전체 ㄹ/ㄴ/ㅇ을 바꾸지 않는다. 고유명사·외래어를 보호하기 위해
+    # 독립 어절 또는 안전한 조사/어미가 붙은 표준어 후보만 교정한다.
+    safe_suffix = (
+        r"(?:"
+        r"님(?:께서는|께서도|께서|은|는|이|가|을|를|의|도|과|와|으로|로|에게|께|에서|만)?|"
+        r"께서는|께서도|께서|은|는|이|가|을|를|의|도|과|와|으로|로|에서|에게|께|만|부터|까지|처럼|보다|"
+        r"하고|하며|하면|하다|합니다|했다|하여|해서|해야|되는|되며|되면|되다|됩니다|됐습니다|"
+        r"입니다|이다|이라고|이라는|이면|이라면"
+        r")"
+    )
+
+    def replace_lexeme(source: str, pattern: str, replacement: str) -> str:
+        return re.sub(
+            rf"(?<![가-힣])(?:{pattern})(?=(?:{safe_suffix})?(?:$|[^가-힣]))",
+            replacement,
+            source,
+        )
+
+    # 비음화·유음화 등으로 실제 발음과 표준 표기가 달라지는 단어.
+    sound_to_spelling = [
+        (r"장\s*노", "장로"),
+        (r"성\s*녕", "성령"),
+        (r"능\s*녁", "능력"),
+        (r"협\s*녁", "협력"),
+        (r"동\s*닙", "독립"),
+        (r"범\s*뉼", "법률"),
+        (r"대통\s*녕", "대통령"),
+        (r"종\s*노", "종로"),
+        (r"원\s*노", "원로"),
+        (r"괄\s*리", "관리"),
+        (r"심\s*니", "심리"),
+        (r"실\s*라", "신라"),
+        (r"절\s*라도", "전라도"),
+        (r"설\s*랄", "설날"),
+        (r"칼\s*랄", "칼날"),
+        (r"물\s*랄리", "물난리"),
+        (r"멸\s*류관", "면류관"),
+    ]
+
+    # 조사와 이어 발음된 결과가 그대로 적힌 교회 핵심 표현.
+    liaison_to_spelling = [
+        (r"(?:어\s*냐\s*글|언\s*야\s*글|어\s*냑\s*을)", "언약을"),
+        (r"(?:어\s*냐\s*기|언\s*야\s*기)", "언약이"),
+        (r"어\s*냐\s*게", "언약에"),
+        (r"(?:보\s*그\s*믈|복\s*으\s*믈)", "복음을"),
+        (r"보\s*그\s*미", "복음이"),
+        (r"보\s*그\s*메", "복음에"),
+        (r"말\s*쓰\s*믈", "말씀을"),
+        (r"말\s*쓰\s*미", "말씀이"),
+        (r"말\s*쓰\s*메", "말씀에"),
+    ]
+
+    # 남한 표준어의 두음법칙이 적용되지 않은 형태가 ASR에 남은 경우.
+    initial_sound_to_spelling = [
+        (r"력\s*사", "역사"),
+        (r"리\s*유", "이유"),
+        (r"리\s*론", "이론"),
+        (r"녀\s*자", "여자"),
+        (r"년\s*세", "연세"),
+        (r"량\s*심", "양심"),
+        (r"료\s*금", "요금"),
+        (r"류\s*학", "유학"),
+        (r"령\s*혼", "영혼"),
+        (r"령\s*적", "영적"),
+        (r"륙\s*신", "육신"),
+        (r"률\s*법", "율법"),
+        (r"례\s*배", "예배"),
+        (r"로\s*인", "노인"),
+        (r"로\s*동", "노동"),
+        (r"로\s*회", "노회"),
+        (r"락\s*원", "낙원"),
+        (r"래\s*일", "내일"),
+        (r"루\s*각", "누각"),
+    ]
+
+    corrected = text
+    for pattern, replacement in [
+        *sound_to_spelling,
+        *liaison_to_spelling,
+        *initial_sound_to_spelling,
+    ]:
+        corrected = replace_lexeme(corrected, pattern, replacement)
+    return corrected
+
+
 def _normalize_korean_colloquial_demonstratives(text: str) -> str:
     """안전한 지시대명사 구어체를 문어체로 정리한다."""
     import re
@@ -3447,6 +3549,7 @@ def correct_text(
 
         # 문맥 기반 혼동어 보정
         corrected = _normalize_korean_slurred_church_terms(corrected)
+        corrected = _normalize_korean_phonological_variants(corrected)
         corrected = _normalize_korean_colloquial_demonstratives(corrected)
         corrected = _normalize_contextual_homophones(corrected)
 
