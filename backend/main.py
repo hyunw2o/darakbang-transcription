@@ -4563,10 +4563,151 @@ def _repeat_detection_key(value: str) -> str:
     return re.sub(r"\s+", " ", compact).strip().lower()
 
 
+PATHOLOGICAL_CLAUSE_REPEAT_MIN_RUN = 8
+PATHOLOGICAL_TOKEN_REPEAT_MIN_RUN = 8
+PATHOLOGICAL_REPEAT_MIN_KEY_CHARS = 8
+PATHOLOGICAL_REPEAT_MAX_TOKEN_UNIT = 18
+
+
+def _split_repetition_clauses(text: str) -> list[str]:
+    """Split while retaining punctuation/spacing so a collapsed transcript remains readable."""
+    if not text:
+        return []
+
+    units: list[str] = []
+    cursor = 0
+    boundary_pattern = re.compile(r"[,，、;；.!?。！？]+(?:[ \t]+|(?=\n|$))|\n+")
+    for match in boundary_pattern.finditer(text):
+        end = match.end()
+        unit = text[cursor:end]
+        if unit:
+            units.append(unit)
+        cursor = end
+    if cursor < len(text):
+        units.append(text[cursor:])
+    return units
+
+
+def _max_repeat_run(units: list[str], *, min_key_chars: int) -> int:
+    maximum = 1 if units else 0
+    index = 0
+    while index < len(units):
+        key = _repeat_detection_key(units[index])
+        if len(key) < min_key_chars:
+            index += 1
+            continue
+        end = index + 1
+        while end < len(units) and _repeat_detection_key(units[end]) == key:
+            end += 1
+        maximum = max(maximum, end - index)
+        index = end
+    return maximum
+
+
+def _repeat_keys_equivalent(base_key: str, candidate_key: str) -> bool:
+    if base_key == candidate_key:
+        return True
+    if not base_key or not candidate_key:
+        return False
+    shorter, longer = sorted((base_key, candidate_key), key=len)
+    return (
+        len(shorter) >= PATHOLOGICAL_REPEAT_MIN_KEY_CHARS
+        and shorter in longer
+        and len(shorter) / max(1, len(longer)) >= 0.45
+    )
+
+
+def _find_pathological_clause_cluster(units: list[str]) -> tuple[int, int] | None:
+    """Find a repeated clause run even when one rendition contains an extra duplicated phrase."""
+    best: tuple[int, int] | None = None
+    for index, unit in enumerate(units):
+        base_key = _repeat_detection_key(unit)
+        if len(base_key) < PATHOLOGICAL_REPEAT_MIN_KEY_CHARS:
+            continue
+
+        end = index + 1
+        while (
+            end < len(units)
+            and _repeat_keys_equivalent(base_key, _repeat_detection_key(units[end]))
+        ):
+            end += 1
+        if end - index < PATHOLOGICAL_CLAUSE_REPEAT_MIN_RUN:
+            continue
+
+        start = index
+        while (
+            start > 0
+            and _repeat_keys_equivalent(base_key, _repeat_detection_key(units[start - 1]))
+        ):
+            start -= 1
+        if best is None or end - start > best[1] - best[0]:
+            best = (start, end)
+    return best
+
+
+def _find_pathological_token_repeat_span(text: str) -> tuple[int, int, str] | None:
+    """Find long periodic token loops, including loops without useful punctuation."""
+    token_pattern = re.compile(r"[A-Za-z0-9]+|[가-힣]+|[ぁ-ゟ゠-ヿ一-龯]+")
+    matches = list(token_pattern.finditer(text or ""))
+    tokens = [match.group(0).lower() for match in matches]
+    token_count = len(tokens)
+    if token_count < PATHOLOGICAL_TOKEN_REPEAT_MIN_RUN * 2:
+        return None
+
+    max_unit = min(
+        PATHOLOGICAL_REPEAT_MAX_TOKEN_UNIT,
+        token_count // PATHOLOGICAL_TOKEN_REPEAT_MIN_RUN,
+    )
+    for start in range(token_count):
+        for unit_size in range(2, max_unit + 1):
+            unit_end = start + unit_size
+            if unit_end > token_count:
+                break
+            unit = tokens[start:unit_end]
+            if len("".join(unit)) < PATHOLOGICAL_REPEAT_MIN_KEY_CHARS:
+                continue
+
+            repeat_count = 1
+            while (
+                start + (repeat_count + 1) * unit_size <= token_count
+                and tokens[
+                    start + repeat_count * unit_size:
+                    start + (repeat_count + 1) * unit_size
+                ] == unit
+            ):
+                repeat_count += 1
+            if repeat_count < PATHOLOGICAL_TOKEN_REPEAT_MIN_RUN:
+                continue
+
+            repeat_start = matches[start].start()
+            second_start = matches[start + unit_size].start()
+            after_index = start + repeat_count * unit_size
+            replacement = text[repeat_start:second_start]
+            replacement_end = matches[after_index].start() if after_index < token_count else len(text)
+            return repeat_start, replacement_end, replacement
+    return None
+
+
+def _contains_pathological_repeats(text: str) -> bool:
+    normalized = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized:
+        return False
+
+    paragraphs = [block.strip() for block in re.split(r"\n{2,}", normalized) if block.strip()]
+    if _max_repeat_run(paragraphs, min_key_chars=12) >= 3:
+        return True
+    if _max_repeat_run(normalized.split("\n"), min_key_chars=12) >= 3:
+        return True
+    if _find_pathological_clause_cluster(_split_repetition_clauses(normalized)) is not None:
+        return True
+    return _find_pathological_token_repeat_span(normalized) is not None
+
+
 def _collapse_pathological_repeats(text: str) -> str:
     """
     STT/LLM이 같은 구간을 여러 번 반복 생성하는 경우만 보수적으로 접는다.
-    실제 반복 발화를 보존하기 위해 3회 이상 연속 반복되고 충분히 긴 블록/라인만 1회로 축약한다.
+    실제 반복 발화를 보존하기 위해 블록/라인은 기존 3회 기준을 유지하고,
+    짧은 구절/토큰 반복은 8회 이상 이어질 때만 1회로 축약한다.
     """
     if not text:
         return text
@@ -4600,6 +4741,30 @@ def _collapse_pathological_repeats(text: str) -> str:
 
     lines = normalized.split("\n")
     normalized = collapse_units(lines, "\n")
+
+    for _ in range(8):
+        clauses = _split_repetition_clauses(normalized)
+        cluster = _find_pathological_clause_cluster(clauses)
+        if cluster is None:
+            break
+        start, end = cluster
+        current = clauses[start]
+        final_unit = clauses[end - 1]
+        strong_terminal = re.search(r"[.!?。！？]+[ \t]*$", final_unit)
+        if strong_terminal:
+            current = re.sub(
+                r"[,，、;；.!?。！？]+[ \t]*$",
+                strong_terminal.group(0),
+                current,
+            )
+        normalized = "".join([*clauses[:start], current, *clauses[end:]])
+
+    for _ in range(8):
+        token_repeat = _find_pathological_token_repeat_span(normalized)
+        if token_repeat is None:
+            break
+        start, end, replacement = token_repeat
+        normalized = f"{normalized[:start]}{replacement}{normalized[end:]}"
     return normalized
 
 
@@ -5172,6 +5337,8 @@ def _transcription_retry_reasons(result: dict, chunk: dict, total_chunks: int) -
         is_last_chunk=int(chunk.get("index") or 0) >= total_chunks - 1,
     ):
         reasons.append("cut_off_boundary")
+    if _contains_pathological_repeats(text):
+        reasons.append("pathological_repeat")
     return reasons
 
 
@@ -5187,6 +5354,16 @@ def _prefer_retry_transcription(primary: dict, retry: dict) -> dict:
     retry_len = _compact_transcript_length(retry_text)
     primary_low = _is_low_confidence_transcription(primary)
     retry_low = _is_low_confidence_transcription(retry)
+    primary_repeats = _contains_pathological_repeats(primary_text)
+    retry_repeats = _contains_pathological_repeats(retry_text)
+    if primary_repeats and not retry_repeats and not retry_low:
+        collapsed_primary_len = _compact_transcript_length(
+            _collapse_pathological_repeats(primary_text)
+        )
+        if retry_len >= max(8, int(collapsed_primary_len * 0.5)):
+            return retry
+    if retry_repeats and not primary_repeats:
+        return primary
     if primary_low and not retry_low and retry_len >= max(8, int(primary_len * 0.65)):
         return retry
 
@@ -6151,7 +6328,19 @@ def whisper_transcribe(
                         audit_text = str(audit.get("text") or "")
                         chosen_len = _compact_transcript_length(str(chosen.get("text") or ""))
                         audit_len = _compact_transcript_length(audit_text)
-                        if audit_len > max(20, int(chosen_len * 1.25)):
+                        chosen_repeats = _contains_pathological_repeats(
+                            str(chosen.get("text") or "")
+                        )
+                        audit_repeats = _contains_pathological_repeats(audit_text)
+                        collapsed_chosen_len = _compact_transcript_length(
+                            _collapse_pathological_repeats(str(chosen.get("text") or ""))
+                        )
+                        prefer_clean_audit = (
+                            chosen_repeats
+                            and not audit_repeats
+                            and audit_len >= max(8, int(collapsed_chosen_len * 0.5))
+                        )
+                        if prefer_clean_audit or audit_len > max(20, int(chosen_len * 1.25)):
                             chosen = {
                                 **chosen,
                                 "text": audit_text,
@@ -6635,7 +6824,7 @@ def _postprocess_transcript(
 ) -> str:
     normalized_mode = (correction_mode or "normal").strip().lower()
     if normalized_mode == "raw":
-        return _normalize_transcript_line_breaks(text)
+        return _normalize_transcript_line_breaks(_collapse_pathological_repeats(text))
 
     corrected = correct_text(
         text,
@@ -6852,16 +7041,27 @@ def _process_transcription_sync(
                 )
                 _log_stage_memory(task_id, "after_whisper")
 
+                correction_source_text = _collapse_pathological_repeats(raw_text)
+                if correction_source_text != raw_text:
+                    print(
+                        f"[{task_id}] Pathological ASR repetition collapsed for correction: "
+                        f"{len(raw_text)} -> {len(correction_source_text)} chars "
+                        "(raw transcript retained separately)."
+                    )
+
                 # 임시 파일 삭제
                 if os.path.exists(temp_file_path):
                     os.unlink(temp_file_path)
                     temp_file_path = ""
 
                 # 2단계: Gemini로 교정 + 구조화
-                skip_gemini_correction, skip_reason = _should_skip_gemini_correction(raw_text, correct)
+                skip_gemini_correction, skip_reason = _should_skip_gemini_correction(
+                    correction_source_text,
+                    correct,
+                )
                 if skip_gemini_correction:
                     print(f"[{task_id}] Skip Gemini correction: {skip_reason}")
-                    corrected_text = raw_text
+                    corrected_text = correction_source_text
                     engine = "whisper+local-postprocess"
                 else:
                     print(f"[{task_id}] Step 2: Gemini correction...")
@@ -6871,7 +7071,7 @@ def _process_transcription_sync(
                     try:
                         corrected_text = asyncio.run(
                             gemini_correct_and_structure(
-                                raw_text,
+                                correction_source_text,
                                 task_id,
                                 transcription_type,
                                 language,
@@ -6893,7 +7093,7 @@ def _process_transcription_sync(
                             f"[{task_id}] Gemini correction failed after retries; "
                             f"using Whisper raw transcript with local postprocess: {gemini_error}"
                         )
-                        corrected_text = raw_text
+                        corrected_text = correction_source_text
                         engine = "whisper+local-postprocess"
 
                 # 3단계: 규칙 기반 후처리
