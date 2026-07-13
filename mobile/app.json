@@ -35,6 +35,9 @@
     "android": {
       "versionCode": 21,
       "package": "com.mallog24.app",
+      "permissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1431"
