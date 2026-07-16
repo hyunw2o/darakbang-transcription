@@ -738,27 +738,13 @@ export default function MallogHomeEnView(props) {
             {loading && currentStep > 0 && (
               <div className="mallog-processing-card mb-5 animate-slide-up animate-nm-card-in">
                 <div className="mallog-processing-inner">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-nm-text-primary">Transcription in progress</p>
-                    <span className="border border-[color:var(--nm-border)] px-2.5 py-1 text-[11px] font-semibold text-nm-text-secondary">
-                      {normalizedProcessingProgress.percent}%
-                    </span>
-                  </div>
                   <StepIndicator
                     currentStep={currentStep}
                     processingProgress={normalizedProcessingProgress}
+                    statusText={processingStatusText}
                     locale="en"
                   />
                 </div>
-                <div className="mallog-processing-progress mt-4">
-                  <div
-                    className="mallog-processing-progress-fill"
-                    style={{ width: `${normalizedProcessingProgress.percent}%` }}
-                  />
-                </div>
-                <p className="mt-3 text-center text-xs leading-5 text-nm-text-secondary" role="status" aria-live="polite">
-                  {processingStatusText}
-                </p>
               </div>
             )}
 

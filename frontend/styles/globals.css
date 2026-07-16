@@ -426,133 +426,364 @@ body {
 }
 
 .mallog-processing-card {
-  border: 0.5px solid var(--nm-border);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--nm-border) 82%, transparent);
   border-radius: 8px;
   background: var(--nm-surface);
-  padding: 18px;
+  padding: 20px;
+  box-shadow: 0 18px 42px -34px var(--nm-shadow-dark);
 }
 
 .mallog-processing-inner {
-  max-width: 920px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
-.mallog-step-indicator {
+.mallog-flow-process {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.mallog-flow-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+}
+
+.mallog-flow-current {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.mallog-flow-live-dot {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border-radius: 9999px;
+  background: var(--nm-accent);
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--nm-accent) 13%, transparent);
+  animation: mallog-flow-pulse 1.8s ease-in-out infinite;
+}
+
+.mallog-flow-process.is-error .mallog-flow-live-dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 6px color-mix(in oklab, #dc2626 13%, transparent);
+}
+
+.mallog-flow-eyebrow {
+  color: var(--nm-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.mallog-flow-title {
+  margin-top: 3px;
+  color: var(--nm-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+.mallog-flow-percent {
+  display: inline-flex;
+  min-width: 56px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--nm-accent) 24%, var(--nm-border));
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--nm-accent) 7%, var(--nm-surface));
+  color: var(--nm-accent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mallog-flow-status {
+  min-height: 42px;
+  margin-top: 10px;
+  color: var(--nm-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.7;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+.mallog-flow-context {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 28px;
-  margin: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: 70px;
+  margin: 16px 0 18px;
   padding: 0;
   list-style: none;
 }
 
-.mallog-step-item {
+.mallog-flow-context-item {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 10px;
-  border-bottom: 0.5px solid var(--nm-border);
-  background: transparent;
-  padding: 10px 4px;
-  transition:
-    border-color var(--nm-transition) var(--nm-ease),
-    background var(--nm-transition) var(--nm-ease),
-    color var(--nm-transition) var(--nm-ease);
+  gap: 9px;
+  padding: 4px 14px;
+  color: var(--nm-text-secondary);
 }
 
-.mallog-step-item.is-completed {
-  border-bottom-color: color-mix(in oklab, #22c55e 32%, var(--nm-border));
+.mallog-flow-context-item + .mallog-flow-context-item {
+  border-left: 1px solid color-mix(in oklab, var(--nm-border) 78%, transparent);
 }
 
-.mallog-step-item.is-active {
-  border-left: 2px solid var(--nm-accent);
-  border-bottom-color: color-mix(in oklab, var(--nm-accent) 38%, var(--nm-border));
-  background: color-mix(in oklab, var(--nm-accent) 9%, var(--nm-surface));
-  padding-left: 10px;
-}
-
-.mallog-step-dot {
+.mallog-flow-context-icon {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
   border: 1px solid var(--nm-border);
-  color: var(--nm-text-secondary);
+  border-radius: 9999px;
+}
+
+.mallog-flow-context-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.mallog-flow-context-icon > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.mallog-flow-context-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mallog-flow-context-label,
+.mallog-flow-context-caption {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+.mallog-flow-context-label {
+  color: inherit;
   font-size: 11px;
   font-weight: 700;
-  line-height: 1;
-  background: var(--nm-surface);
+  line-height: 1.35;
 }
 
-.mallog-step-item.is-completed .mallog-step-dot {
-  border-color: #22c55e;
-  background: #22c55e;
-  color: white;
-}
-
-.mallog-step-item.is-active .mallog-step-dot {
-  border-color: var(--nm-accent);
-  background: color-mix(in oklab, var(--nm-accent) 13%, var(--nm-surface));
-  color: var(--nm-accent);
-}
-
-.mallog-step-pulse {
-  width: 9px;
-  height: 9px;
-  border-radius: 9999px;
-  background: var(--nm-accent);
-  box-shadow: 0 0 0 5px color-mix(in oklab, var(--nm-accent) 14%, transparent);
-}
-
-.mallog-step-label {
-  color: var(--nm-text-primary);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.mallog-step-caption {
-  margin-top: 2px;
+.mallog-flow-context-caption {
   color: var(--nm-text-secondary);
   font-size: 10px;
-  font-weight: 600;
-  line-height: 1.2;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
-.mallog-step-item.is-completed .mallog-step-label {
+.mallog-flow-context-item.is-completed {
   color: #16a34a;
 }
 
-.mallog-step-item.is-active .mallog-step-label {
+.mallog-flow-context-item.is-completed .mallog-flow-context-icon {
+  border-color: color-mix(in oklab, #22c55e 62%, var(--nm-border));
+  background: color-mix(in oklab, #22c55e 10%, var(--nm-surface));
+}
+
+.mallog-flow-context-item.is-active {
   color: var(--nm-accent);
 }
 
-.mallog-processing-progress {
-  height: 7px;
-  overflow: hidden;
-  border-radius: 9999px;
-  border: 0.5px solid var(--nm-border);
-  background: var(--nm-surface-soft);
+.mallog-flow-context-item.is-active .mallog-flow-context-icon {
+  border-color: var(--nm-accent);
+  background: color-mix(in oklab, var(--nm-accent) 10%, var(--nm-surface));
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--nm-accent) 9%, transparent);
 }
 
-.mallog-processing-progress-fill {
+.mallog-flow-context-item.is-waiting {
+  opacity: 0.58;
+}
+
+.mallog-flow-rail-wrap {
+  position: relative;
+  height: 14px;
+}
+
+.mallog-flow-rail {
+  position: absolute;
+  inset: 1px 0;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, var(--nm-border) 84%, transparent);
+  background: var(--nm-surface-soft);
+  box-shadow: inset 0 1px 2px color-mix(in oklab, var(--nm-shadow-dark) 22%, transparent);
+}
+
+.mallog-flow-fill {
+  position: relative;
   height: 100%;
+  overflow: hidden;
   border-radius: 9999px;
   background: var(--nm-accent);
-  transition: width 1s ease-out;
+  transition: width 900ms var(--nm-ease);
+}
+
+.mallog-flow-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.mallog-flow-wave-path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.76);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 8 8;
+  vector-effect: non-scaling-stroke;
+  animation: mallog-wave-flow 1.3s linear infinite;
+}
+
+.mallog-flow-head {
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--nm-accent);
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--nm-accent) 20%, transparent);
+  transform: translateY(-50%);
+  animation: mallog-flow-head 1.8s ease-in-out infinite;
+}
+
+.mallog-flow-markers {
+  position: absolute;
+  z-index: 2;
+  inset: 0 5px;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  list-style: none;
+}
+
+.mallog-flow-markers li {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+}
+
+.mallog-flow-markers span {
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--nm-text-secondary) 34%, transparent);
+}
+
+.mallog-flow-markers li.is-completed span,
+.mallog-flow-markers li.is-active span {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.mallog-flow-markers li.is-active span {
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--nm-accent) 30%, transparent);
+}
+
+@keyframes mallog-wave-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@keyframes mallog-flow-pulse {
+  0%, 100% {
+    transform: scale(0.9);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes mallog-flow-head {
+  0%, 100% {
+    opacity: 0.78;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 640px) {
   .mallog-processing-card {
-    padding: 14px;
+    padding: 16px;
   }
 
-  .mallog-step-indicator {
-    grid-template-columns: 1fr;
-    gap: 8px;
+  .mallog-flow-title {
+    font-size: 17px;
+  }
+
+  .mallog-flow-status {
+    min-height: 48px;
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.65;
+  }
+
+  .mallog-flow-context {
+    min-height: 54px;
+    margin: 12px 0 16px;
+  }
+
+  .mallog-flow-context-item {
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 3px 7px;
+    text-align: center;
+  }
+
+  .mallog-flow-context-icon {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+  }
+
+  .mallog-flow-context-caption {
+    display: none;
+  }
+
+  .mallog-flow-context-copy {
+    width: 100%;
+    align-items: center;
+  }
+
+  .mallog-flow-context-label {
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
   }
 }
 
@@ -566,9 +797,14 @@ body {
   .nm-segment-item,
   .action-btn,
   .progress-bar-fill,
-  .mallog-step-item,
-  .mallog-processing-progress-fill {
+  .mallog-flow-fill {
     transition-duration: 0ms !important;
+  }
+
+  .mallog-flow-live-dot,
+  .mallog-flow-wave-path,
+  .mallog-flow-head {
+    animation: none !important;
   }
 }
 
