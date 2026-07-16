@@ -19,6 +19,7 @@ const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const GUEST_MONTHLY_LIMIT_SECONDS = 1800
 const GUEST_MAX_AUDIO_SECONDS = 600
 const GUEST_SESSION_STORAGE_KEY = 'mallog24_guest_session_id'
+const RECORDING_DEVICE_STORAGE_KEY = 'mallog24_recording_device_id'
 const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
 const STATUS_POLL_INTERVAL_MS = 3000
 const STATUS_POLL_REQUEST_TIMEOUT_MS = 12000
@@ -63,8 +64,10 @@ const TRANSCRIPTION_MESSAGES = {
     guestTranscribeStart: '비로그인 체험 변환하기',
     selectFile: '파일을 선택해주세요.',
     recordingUnsupported: '이 브라우저에서는 녹음 기능을 사용할 수 없습니다. 최신 Chrome, Edge, Safari를 사용하거나 파일 업로드를 이용해 주세요.',
-    recordingPermissionDenied: '마이크 권한이 필요합니다. 브라우저 주소창의 권한 설정에서 마이크 접근을 허용해 주세요.',
+    recordingPermissionDenied: '마이크 권한이 필요합니다. 브라우저 주소창과 운영체제의 개인정보 보호·마이크 설정에서 접근을 허용해 주세요.',
     recordingStartFailed: '녹음을 시작하지 못했습니다. 마이크 권한과 입력 장치를 확인해 주세요.',
+    recordingDeviceFallback: '선택한 마이크를 사용할 수 없어 시스템 기본 마이크로 연결했습니다.',
+    recordingMicrophoneFallback: '마이크',
     recordingStopFailed: '녹음을 저장하지 못했습니다. 다시 시도해 주세요.',
     recordingEmpty: '녹음된 음성이 없습니다. 조금 더 길게 녹음한 뒤 다시 시도해 주세요.',
     recordingReady: '녹음 파일이 준비되었습니다. 변환하기를 눌러 진행해 주세요.',
@@ -120,8 +123,10 @@ const TRANSCRIPTION_MESSAGES = {
     guestTranscribeStart: 'Start Guest Trial',
     selectFile: 'Please select an audio file.',
     recordingUnsupported: 'Recording is not available in this browser. Please use the latest Chrome, Edge, Safari, or upload a file instead.',
-    recordingPermissionDenied: 'Microphone permission is required. Allow microphone access in your browser permission settings.',
+    recordingPermissionDenied: 'Microphone permission is required. Allow access in both the browser and the operating system microphone privacy settings.',
     recordingStartFailed: 'Could not start recording. Please check microphone permission and input device.',
+    recordingDeviceFallback: 'The selected microphone was unavailable, so the system default microphone was connected.',
+    recordingMicrophoneFallback: 'Microphone',
     recordingStopFailed: 'Could not save the recording. Please try again.',
     recordingEmpty: 'No audio was recorded. Please record a little longer and try again.',
     recordingReady: 'Recording is ready. Press Start Transcription to continue.',
@@ -210,6 +215,10 @@ export default function useMallogTranscription({
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [recordingLevel, setRecordingLevel] = useState(0)
   const [recordingSignal, setRecordingSignal] = useState(() => createEmptyRecordingSignal())
+  const [recordingDevices, setRecordingDevices] = useState([])
+  const [selectedRecordingDeviceId, setSelectedRecordingDeviceId] = useState('')
+  const [activeRecordingDeviceLabel, setActiveRecordingDeviceLabel] = useState('')
+  const [recordingInputState, setRecordingInputState] = useState('idle')
   const [guestSessionId, setGuestSessionId] = useState('')
   const [guestUsage, setGuestUsage] = useState({
     plan_tier: 'guest',
@@ -237,12 +246,88 @@ export default function useMallogTranscription({
   const recordingTimerRef = useRef(null)
   const recordingStartedAtRef = useRef(0)
   const recordingAudioContextRef = useRef(null)
+  const recordingSourceNodeRef = useRef(null)
   const recordingAnalyserRef = useRef(null)
   const recordingLevelDataRef = useRef(null)
+  const recordingByteLevelDataRef = useRef(null)
   const recordingFrequencyDataRef = useRef(null)
   const recordingSignalRef = useRef(createEmptyRecordingSignal())
   const recordingMeterFrameRef = useRef(null)
+  const recordingNoSignalTimerRef = useRef(null)
+  const recordingInputStateRef = useRef('idle')
   const discardRecordingRef = useRef(false)
+
+  const updateRecordingInputState = useCallback((nextState) => {
+    if (!nextState || recordingInputStateRef.current === nextState) return
+    recordingInputStateRef.current = nextState
+    setRecordingInputState(nextState)
+  }, [])
+
+  const selectRecordingDevice = useCallback((deviceId) => {
+    const normalizedId = String(deviceId || '')
+    setSelectedRecordingDeviceId(normalizedId)
+    if (typeof window === 'undefined') return
+    if (normalizedId) {
+      window.localStorage.setItem(RECORDING_DEVICE_STORAGE_KEY, normalizedId)
+    } else {
+      window.localStorage.removeItem(RECORDING_DEVICE_STORAGE_KEY)
+    }
+  }, [])
+
+  const resumeRecordingAnalysis = useCallback(async () => {
+    const audioContext = recordingAudioContextRef.current
+    if (!audioContext?.resume) return false
+
+    try {
+      await audioContext.resume()
+      if (audioContext.state === 'running') {
+        updateRecordingInputState('listening')
+        return true
+      }
+    } catch {
+      // The visible input state remains actionable for another user gesture.
+    }
+    updateRecordingInputState('analysis-blocked')
+    return false
+  }, [updateRecordingInputState])
+
+  const refreshRecordingDevices = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return []
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const audioInputs = devices
+        .filter((device) => device.kind === 'audioinput')
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          groupId: device.groupId,
+          label: device.label || `${messages.recordingMicrophoneFallback} ${index + 1}`,
+        }))
+      setRecordingDevices(audioInputs)
+      setSelectedRecordingDeviceId((currentId) => {
+        if (!currentId || audioInputs.some((device) => device.deviceId === currentId)) return currentId
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(RECORDING_DEVICE_STORAGE_KEY)
+        }
+        return ''
+      })
+      return audioInputs
+    } catch {
+      return []
+    }
+  }, [messages.recordingMicrophoneFallback])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSelectedRecordingDeviceId(window.localStorage.getItem(RECORDING_DEVICE_STORAGE_KEY) || '')
+    }
+    refreshRecordingDevices()
+
+    const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : null
+    if (!mediaDevices?.addEventListener) return undefined
+    mediaDevices.addEventListener('devicechange', refreshRecordingDevices)
+    return () => mediaDevices.removeEventListener('devicechange', refreshRecordingDevices)
+  }, [refreshRecordingDevices])
 
   const readResponseData = useCallback(async (response, fallbackMessage) => {
     const data = await safeReadJson(response)
@@ -582,40 +667,87 @@ export default function useMallogTranscription({
       window.cancelAnimationFrame(recordingMeterFrameRef.current)
       recordingMeterFrameRef.current = null
     }
+    if (recordingNoSignalTimerRef.current && typeof window !== 'undefined') {
+      window.clearTimeout(recordingNoSignalTimerRef.current)
+      recordingNoSignalTimerRef.current = null
+    }
+    recordingSourceNodeRef.current?.disconnect?.()
+    recordingSourceNodeRef.current = null
     recordingAnalyserRef.current = null
     recordingLevelDataRef.current = null
+    recordingByteLevelDataRef.current = null
     recordingFrequencyDataRef.current = null
     recordingSignalRef.current = createEmptyRecordingSignal()
     const audioContext = recordingAudioContextRef.current
     recordingAudioContextRef.current = null
+    if (audioContext) audioContext.onstatechange = null
     audioContext?.close?.().catch?.(() => {})
     setRecordingLevel(0)
     setRecordingSignal(recordingSignalRef.current)
   }, [])
 
-  const startRecordingMeter = useCallback((stream) => {
-    stopRecordingMeter()
+  const startRecordingMeter = useCallback(async (stream, preparedAudioContext = null, preparedResume = null) => {
+    if (!preparedAudioContext) stopRecordingMeter()
     if (typeof window === 'undefined') return
 
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext
-    if (!AudioContextConstructor) return
+    if (!AudioContextConstructor) {
+      updateRecordingInputState('analysis-blocked')
+      return
+    }
 
     try {
-      const audioContext = new AudioContextConstructor()
+      const audioContext = preparedAudioContext || new AudioContextConstructor()
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 2048
       analyser.smoothingTimeConstant = 0.68
       analyser.minDecibels = -90
       analyser.maxDecibels = -12
-      audioContext.createMediaStreamSource(stream).connect(analyser)
+      const sourceNode = audioContext.createMediaStreamSource(stream)
+      sourceNode.connect(analyser)
 
       const data = new Float32Array(analyser.fftSize)
+      const byteData = new Uint8Array(analyser.fftSize)
       const frequencyData = new Uint8Array(analyser.frequencyBinCount)
       recordingAudioContextRef.current = audioContext
+      recordingSourceNodeRef.current = sourceNode
       recordingAnalyserRef.current = analyser
       recordingLevelDataRef.current = data
+      recordingByteLevelDataRef.current = byteData
       recordingFrequencyDataRef.current = frequencyData
-      audioContext.resume?.().catch?.(() => {})
+
+      const scheduleNoSignalCheck = () => {
+        if (recordingNoSignalTimerRef.current) {
+          window.clearTimeout(recordingNoSignalTimerRef.current)
+        }
+        recordingNoSignalTimerRef.current = window.setTimeout(() => {
+          if (recordingInputStateRef.current === 'listening') {
+            updateRecordingInputState('no-signal')
+          }
+        }, 3000)
+      }
+
+      audioContext.onstatechange = () => {
+        if (audioContext.state === 'running') {
+          if (recordingInputStateRef.current === 'analysis-blocked') {
+            updateRecordingInputState('listening')
+          }
+          scheduleNoSignalCheck()
+        } else if (audioContext.state === 'suspended') {
+          updateRecordingInputState('analysis-blocked')
+        }
+      }
+
+      try {
+        await (preparedResume || audioContext.resume?.())
+      } catch {
+        updateRecordingInputState('analysis-blocked')
+      }
+      if (audioContext.state === 'running') {
+        scheduleNoSignalCheck()
+      } else {
+        updateRecordingInputState('analysis-blocked')
+      }
 
       let lastLevel = 0
       let lastAnalysisAt = 0
@@ -624,8 +756,9 @@ export default function useMallogTranscription({
       const updateMeter = (timestamp = 0) => {
         const activeAnalyser = recordingAnalyserRef.current
         const activeData = recordingLevelDataRef.current
+        const activeByteData = recordingByteLevelDataRef.current
         const activeFrequencyData = recordingFrequencyDataRef.current
-        if (!activeAnalyser || !activeData || !activeFrequencyData) return
+        if (!activeAnalyser || !activeData || !activeByteData || !activeFrequencyData) return
 
         if (timestamp - lastAnalysisAt < 48) {
           recordingMeterFrameRef.current = window.requestAnimationFrame(updateMeter)
@@ -633,10 +766,20 @@ export default function useMallogTranscription({
         }
         lastAnalysisAt = timestamp
 
-        activeAnalyser.getFloatTimeDomainData(activeData)
+        if (typeof activeAnalyser.getFloatTimeDomainData === 'function') {
+          activeAnalyser.getFloatTimeDomainData(activeData)
+        } else {
+          activeAnalyser.getByteTimeDomainData(activeByteData)
+          for (let index = 0; index < activeByteData.length; index += 1) {
+            activeData[index] = (activeByteData[index] - 128) / 128
+          }
+        }
         activeAnalyser.getByteFrequencyData(activeFrequencyData)
         const rms = calculateSignalRms(activeData)
         const nextLevel = Math.max(0, Math.min(1, rms * 4.8))
+        if (rms >= 0.004 && recordingInputStateRef.current !== 'detected') {
+          updateRecordingInputState('detected')
+        }
         const previousSignal = recordingSignalRef.current
         const spectrum = buildLogFrequencyBands(
           activeFrequencyData,
@@ -667,14 +810,17 @@ export default function useMallogTranscription({
       recordingMeterFrameRef.current = window.requestAnimationFrame(updateMeter)
     } catch {
       stopRecordingMeter()
+      updateRecordingInputState('analysis-blocked')
     }
-  }, [stopRecordingMeter])
+  }, [stopRecordingMeter, updateRecordingInputState])
 
   const stopRecordingStream = useCallback(() => {
     stopRecordingMeter()
     recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop())
     recordingStreamRef.current = null
-  }, [stopRecordingMeter])
+    setActiveRecordingDeviceLabel('')
+    updateRecordingInputState('idle')
+  }, [stopRecordingMeter, updateRecordingInputState])
 
   const startRecording = useCallback(async (uploadBlockedByQuota) => {
     if (uploadBlockedByQuota) {
@@ -698,8 +844,55 @@ export default function useMallogTranscription({
     setError(null)
     setNotice(null)
 
+    stopRecordingMeter()
+    let preparedAudioContext = null
+    let preparedAudioContextResume = null
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext
+    if (AudioContextConstructor) {
+      try {
+        preparedAudioContext = new AudioContextConstructor()
+        recordingAudioContextRef.current = preparedAudioContext
+        preparedAudioContextResume = preparedAudioContext.resume?.()
+      } catch {
+        preparedAudioContext = null
+        preparedAudioContextResume = null
+      }
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const baseAudioConstraints = {
+        channelCount: { ideal: 1 },
+        echoCancellation: { ideal: true },
+        noiseSuppression: { ideal: true },
+        autoGainControl: { ideal: true },
+      }
+      let stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: selectedRecordingDeviceId
+            ? { ...baseAudioConstraints, deviceId: { exact: selectedRecordingDeviceId } }
+            : baseAudioConstraints,
+        })
+      } catch (deviceError) {
+        const canRetryDefault = selectedRecordingDeviceId && [
+          'AbortError',
+          'NotFoundError',
+          'NotReadableError',
+          'OverconstrainedError',
+        ].includes(deviceError?.name)
+        if (!canRetryDefault) throw deviceError
+
+        selectRecordingDevice('')
+        stream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints })
+        setNotice(messages.recordingDeviceFallback)
+      }
+
+      const audioTrack = stream.getAudioTracks?.()[0]
+      if (!audioTrack || audioTrack.readyState !== 'live') {
+        stream.getTracks?.().forEach((track) => track.stop())
+        throw new Error('No live microphone track')
+      }
+
       const mimeType = resolveRecordingMimeType()
       const recorder = mimeType ? new window.MediaRecorder(stream, { mimeType }) : new window.MediaRecorder(stream)
 
@@ -707,7 +900,17 @@ export default function useMallogTranscription({
       recordingStreamRef.current = stream
       mediaRecorderRef.current = recorder
       recordingChunksRef.current = []
-      startRecordingMeter(stream)
+      const availableDevices = await refreshRecordingDevices()
+      const activeDeviceId = audioTrack.getSettings?.().deviceId || ''
+      const activeDevice = availableDevices.find((device) => device.deviceId === activeDeviceId)
+      setActiveRecordingDeviceLabel(
+        audioTrack.label || activeDevice?.label || messages.recordingMicrophoneFallback
+      )
+      updateRecordingInputState(audioTrack.muted ? 'muted' : 'listening')
+      audioTrack.addEventListener?.('mute', () => updateRecordingInputState('muted'))
+      audioTrack.addEventListener?.('unmute', () => updateRecordingInputState('listening'))
+      audioTrack.addEventListener?.('ended', () => updateRecordingInputState('ended'))
+      await startRecordingMeter(stream, preparedAudioContext, preparedAudioContextResume)
       fileDurationProbeRef.current += 1
       setFile(null)
       setFileDurationSeconds(0)
@@ -738,7 +941,7 @@ export default function useMallogTranscription({
       const denied = error?.name === 'NotAllowedError' || error?.name === 'SecurityError'
       setError(denied ? messages.recordingPermissionDenied : messages.recordingStartFailed)
     }
-  }, [clearRecordingTimer, loading, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, messages.usageLimitToast, recordingState, resetResultWorkspace, setError, setFileDurationSeconds, setNotice, showToast, startRecordingMeter, stopRecordingStream])
+  }, [clearRecordingTimer, loading, messages.recordingDeviceFallback, messages.recordingMicrophoneFallback, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, messages.usageLimitToast, recordingState, refreshRecordingDevices, resetResultWorkspace, selectRecordingDevice, selectedRecordingDeviceId, setError, setFileDurationSeconds, setNotice, showToast, startRecordingMeter, stopRecordingMeter, stopRecordingStream, updateRecordingInputState])
 
   const stopRecording = useCallback(async (usage) => {
     const recorder = mediaRecorderRef.current
@@ -1646,6 +1849,12 @@ export default function useMallogTranscription({
     recordingSeconds,
     recordingLevel,
     recordingSignal,
+    recordingDevices,
+    selectedRecordingDeviceId,
+    selectRecordingDevice,
+    resumeRecordingAnalysis,
+    activeRecordingDeviceLabel,
+    recordingInputState,
     guestUsage,
     guestTranscribeHint: messages.guestTranscribeHint,
     guestTranscribeStart: messages.guestTranscribeStart,

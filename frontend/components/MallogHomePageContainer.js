@@ -511,6 +511,12 @@ export default function MallogHomePageContainer({
       recordingSeconds={recordingSeconds}
       recordingLevel={transcription.recordingLevel}
       recordingSignal={transcription.recordingSignal}
+      recordingDevices={transcription.recordingDevices}
+      selectedRecordingDeviceId={transcription.selectedRecordingDeviceId}
+      selectRecordingDevice={transcription.selectRecordingDevice}
+      resumeRecordingAnalysis={transcription.resumeRecordingAnalysis}
+      activeRecordingDeviceLabel={transcription.activeRecordingDeviceLabel}
+      recordingInputState={transcription.recordingInputState}
       fileInputRef={fileInputRef}
       isGuestMode={isGuestMode}
       guestTranscribeHint={guestTranscribeHint}

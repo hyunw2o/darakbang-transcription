@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import HeaderMenuControls from './HeaderMenuControls'
 import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
+import MicrophoneInputControl from './MicrophoneInputControl'
 import RecordingWaveform from './RecordingWaveform'
 import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
@@ -14,6 +15,23 @@ import {
   getTranscriptionProgressText,
   normalizeTranscriptionProgress,
 } from '../utils/transcriptionProgress'
+
+const MICROPHONE_INPUT_LABELS = {
+  inputLabel: 'Input microphone',
+  systemDefault: 'System default microphone',
+  microphoneFallback: 'Microphone',
+  statusLabel: 'Input status',
+  resumeAnalysis: 'Resume',
+  states: {
+    idle: 'Waiting for connection',
+    listening: 'Waiting for input',
+    detected: 'Microphone input detected',
+    'no-signal': 'No input signal',
+    muted: 'Microphone muted',
+    ended: 'Microphone disconnected',
+    'analysis-blocked': 'Waveform analysis paused',
+  },
+}
 
 function FooterInlineRow({ items, className = '' }) {
   const visibleItems = items.filter(Boolean)
@@ -139,6 +157,12 @@ export default function MallogHomeEnView(props) {
     recordingSeconds,
     recordingLevel,
     recordingSignal,
+    recordingDevices,
+    selectedRecordingDeviceId,
+    selectRecordingDevice,
+    resumeRecordingAnalysis,
+    activeRecordingDeviceLabel,
+    recordingInputState,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -650,6 +674,16 @@ export default function MallogHomeEnView(props) {
                       )}
                     </div>
                   </div>
+                  <MicrophoneInputControl
+                    devices={recordingDevices}
+                    selectedDeviceId={selectedRecordingDeviceId}
+                    onSelectDevice={selectRecordingDevice}
+                    onResumeAnalysis={resumeRecordingAnalysis}
+                    disabled={loading || recordingState !== 'idle'}
+                    activeDeviceLabel={activeRecordingDeviceLabel}
+                    inputState={recordingInputState}
+                    labels={MICROPHONE_INPUT_LABELS}
+                  />
                   {recordingState === 'recording' && (
                     <RecordingWaveform
                       active

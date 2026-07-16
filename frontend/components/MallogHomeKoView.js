@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import HeaderMenuControls from './HeaderMenuControls'
 import MallogLandingSections from './MallogLandingSections'
 import Mallog24Logo from './Mallog24Logo'
+import MicrophoneInputControl from './MicrophoneInputControl'
 import RecordingWaveform from './RecordingWaveform'
 import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
@@ -14,6 +15,23 @@ import {
   getTranscriptionProgressText,
   normalizeTranscriptionProgress,
 } from '../utils/transcriptionProgress'
+
+const MICROPHONE_INPUT_LABELS = {
+  inputLabel: '입력 마이크',
+  systemDefault: '시스템 기본 마이크',
+  microphoneFallback: '마이크',
+  statusLabel: '입력 상태',
+  resumeAnalysis: '다시 켜기',
+  states: {
+    idle: '연결 대기',
+    listening: '입력 대기 중',
+    detected: '마이크 입력 감지됨',
+    'no-signal': '입력 신호 없음',
+    muted: '마이크 음소거됨',
+    ended: '마이크 연결 종료됨',
+    'analysis-blocked': '파형 분석이 일시정지됨',
+  },
+}
 
 function FooterInlineRow({ items, className = '' }) {
   const visibleItems = items.filter(Boolean)
@@ -139,6 +157,12 @@ export default function MallogHomeKoView(props) {
     recordingSeconds,
     recordingLevel,
     recordingSignal,
+    recordingDevices,
+    selectedRecordingDeviceId,
+    selectRecordingDevice,
+    resumeRecordingAnalysis,
+    activeRecordingDeviceLabel,
+    recordingInputState,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -649,6 +673,16 @@ export default function MallogHomeKoView(props) {
                       )}
                     </div>
                   </div>
+                  <MicrophoneInputControl
+                    devices={recordingDevices}
+                    selectedDeviceId={selectedRecordingDeviceId}
+                    onSelectDevice={selectRecordingDevice}
+                    onResumeAnalysis={resumeRecordingAnalysis}
+                    disabled={loading || recordingState !== 'idle'}
+                    activeDeviceLabel={activeRecordingDeviceLabel}
+                    inputState={recordingInputState}
+                    labels={MICROPHONE_INPUT_LABELS}
+                  />
                   {recordingState === 'recording' && (
                     <RecordingWaveform
                       active
