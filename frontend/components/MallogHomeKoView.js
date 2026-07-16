@@ -138,6 +138,7 @@ export default function MallogHomeKoView(props) {
     recordingState,
     recordingSeconds,
     recordingLevel,
+    recordingSignal,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -652,6 +653,7 @@ export default function MallogHomeKoView(props) {
                     <RecordingWaveform
                       active
                       level={recordingLevel}
+                      signal={recordingSignal}
                       label={`녹음 중 · ${formatSecondsToHourMinute(recordingSeconds)}`}
                     />
                   )}

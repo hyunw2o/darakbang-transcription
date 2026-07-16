@@ -138,6 +138,7 @@ export default function MallogHomeEnView(props) {
     recordingState,
     recordingSeconds,
     recordingLevel,
+    recordingSignal,
     fileInputRef,
     isGuestMode,
     guestTranscribeHint,
@@ -653,6 +654,7 @@ export default function MallogHomeEnView(props) {
                     <RecordingWaveform
                       active
                       level={recordingLevel}
+                      signal={recordingSignal}
                       label={`Recording · ${formatSecondsToHourMinute(recordingSeconds, 'en')}`}
                     />
                   )}

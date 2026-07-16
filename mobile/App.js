@@ -82,7 +82,11 @@ const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
   isMeteringEnabled: true,
 };
-const RECORDING_WAVEFORM_BARS = [0.2, 0.48, 0.74, 0.52, 0.96, 0.64, 0.84, 0.38, 0.7, 0.3, 0.9, 0.5];
+const RECORDING_WAVEFORM_BAR_COUNT = 24;
+
+function createEmptyRecordingEnvelope() {
+  return Array(RECORDING_WAVEFORM_BAR_COUNT).fill(0);
+}
 const PROCESSING_STEP_KEYS = [
   "uploaded",
   "jobReady",
@@ -241,15 +245,23 @@ function normalizeRecordingLevel(metering) {
   return Math.max(0, Math.min(1, metering / 100));
 }
 
-function RecordingWaveform({ active, level, label, theme }) {
+function RecordingWaveform({ active, level, levels, label, theme }) {
   const normalizedLevel = active ? Math.max(0.04, Math.max(0, Math.min(1, level || 0))) : 0;
+  const envelope = Array.isArray(levels) && levels.length
+    ? levels
+    : createEmptyRecordingEnvelope().map((_, index) => (
+      Math.sin(index * 1.25) * 0.18 + 0.2
+    ) * normalizedLevel);
 
   return (
     <View style={[styles.recordWaveformRow]}>
       <View style={[styles.recordWaveformTrack, { borderColor: "rgba(239, 68, 68, 0.14)", backgroundColor: "rgba(239, 68, 68, 0.04)" }]}>
-        {RECORDING_WAVEFORM_BARS.map((weight, index) => {
-          const height = 6 + Math.round((0.14 + normalizedLevel * weight) * 30);
-          const opacity = active ? 0.16 + normalizedLevel * 0.52 : 0.1;
+        <View style={styles.recordWaveformCenterline} />
+        {envelope.map((sampleLevel, index) => {
+          const value = active ? Math.max(0, Math.min(1, Number(sampleLevel) || 0)) : 0;
+          const height = 5 + Math.round(value * 31);
+          const recency = envelope.length <= 1 ? 1 : index / (envelope.length - 1);
+          const opacity = active ? 0.12 + value * 0.62 + recency * 0.08 : 0.08;
           return (
             <View
               key={`record-wave-${index}`}
@@ -434,7 +446,7 @@ function getMobileLegalDocuments(baseDocs, language) {
 
 function App() {
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
-  const audioRecorderState = useAudioRecorderState(audioRecorder, 250);
+  const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
   const pollRef = useRef(null);
   const pollStartedAtRef = useRef(0);
   const pollTokenRef = useRef(0);
@@ -458,6 +470,7 @@ function App() {
   const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
   const [recordingStatus, setRecordingStatus] = useState("idle");
+  const [recordingEnvelope, setRecordingEnvelope] = useState(createEmptyRecordingEnvelope);
   const [guestModeStarted, setGuestModeStarted] = useState(false);
   const [guestSessionId, setGuestSessionId] = useState("");
   const [guestUsage, setGuestUsage] = useState({
@@ -519,6 +532,22 @@ function App() {
   const recordingActive = recordingStatus === "recording" || Boolean(audioRecorderState?.isRecording);
   const recordingBusy = recordingStatus === "requesting" || recordingStatus === "stopping" || recordingActive;
   const recordingLevel = recordingActive ? normalizeRecordingLevel(audioRecorderState?.metering) : 0;
+  useEffect(() => {
+    if (!recordingActive) {
+      setRecordingEnvelope((previous) => (
+        previous.some((value) => value > 0) ? createEmptyRecordingEnvelope() : previous
+      ));
+      return;
+    }
+
+    const noiseGatedLevel = recordingLevel < 0.035 ? 0 : Math.pow(recordingLevel, 1.32);
+    setRecordingEnvelope((previous) => {
+      const current = previous[previous.length - 1] || 0;
+      const response = noiseGatedLevel > current ? 0.72 : 0.36;
+      const smoothed = Math.max(0, Math.min(1, current + (noiseGatedLevel - current) * response));
+      return [...previous.slice(1), smoothed];
+    });
+  }, [audioRecorderState?.durationMillis, audioRecorderState?.metering, recordingActive, recordingLevel]);
   const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
   const legalDocs = useMemo(
     () => (
@@ -2863,6 +2892,7 @@ function App() {
                       <RecordingWaveform
                         active
                         level={recordingLevel}
+                        levels={recordingEnvelope}
                         theme={activeTheme}
                         label={`${copy.recordingActive} · ${formatSecondsToHourMinute(recordingDurationSeconds)}`}
                       />
@@ -4503,17 +4533,28 @@ const styles = StyleSheet.create({
   },
   recordWaveformTrack: {
     height: 40,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
     paddingHorizontal: 12,
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 2,
     overflow: "hidden",
   },
+  recordWaveformCenterline: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    top: "50%",
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(239, 68, 68, 0.16)",
+  },
   recordWaveformBar: {
-    width: 5,
+    minWidth: 2,
+    maxWidth: 5,
+    flex: 1,
     borderRadius: 999,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.32,

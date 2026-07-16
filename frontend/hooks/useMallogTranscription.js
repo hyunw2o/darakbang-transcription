@@ -7,6 +7,13 @@ import {
   EMPTY_TRANSCRIPTION_PROGRESS,
   normalizeTranscriptionProgress,
 } from '../utils/transcriptionProgress'
+import {
+  buildLogFrequencyBands,
+  calculateSignalRms,
+  createEmptyRecordingSignal,
+  detectSignalPitch,
+  downsampleWaveform,
+} from '../utils/recordingSignal'
 
 const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const GUEST_MONTHLY_LIMIT_SECONDS = 1800
@@ -202,6 +209,7 @@ export default function useMallogTranscription({
   const [recordingState, setRecordingState] = useState('idle')
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [recordingLevel, setRecordingLevel] = useState(0)
+  const [recordingSignal, setRecordingSignal] = useState(() => createEmptyRecordingSignal())
   const [guestSessionId, setGuestSessionId] = useState('')
   const [guestUsage, setGuestUsage] = useState({
     plan_tier: 'guest',
@@ -231,6 +239,8 @@ export default function useMallogTranscription({
   const recordingAudioContextRef = useRef(null)
   const recordingAnalyserRef = useRef(null)
   const recordingLevelDataRef = useRef(null)
+  const recordingFrequencyDataRef = useRef(null)
+  const recordingSignalRef = useRef(createEmptyRecordingSignal())
   const recordingMeterFrameRef = useRef(null)
   const discardRecordingRef = useRef(false)
 
@@ -574,10 +584,13 @@ export default function useMallogTranscription({
     }
     recordingAnalyserRef.current = null
     recordingLevelDataRef.current = null
+    recordingFrequencyDataRef.current = null
+    recordingSignalRef.current = createEmptyRecordingSignal()
     const audioContext = recordingAudioContextRef.current
     recordingAudioContextRef.current = null
     audioContext?.close?.().catch?.(() => {})
     setRecordingLevel(0)
+    setRecordingSignal(recordingSignalRef.current)
   }, [])
 
   const startRecordingMeter = useCallback((stream) => {
@@ -590,31 +603,61 @@ export default function useMallogTranscription({
     try {
       const audioContext = new AudioContextConstructor()
       const analyser = audioContext.createAnalyser()
-      analyser.fftSize = 512
-      analyser.smoothingTimeConstant = 0.82
+      analyser.fftSize = 2048
+      analyser.smoothingTimeConstant = 0.68
+      analyser.minDecibels = -90
+      analyser.maxDecibels = -12
       audioContext.createMediaStreamSource(stream).connect(analyser)
 
-      const data = new Uint8Array(analyser.fftSize)
+      const data = new Float32Array(analyser.fftSize)
+      const frequencyData = new Uint8Array(analyser.frequencyBinCount)
       recordingAudioContextRef.current = audioContext
       recordingAnalyserRef.current = analyser
       recordingLevelDataRef.current = data
+      recordingFrequencyDataRef.current = frequencyData
       audioContext.resume?.().catch?.(() => {})
 
       let lastLevel = 0
-      const updateMeter = () => {
+      let lastAnalysisAt = 0
+      let lastPitchAt = 0
+      let currentPitch = recordingSignalRef.current.pitch
+      const updateMeter = (timestamp = 0) => {
         const activeAnalyser = recordingAnalyserRef.current
         const activeData = recordingLevelDataRef.current
-        if (!activeAnalyser || !activeData) return
+        const activeFrequencyData = recordingFrequencyDataRef.current
+        if (!activeAnalyser || !activeData || !activeFrequencyData) return
 
-        activeAnalyser.getByteTimeDomainData(activeData)
-        let sumSquares = 0
-        for (let index = 0; index < activeData.length; index += 1) {
-          const centered = (activeData[index] - 128) / 128
-          sumSquares += centered * centered
+        if (timestamp - lastAnalysisAt < 48) {
+          recordingMeterFrameRef.current = window.requestAnimationFrame(updateMeter)
+          return
         }
-        const rms = Math.sqrt(sumSquares / activeData.length)
+        lastAnalysisAt = timestamp
+
+        activeAnalyser.getFloatTimeDomainData(activeData)
+        activeAnalyser.getByteFrequencyData(activeFrequencyData)
+        const rms = calculateSignalRms(activeData)
         const nextLevel = Math.max(0, Math.min(1, rms * 4.8))
-        if (Math.abs(nextLevel - lastLevel) > 0.015) {
+        const previousSignal = recordingSignalRef.current
+        const spectrum = buildLogFrequencyBands(
+          activeFrequencyData,
+          audioContext.sampleRate,
+          previousSignal.spectrum
+        )
+
+        if (timestamp - lastPitchAt >= 96) {
+          currentPitch = detectSignalPitch(activeData, audioContext.sampleRate)
+          lastPitchAt = timestamp
+        }
+
+        const nextSignal = {
+          waveform: downsampleWaveform(activeData),
+          spectrum,
+          pitch: currentPitch,
+        }
+        recordingSignalRef.current = nextSignal
+        setRecordingSignal(nextSignal)
+
+        if (Math.abs(nextLevel - lastLevel) > 0.01) {
           lastLevel = nextLevel
           setRecordingLevel(nextLevel)
         }
@@ -1602,6 +1645,7 @@ export default function useMallogTranscription({
     recordingState,
     recordingSeconds,
     recordingLevel,
+    recordingSignal,
     guestUsage,
     guestTranscribeHint: messages.guestTranscribeHint,
     guestTranscribeStart: messages.guestTranscribeStart,
