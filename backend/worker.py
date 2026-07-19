@@ -15,6 +15,7 @@ from main import (
     _delete_transcription_input_from_storage,
     _download_transcription_input_from_storage,
     _ensure_transcription_jobs_scope_ready,
+    _extract_audio_duration_seconds,
     _fetch_queued_transcription_jobs,
     _process_transcription_sync,
     _upsert_transcription_job,
@@ -63,6 +64,12 @@ def process_claimed_job(job: dict) -> None:
             storage_bucket,
             storage_object_path,
         )
+        downloaded_audio_seconds = _extract_audio_duration_seconds(temp_file_path)
+        if audio_seconds > 0 and downloaded_audio_seconds + 2 < audio_seconds:
+            raise RuntimeError(
+                "Downloaded audio is shorter than the verified upload "
+                f"({downloaded_audio_seconds}s < {audio_seconds}s)."
+            )
         _process_transcription_sync(
             task_id,
             owner_key,

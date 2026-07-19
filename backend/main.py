@@ -204,6 +204,7 @@ GUEST_IP_MONTHLY_LIMIT_SECONDS = max(
 )
 GUEST_RESULT_TTL_SECONDS = max(600, int(os.getenv("GUEST_RESULT_TTL_SECONDS", "7200")))
 GUEST_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
+UPLOAD_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
 TRANSCRIPTION_JOBS_TABLE_NAME = "transcription_jobs"
 USAGE_TABLE_NAME = "user_usage_quotas"
 USER_GLOSSARY_TABLE_NAME = "user_glossary_terms"
@@ -320,7 +321,12 @@ app.add_middleware(
     allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Guest-Session-Id"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Guest-Session-Id",
+        "X-Mallog24-Upload-Id",
+    ],
 )
 
 
@@ -1334,6 +1340,15 @@ def _validate_uploaded_audio_payload(file: UploadFile, contents: bytes) -> tuple
     return extension, signature_mime or expected_mime
 
 
+def _normalize_upload_request_id(value: str | None) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return str(uuid.uuid4())
+    if not UPLOAD_REQUEST_ID_PATTERN.fullmatch(normalized):
+        raise HTTPException(status_code=400, detail="업로드 요청 ID 형식이 올바르지 않습니다.")
+    return normalized
+
+
 def _get_client_ip(request: Request) -> str:
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
@@ -1472,17 +1487,35 @@ def _upload_transcription_input_to_storage(
     with open(local_path, "rb") as file_handle:
         file_bytes = file_handle.read()
 
-    with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-        response = client.post(
-            upload_url,
-            headers={
-                **_supabase_storage_headers(source_mime_type or "application/octet-stream"),
-                "x-upsert": "true",
-            },
-            content=file_bytes,
-        )
-    if response.status_code >= 400:
-        raise RuntimeError(f"Supabase Storage 업로드 실패: {response.text[:300]}")
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=httpx.Timeout(180.0, connect=15.0)) as client:
+                response = client.post(
+                    upload_url,
+                    headers={
+                        **_supabase_storage_headers(source_mime_type or "application/octet-stream"),
+                        "x-upsert": "true",
+                    },
+                    content=file_bytes,
+                )
+                if response.status_code >= 400:
+                    raise RuntimeError(f"Supabase Storage 업로드 실패: {response.text[:300]}")
+
+                head_response = client.head(upload_url, headers=_supabase_storage_headers())
+                stored_size = int(head_response.headers.get("content-length") or 0)
+                if head_response.status_code < 400 and stored_size > 0 and stored_size != len(file_bytes):
+                    raise RuntimeError(
+                        f"Supabase Storage 파일 크기 불일치: {stored_size} != {len(file_bytes)}"
+                    )
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (2 ** attempt))
+    if last_error is not None:
+        raise last_error
 
     return {
         "storage_bucket": TRANSCRIPTION_STORAGE_BUCKET,
@@ -1502,13 +1535,31 @@ def _download_transcription_input_from_storage(storage_bucket: str, object_path:
         f"{urllib.parse.quote(storage_bucket, safe='')}/"
         f"{urllib.parse.quote(object_path, safe='/')}"
     )
-    with httpx.Client(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
-        response = client.get(download_url, headers=_supabase_storage_headers())
-    if response.status_code >= 400:
-        raise RuntimeError(f"Supabase Storage 다운로드 실패: {response.text[:300]}")
+    file_bytes: bytes | None = None
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(timeout=httpx.Timeout(180.0, connect=15.0)) as client:
+                response = client.get(download_url, headers=_supabase_storage_headers())
+            if response.status_code >= 400:
+                raise RuntimeError(f"Supabase Storage 다운로드 실패: {response.text[:300]}")
+            declared_size = int(response.headers.get("content-length") or 0)
+            if declared_size > 0 and declared_size != len(response.content):
+                raise RuntimeError(
+                    f"Supabase Storage 다운로드 크기 불일치: {len(response.content)} != {declared_size}"
+                )
+            file_bytes = response.content
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (2 ** attempt))
+    if last_error is not None or file_bytes is None:
+        raise last_error or RuntimeError("Supabase Storage 다운로드 결과가 비어 있습니다.")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or pathlib.Path(object_path).suffix or ".upload") as temp_file:
-        temp_file.write(response.content)
+        temp_file.write(file_bytes)
         return temp_file.name
 
 
@@ -6370,6 +6421,12 @@ def whisper_transcribe(
                             }
                             unresolved_reasons = _transcription_retry_reasons(chosen, chunk, len(chunks))
 
+                if _contains_pathological_repeats(str(chosen.get("text") or "")):
+                    collapsed_text = _collapse_pathological_repeats(str(chosen.get("text") or ""))
+                    if collapsed_text.strip():
+                        chosen = {**chosen, "text": collapsed_text, "repeat_collapsed": True}
+                        unresolved_reasons = _transcription_retry_reasons(chosen, chunk, len(chunks))
+
                 if unresolved_reasons:
                     chosen["needs_review"] = True
                     review_label = "확인 필요" if language == "ko" else "要確認" if language == "ja" else "Review needed"
@@ -6381,6 +6438,16 @@ def whisper_transcribe(
                 else:
                     chunks[index]["status"] = "verified"
                 all_results[index] = chosen
+
+        for index, result in enumerate(all_results):
+            result_text = str(result.get("text") or "")
+            if not _contains_pathological_repeats(result_text):
+                continue
+            collapsed_text = _collapse_pathological_repeats(result_text)
+            if collapsed_text.strip() and collapsed_text != result_text:
+                all_results[index] = {**result, "text": collapsed_text, "repeat_collapsed": True}
+                if chunks[index].get("status") == "transcribed":
+                    chunks[index]["status"] = "repeat_collapsed"
 
         _notify_pipeline_progress(
             progress_callback,
@@ -7205,6 +7272,10 @@ def _process_transcription_sync(
             engine = f"{engine}+fine-tuned-correction"
             _log_stage_memory(task_id, "after_fine_tuned_correction")
 
+        corrected_text = _normalize_transcript_line_breaks(
+            _collapse_pathological_repeats(corrected_text)
+        )
+
         # 결과 저장
         report_pipeline_progress("saving_result")
         created_at = datetime.now().isoformat()
@@ -7334,9 +7405,11 @@ async def transcribe_audio(
     correct: bool = Form(True),
     transcription_type: str = Form("conversation"),
     correction_mode: str = Form("normal"),
+    expected_size_bytes: int = Form(0),
     authorization: str | None = Header(default=None),
     x_guest_session_id: str | None = Header(default=None),
     x_mallog24_client_platform: str | None = Header(default=None),
+    x_mallog24_upload_id: str | None = Header(default=None),
 ):
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
     temp_file_path = ""
@@ -7355,6 +7428,7 @@ async def transcribe_audio(
             _ensure_transcriptions_user_scope_ready()
             _ensure_user_usage_scope_ready()
         _ensure_transcription_jobs_scope_ready()
+        task_id = _normalize_upload_request_id(x_mallog24_upload_id)
 
         normalized_language = (language or "ko").strip().lower()
         if normalized_language not in ALLOWED_LANGUAGES:
@@ -7370,7 +7444,31 @@ async def transcribe_audio(
                 detail="지원하지 않는 교정 모드입니다. strict/normal/raw 중에서 선택하세요.",
             )
 
+        existing_job = _fetch_transcription_job(task_id, user_id)
+        existing_status = str((existing_job or {}).get("status") or "").strip().lower()
+        existing_storage_path = str((existing_job or {}).get("storage_object_path") or "").strip()
+        existing_runtime_status = str(task_status.get(task_id) or "").strip().lower()
+        existing_job_can_resume = bool(
+            existing_job
+            and (
+                existing_status in {"processing", "completed", "error"}
+                or existing_storage_path
+                or existing_runtime_status in {"queued", "processing"}
+            )
+        )
+        if existing_job_can_resume:
+            return {
+                **_build_transcription_status_response(existing_job, task_id),
+                "success": True,
+                "guest": is_guest,
+                "idempotent_replay": True,
+            }
+        if existing_job:
+            print(f"Restarting incomplete idempotent upload: {task_id}")
+
         max_size_mb = int(MAX_UPLOAD_BYTES / 1024 / 1024)
+        if expected_size_bytes < 0 or expected_size_bytes > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail=f"파일 크기는 {max_size_mb}MB 이하")
         file_signature = b""
         total_bytes = 0
         chunk_size = 1024 * 1024  # 1MB
@@ -7389,6 +7487,15 @@ async def transcribe_audio(
                     file_signature += chunk[:remain]
                 temp_file.write(chunk)
 
+        if expected_size_bytes > 0 and total_bytes != expected_size_bytes:
+            raise HTTPException(
+                status_code=408,
+                detail=(
+                    "업로드된 파일 크기가 원본과 일치하지 않습니다. "
+                    "네트워크 연결을 확인한 뒤 같은 파일로 다시 시도해 주세요."
+                ),
+            )
+
         original_ext, source_mime_type = _validate_uploaded_audio_payload(file, file_signature)
         normalized_temp_path = f"{temp_file_path}{original_ext}"
         os.replace(temp_file_path, normalized_temp_path)
@@ -7401,7 +7508,6 @@ async def transcribe_audio(
             else _enforce_upload_quota_or_raise(user, audio_seconds, force_free_plan=force_ios_free_plan)
         )
 
-        task_id = str(uuid.uuid4())
         _set_task_runtime_state(task_id, "queued", owner_id=user_id)
         queued_progress = _build_transcription_progress("queued")
         task_progress[task_id] = queued_progress
