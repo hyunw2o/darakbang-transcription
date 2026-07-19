@@ -60,7 +60,7 @@ import {
 import { getExtension, inferMimeFromAsset } from "./utils/file";
 import { formatDate, formatSecondsToHourMinute, sanitizeFileName } from "./utils/format";
 import { buildDocxBase64 } from "./utils/docx";
-import { requestApi } from "./utils/network";
+import { requestApi, requestApiWithNetworkRetry } from "./utils/network";
 import useMobileAuth from "./hooks/useMobileAuth";
 
 import { I18N, LEGAL_DOCUMENTS } from "./content";
@@ -162,6 +162,16 @@ function resolveProcessingDetail(copy, progress) {
 function buildRecordedAudioName() {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
   return `mallog24-recording-${stamp}.m4a`;
+}
+
+function createUploadRequestId() {
+  return `upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function resolveUploadTimeoutMs(fileSize) {
+  const bytes = Math.max(0, Number(fileSize) || 0);
+  const estimatedAtSlowConnection = (bytes / (32 * 1024)) * 1000 + (2 * 60 * 1000);
+  return Math.max(10 * 60 * 1000, Math.min(90 * 60 * 1000, Math.round(estimatedAtSlowConnection)));
 }
 
 function escapeRegExp(value) {
@@ -451,6 +461,8 @@ function App() {
   const pollStartedAtRef = useRef(0);
   const pollTokenRef = useRef(0);
   const activeTaskIdRef = useRef("");
+  const pollInFlightRef = useRef(false);
+  const pollFailureCountRef = useRef(0);
   const resultEpochRef = useRef(0);
   const scrollUnlockTimerRef = useRef(null);
   const historyDeleteConfirmTimerRef = useRef(null);
@@ -653,6 +665,7 @@ function App() {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
+    pollInFlightRef.current = false;
   }, []);
   const unlockWorkspaceScroll = useCallback(() => {
     clearScrollUnlockTimer();
@@ -670,6 +683,7 @@ function App() {
     stopPolling();
     pollTokenRef.current += 1;
     pollStartedAtRef.current = 0;
+    pollFailureCountRef.current = 0;
     activeTaskIdRef.current = "";
   }, [stopPolling]);
   const resetResultWorkspace = useCallback((restoreScroll = false) => {
@@ -1321,12 +1335,15 @@ function App() {
     const pollToken = pollTokenRef.current;
     activeTaskIdRef.current = taskId;
     pollStartedAtRef.current = Date.now();
+    pollFailureCountRef.current = 0;
     setTaskPhase("queued");
     const queuedProgress = normalizeProcessingProgress(initialProgress, "queued");
     setProcessingProgress(queuedProgress);
     setTaskStateText(resolveProcessingDetail(copy, queuedProgress));
 
     pollRef.current = setInterval(async () => {
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
       try {
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
 
@@ -1345,9 +1362,13 @@ function App() {
 
         const data = await requestApi(
           `/api/status/${taskId}`,
-          isLoggedIn ? { token: authToken } : { headers: await getGuestHeaders() }
+          isLoggedIn
+            ? { token: authToken, timeoutMs: 45000 }
+            : { headers: await getGuestHeaders(), timeoutMs: 45000 }
         );
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
+        pollFailureCountRef.current = 0;
+        setNotice("");
 
         const fallbackStage = data.status === "processing" ? "transcribing" : data.status;
         const nextProgress = normalizeProcessingProgress(data.progress, fallbackStage);
@@ -1403,13 +1424,12 @@ function App() {
         }
       } catch (e) {
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
-        stopPolling();
-        activeTaskIdRef.current = "";
-        setSubmitting(false);
-        setTaskPhase("idle");
-        setTaskStateText("");
-        setProcessingProgress(normalizeProcessingProgress(null, "error"));
-        setError(e.message || copy.errors.statusFailed);
+        pollFailureCountRef.current += 1;
+        if (pollFailureCountRef.current === 2 || pollFailureCountRef.current % 8 === 0) {
+          setNotice(copy.errors.statusRetrying || copy.errors.statusFailed);
+        }
+      } finally {
+        pollInFlightRef.current = false;
       }
     }, STATUS_POLL_INTERVAL_MS);
   };
@@ -1431,31 +1451,49 @@ function App() {
     setTaskStateText(resolveProcessingDetail(copy, uploadProgress));
 
     try {
-      const body = new FormData();
-      body.append("file", {
-        uri: pickedFile.uri,
-        name: pickedFile.name,
-        type: pickedFile.mimeType,
-      });
-      body.append("language", transcriptionLanguage);
-      body.append("correct", "true");
-      body.append("transcription_type", transcriptionType);
-      body.append("correction_mode", "normal");
-
       const requestOptions = isLoggedIn
         ? { token: authToken }
         : { headers: await getGuestHeaders() };
-
-      const data = await requestApi("/api/transcribe", {
-        method: "POST",
-        ...requestOptions,
-        body,
-      });
+      const uploadRequestId = createUploadRequestId();
+      const data = await requestApiWithNetworkRetry(
+        "/api/transcribe",
+        {
+          method: "POST",
+          ...requestOptions,
+          headers: {
+            ...(requestOptions.headers || {}),
+            "X-Mallog24-Upload-Id": uploadRequestId,
+          },
+          bodyFactory: () => {
+            const body = new FormData();
+            body.append("language", transcriptionLanguage);
+            body.append("correct", "true");
+            body.append("transcription_type", transcriptionType);
+            body.append("correction_mode", "normal");
+            body.append("expected_size_bytes", String(Number(pickedFile.size) || 0));
+            body.append("file", {
+              uri: pickedFile.uri,
+              name: pickedFile.name,
+              type: pickedFile.mimeType,
+            });
+            return body;
+          },
+          timeoutMs: resolveUploadTimeoutMs(pickedFile.size),
+        },
+        {
+          maxAttempts: 4,
+          onRetry: () => {
+            setNotice(copy.notices.uploadRetrying);
+            setTaskStateText(copy.notices.uploadRetrying);
+          },
+        }
+      );
+      setNotice("");
       if (!isLoggedIn && data?.quota) {
         setGuestUsage(data.quota);
       }
 
-      if (data.status === "queued" && data.task_id) {
+      if ((data.status === "queued" || data.status === "processing") && data.task_id) {
         startPollingTask(data.task_id, submitEpoch, data.progress);
       } else if (data.status === "completed") {
         if (submitEpoch !== resultEpochRef.current) return;
@@ -1474,6 +1512,8 @@ function App() {
         } else {
           fetchGuestUsage().catch(() => {});
         }
+      } else if (data.status === "error") {
+        throw new Error(data.error || copy.errors.transcribeError);
       } else {
         setSubmitting(false);
         setTaskPhase("idle");

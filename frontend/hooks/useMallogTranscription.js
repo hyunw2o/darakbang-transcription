@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAudioDurationSecondsInBrowser } from '../utils/audio'
 import { buildDocxBlob } from '../utils/docx'
 import { sanitizeFileName, triggerBlobDownload } from '../utils/format'
-import { apiFetch, safeReadJson } from '../utils/network'
+import { apiFetch, apiFetchWithNetworkRetry, safeReadJson } from '../utils/network'
 import {
   EMPTY_TRANSCRIPTION_PROGRESS,
   normalizeTranscriptionProgress,
@@ -20,11 +20,17 @@ const GUEST_MONTHLY_LIMIT_SECONDS = 1800
 const GUEST_MAX_AUDIO_SECONDS = 600
 const GUEST_SESSION_STORAGE_KEY = 'mallog24_guest_session_id'
 const RECORDING_DEVICE_STORAGE_KEY = 'mallog24_recording_device_id'
-const TRANSCRIBE_POLL_TIMEOUT_MS = 45 * 60 * 1000
+const TRANSCRIBE_POLL_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const STATUS_POLL_INTERVAL_MS = 3000
-const STATUS_POLL_REQUEST_TIMEOUT_MS = 12000
-const STATUS_POLL_MAX_FAILURES = 5
+const STATUS_POLL_REQUEST_TIMEOUT_MS = 30000
 const HISTORY_DELETE_CONFIRM_WINDOW_MS = 5000
+
+function createUploadRequestId() {
+  const generated = typeof window !== 'undefined' && window.crypto?.randomUUID
+    ? window.crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+  return `upload-${generated}`
+}
 
 function resolveRecordingMimeType() {
   if (typeof window === 'undefined' || typeof window.MediaRecorder === 'undefined') return ''
@@ -72,6 +78,7 @@ const TRANSCRIPTION_MESSAGES = {
     recordingEmpty: '녹음된 음성이 없습니다. 조금 더 길게 녹음한 뒤 다시 시도해 주세요.',
     recordingReady: '녹음 파일이 준비되었습니다. 변환하기를 눌러 진행해 주세요.',
     recordingCanceled: '녹음을 취소했습니다.',
+    uploadRetrying: '네트워크 연결이 불안정해 파일 업로드를 안전하게 다시 시도하고 있습니다.',
     transcribeFailed: '변환 실패',
     loadHistoryFailed: '해당 기록을 불러올 수 없습니다.',
     loadHistoryGeneric: '불러오기 실패',
@@ -131,6 +138,7 @@ const TRANSCRIPTION_MESSAGES = {
     recordingEmpty: 'No audio was recorded. Please record a little longer and try again.',
     recordingReady: 'Recording is ready. Press Start Transcription to continue.',
     recordingCanceled: 'Recording canceled.',
+    uploadRetrying: 'The connection is unstable. Retrying the file upload safely.',
     transcribeFailed: 'Transcription failed.',
     loadHistoryFailed: 'Unable to load this record.',
     loadHistoryGeneric: 'Failed to load record.',
@@ -236,6 +244,7 @@ export default function useMallogTranscription({
   const activeTaskIdRef = useRef('')
   const pollResultCommitTimerRef = useRef(null)
   const pollFailureCountRef = useRef(0)
+  const pollInFlightRef = useRef(false)
   const fileDurationProbeRef = useRef(0)
   const resultEpochRef = useRef(0)
   const historyDeleteConfirmTimerRef = useRef(null)
@@ -468,6 +477,7 @@ export default function useMallogTranscription({
       window.clearInterval(pollInterval.current)
       pollInterval.current = null
     }
+    pollInFlightRef.current = false
     pollStartTime.current = null
     clearPollResultCommitTimer()
   }, [clearPollResultCommitTimer])
@@ -1077,6 +1087,8 @@ export default function useMallogTranscription({
     setProcessingProgress(normalizeTranscriptionProgress(null, 'queued'))
 
     pollInterval.current = window.setInterval(async () => {
+      if (pollInFlightRef.current) return
+      pollInFlightRef.current = true
       try {
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
@@ -1120,11 +1132,7 @@ export default function useMallogTranscription({
             return
           }
           pollFailureCountRef.current += 1
-          if (pollFailureCountRef.current >= STATUS_POLL_MAX_FAILURES) {
-            failPolling(taskId, detail || messages.pollingFailed)
-            return
-          }
-          if (pollFailureCountRef.current >= 3) {
+          if (pollFailureCountRef.current === 3 || pollFailureCountRef.current % 10 === 0) {
             showToast(messages.pollingSlow)
           }
           return
@@ -1134,6 +1142,9 @@ export default function useMallogTranscription({
           res,
           locale === 'en' ? 'Failed to fetch status.' : '상태를 확인하지 못했습니다.'
         )
+        if (pollFailureCountRef.current > 0) {
+          setNotice(null)
+        }
         pollFailureCountRef.current = 0
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
@@ -1177,17 +1188,15 @@ export default function useMallogTranscription({
       } catch (error) {
         if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
         pollFailureCountRef.current += 1
-        if (pollFailureCountRef.current >= STATUS_POLL_MAX_FAILURES) {
-          failPolling(taskId, messages.pollingFailed)
-          return
-        }
-        if (pollFailureCountRef.current >= 3) {
+        if (pollFailureCountRef.current === 3 || pollFailureCountRef.current % 10 === 0) {
           showToast(messages.pollingNetwork)
         }
         console.error('Polling error', error)
+      } finally {
+        pollInFlightRef.current = false
       }
     }, STATUS_POLL_INTERVAL_MS)
-  }, [apiUrl, authToken, failPolling, fetchGuestUsage, fetchHistory, fetchUsage, getTranscriptionHeaders, locale, messages.pollingFailed, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
+  }, [apiUrl, authToken, failPolling, fetchGuestUsage, fetchHistory, fetchUsage, getTranscriptionHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
 
   const handleSubmit = useCallback(async (event, usage) => {
     event.preventDefault()
@@ -1228,28 +1237,50 @@ export default function useMallogTranscription({
     setProcessingProgress(normalizeTranscriptionProgress(null, 'uploading'))
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('language', language)
-      formData.append('correct', 'true')
-      formData.append('transcription_type', transcriptionType)
-      formData.append('correction_mode', 'normal')
-
-      const response = await apiFetch(`${apiUrl}/api/transcribe`, {
-        method: 'POST',
-        headers: getTranscriptionHeaders(),
-        credentials: authToken ? 'include' : 'omit',
-        body: formData,
-      })
+      const uploadRequestId = createUploadRequestId()
+      const response = await apiFetchWithNetworkRetry(
+        `${apiUrl}/api/transcribe`,
+        () => {
+          const formData = new FormData()
+          formData.append('language', language)
+          formData.append('correct', 'true')
+          formData.append('transcription_type', transcriptionType)
+          formData.append('correction_mode', 'normal')
+          formData.append('expected_size_bytes', String(Number(file.size) || 0))
+          formData.append('file', file)
+          return {
+            method: 'POST',
+            headers: {
+              ...getTranscriptionHeaders(),
+              'X-Mallog24-Upload-Id': uploadRequestId,
+            },
+            credentials: authToken ? 'include' : 'omit',
+            body: formData,
+          }
+        },
+        {
+          maxAttempts: 4,
+          onRetry: () => {
+            setNotice(messages.uploadRetrying)
+            setProcessingProgress(normalizeTranscriptionProgress(null, 'uploading'))
+          },
+        }
+      )
       const data = await readResponseData(response, messages.transcribeFailed)
+      setNotice(null)
       if (!authToken && data?.quota) {
         setGuestUsage(data.quota)
       }
 
-      if (data.status === 'queued') {
+      if (data.status === 'queued' || data.status === 'processing') {
         setCurrentStep(2)
-        setProcessingProgress(normalizeTranscriptionProgress(data.progress, 'queued'))
+        setProcessingProgress(normalizeTranscriptionProgress(
+          data.progress,
+          data.status === 'processing' ? 'transcribing' : 'queued'
+        ))
         startPolling(data.task_id, submitEpoch)
+      } else if (data.status === 'error') {
+        throw new Error(data.error || messages.transcribeFailed)
       } else {
         if (submitEpoch !== resultEpochRef.current) return
         setResult(data)
@@ -1268,7 +1299,7 @@ export default function useMallogTranscription({
       setCurrentStep(0)
       setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
     }
-  }, [apiUrl, authToken, fetchGuestUsage, fetchUsage, file, fileDurationSeconds, getTranscriptionHeaders, invalidatePollingSession, language, messages.guestTranscribeHint, messages.quotaExceeded, messages.selectFile, messages.transcribeFailed, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
+  }, [apiUrl, authToken, fetchGuestUsage, fetchUsage, file, fileDurationSeconds, getTranscriptionHeaders, invalidatePollingSession, language, messages.guestTranscribeHint, messages.quotaExceeded, messages.selectFile, messages.transcribeFailed, messages.uploadRetrying, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
 
   const handleLoadHistory = useCallback(async (taskId) => {
     invalidatePollingSession()

@@ -43,7 +43,14 @@ function getFriendlyAuthError(message, copy) {
 
 async function requestApi(
   path,
-  { method = "GET", token = "", body = undefined, timeoutMs = 20000, headers: customHeaders = {} } = {}
+  {
+    method = "GET",
+    token = "",
+    body = undefined,
+    bodyFactory = null,
+    timeoutMs = 20000,
+    headers: customHeaders = {},
+  } = {}
 ) {
   const headers = { ...customHeaders };
   headers["X-Mallog24-Client-Platform"] = Platform.OS;
@@ -67,7 +74,7 @@ async function requestApi(
       const response = await fetch(`${baseUrl}${path}`, {
         method,
         headers,
-        body,
+        body: typeof bodyFactory === "function" ? bodyFactory() : body,
         signal: controller.signal,
       });
 
@@ -75,7 +82,9 @@ async function requestApi(
       const data = parseResponseText(rawText);
 
       if (!response.ok) {
-        throw new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+        const requestError = new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+        requestError.status = response.status;
+        throw requestError;
       }
 
       return data;
@@ -97,6 +106,38 @@ async function requestApi(
   if (lastError?.name === "AbortError" || isTimeoutErrorMessage(lastError?.message)) {
     throw new Error("Request timed out. Please check server status.");
   }
+  throw lastError || new Error("Request failed.");
+}
+
+async function requestApiWithNetworkRetry(
+  path,
+  options = {},
+  { maxAttempts = 3, retryDelayMs = 1500, onRetry } = {}
+) {
+  const retryableStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+  const attempts = Math.max(1, Number(maxAttempts) || 1);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await requestApi(path, options);
+    } catch (error) {
+      lastError = error;
+      const retryable = (
+        isTimeoutErrorMessage(error?.message || "") ||
+        isNetworkFetchError(error) ||
+        retryableStatuses.has(Number(error?.status))
+      );
+      if (!retryable || attempt >= attempts) {
+        throw error;
+      }
+
+      onRetry?.({ attempt: attempt + 1, maxAttempts: attempts, error });
+      const delay = Math.min(10000, retryDelayMs * (2 ** Math.max(0, attempt - 1)));
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
   throw lastError || new Error("Request failed.");
 }
 
@@ -122,4 +163,5 @@ export {
   getFriendlyAuthError,
   requestApi,
   requestApiWithTimeoutRetry,
+  requestApiWithNetworkRetry,
 };

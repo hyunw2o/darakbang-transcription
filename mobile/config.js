@@ -42,7 +42,7 @@ const AUTH_REQUEST_TIMEOUT_MS = Math.max(
 );
 const TRANSCRIBE_POLL_TIMEOUT_MS = Math.max(
   120000,
-  Number(process.env.EXPO_PUBLIC_TRANSCRIBE_POLL_TIMEOUT_MS) || 45 * 60 * 1000
+  Number(process.env.EXPO_PUBLIC_TRANSCRIBE_POLL_TIMEOUT_MS) || 2 * 60 * 60 * 1000
 );
 const STATUS_POLL_INTERVAL_MS = Math.max(
   2000,
