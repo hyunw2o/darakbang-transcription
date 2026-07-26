@@ -102,11 +102,13 @@ const I18N = {
     },
     transcriptionTypes: {
       sermon: "설교",
+      prayer: "기도문",
       phonecall: "통화",
       conversation: "회의",
     },
     contentStyles: {
       sermon: "설교",
+      prayer: "기도문",
       lecture: "강의",
       phonecall: "통화",
       meeting: "회의",
@@ -181,6 +183,7 @@ const I18N = {
     generateSummary: "설교 요약 생성",
     generateSummaryByType: {
       sermon: "설교 요약 생성",
+      prayer: "기도문 핵심 정리 생성",
       lecture: "강의 요약 생성",
       phonecall: "통화 기록 요약 생성",
       meeting: "회의 요약 생성",
@@ -223,7 +226,8 @@ const I18N = {
       uploading: "업로드 중",
     },
     selectedTypeHints: {
-      sermon: "설교 흐름(본론/결론/기도) 중심으로 구조화합니다.",
+      sermon: "모든 발화를 보존하며 설교 흐름(서론/본론/결론/기도)으로 구조화합니다.",
+      prayer: "설교 구조를 만들지 않고 실제 기도 내용을 들린 순서대로 보존합니다.",
       phonecall: "통화 화자 분리와 핵심 문장 중심으로 정리합니다.",
       conversation: "회의 안건/결정/후속 조치를 분리해 정리합니다.",
     },
@@ -556,11 +560,13 @@ const I18N = {
     },
     transcriptionTypes: {
       sermon: "Sermon",
+      prayer: "Prayer",
       phonecall: "Call",
       conversation: "Meeting",
     },
     contentStyles: {
       sermon: "Sermon",
+      prayer: "Prayer",
       lecture: "Lecture",
       phonecall: "Call",
       meeting: "Meeting",
@@ -635,6 +641,7 @@ const I18N = {
     generateSummary: "Generate Summary",
     generateSummaryByType: {
       sermon: "Generate Sermon Summary",
+      prayer: "Generate Prayer Highlights",
       lecture: "Generate Lecture Summary",
       phonecall: "Generate Call Summary",
       meeting: "Generate Meeting Summary",
@@ -677,7 +684,8 @@ const I18N = {
       uploading: "Uploading",
     },
     selectedTypeHints: {
-      sermon: "Structures content by sermon flow (message/application/prayer).",
+      sermon: "Preserves every utterance and structures the sermon as introduction, main body, conclusion, and prayer.",
+      prayer: "Preserves the spoken prayer in order without adding sermon sections or invented topics.",
       phonecall: "Focuses on speaker separation and core call statements.",
       conversation: "Separates agenda, decisions, and action items for meetings.",
     },

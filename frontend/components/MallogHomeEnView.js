@@ -718,6 +718,7 @@ export default function MallogHomeEnView(props) {
                       className="nm-input w-full"
                     >
                       <option value="sermon">Sermon Transcript</option>
+                      <option value="prayer">Prayer Transcript</option>
                       <option value="phonecall">Call Record</option>
                       <option value="conversation">Meeting/Conversation Record</option>
                     </select>

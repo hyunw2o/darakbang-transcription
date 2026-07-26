@@ -282,14 +282,15 @@ export default function MallogHomePageContainer({
   const stopRecording = () => stopRecordingInternal(effectiveUsage)
 
   const typeLabels = isEnglish
-    ? { sermon: 'Sermon Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
-    : { sermon: '설교 녹취', phonecall: '통화 기록', conversation: '대화/회의 기록' }
+    ? { sermon: 'Sermon Transcript', prayer: 'Prayer Transcript', phonecall: 'Call Record', conversation: 'Meeting/Conversation Record' }
+    : { sermon: '설교 녹취', prayer: '기도문 전용', phonecall: '통화 기록', conversation: '대화/회의 기록' }
   const contentStyleLabels = isEnglish
-    ? { sermon: 'Sermon', lecture: 'Lecture', phonecall: 'Call', meeting: 'Meeting', forum: 'Forum', debate: 'Debate' }
-    : { sermon: '설교', lecture: '강의', phonecall: '통화', meeting: '회의', forum: '포럼', debate: '토론' }
+    ? { sermon: 'Sermon', prayer: 'Prayer', lecture: 'Lecture', phonecall: 'Call', meeting: 'Meeting', forum: 'Forum', debate: 'Debate' }
+    : { sermon: '설교', prayer: '기도문', lecture: '강의', phonecall: '통화', meeting: '회의', forum: '포럼', debate: '토론' }
   const summaryActionLabels = isEnglish
     ? {
         sermon: 'Generate Sermon Summary',
+        prayer: 'Generate Prayer Highlights',
         lecture: 'Generate Lecture Summary',
         phonecall: 'Generate Call Summary',
         meeting: 'Generate Meeting Summary',
@@ -298,6 +299,7 @@ export default function MallogHomePageContainer({
       }
     : {
         sermon: '설교 기록 요약 생성',
+        prayer: '기도문 핵심 정리 생성',
         lecture: '강의 기록 요약 생성',
         phonecall: '통화 기록 요약 생성',
         meeting: '회의 기록 요약 생성',
@@ -307,6 +309,7 @@ export default function MallogHomePageContainer({
   const summaryTitleLabels = isEnglish
     ? {
         sermon: 'Sermon Summary',
+        prayer: 'Prayer Highlights',
         lecture: 'Lecture Summary',
         phonecall: 'Call Summary',
         meeting: 'Meeting Summary',
@@ -315,6 +318,7 @@ export default function MallogHomePageContainer({
       }
     : {
         sermon: '설교 기록 요약',
+        prayer: '기도문 핵심 정리',
         lecture: '강의 기록 요약',
         phonecall: '통화 기록 요약',
         meeting: '회의 기록 요약',
@@ -323,12 +327,14 @@ export default function MallogHomePageContainer({
       }
   const transcriptionTypeHints = isEnglish
     ? {
-        sermon: 'Structured by sermon flow (Main Body / Conclusion / Prayer) with stronger homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
+        sermon: 'Structured by sermon flow (Introduction / Main Body / Conclusion / Prayer) while preserving every audible sentence.',
+        prayer: 'Preserves the spoken prayer in order without adding sermon sections or invented prayer topics.',
         phonecall: 'Separates call speakers (A/B), reinforces clinical wording, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
         conversation: 'Separates meeting participants, structures agenda/decisions/actions, and improves homophone correction (e.g., 3oneul/samoneul and forum-bang/forum-mang).',
       }
     : {
-        sermon: '설교 흐름(본론/결론/기도) 중심으로 정리합니다.',
+        sermon: '모든 발화를 보존하며 설교 흐름(서론/본론/결론/기도)으로 정리합니다.',
+        prayer: '설교 구조를 만들지 않고 실제 기도 내용을 들린 순서대로 보존합니다.',
         phonecall: '통화 화자를 A/B로 분리하여 정리합니다.',
         conversation: '회의 참석자 발언을 분리하고 안건/결정/후속 조치 하며 구조화 합니다.',
       }
@@ -354,7 +360,7 @@ export default function MallogHomePageContainer({
         { key: 'google', label: 'Google로 로그인' },
         { key: 'kakao', label: '카카오로 로그인' },
       ]
-  const sectionHeaders = ['본론', '결론', '기도', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치', 'Main Body', 'Conclusion', 'Prayer', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
+  const sectionHeaders = ['서론', '본론', '결론', '기도', '기도문', '요약', '주요 내용', '논의 안건', '결정 사항', '후속 조치', 'Introduction', 'Main Body', 'Conclusion', 'Prayer', 'Prayer Transcript', 'Summary', 'Key Points', 'Agenda Items', 'Decisions', 'Action Items']
   const glossaryLabels = isEnglish
     ? {
         title: 'User Glossary',

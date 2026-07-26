@@ -72,9 +72,10 @@ const EMPTY_GLOSSARY_FORM = {
   aliases: "",
   contexts: "",
 };
-const TRANSCRIPTION_TYPE_CARD_ORDER = ["sermon", "conversation", "phonecall"];
+const TRANSCRIPTION_TYPE_CARD_ORDER = ["sermon", "prayer", "conversation", "phonecall"];
 const TRANSCRIPTION_TYPE_CARD_META = {
   sermon: { icon: "S" },
+  prayer: { icon: "P" },
   conversation: { icon: "M" },
   phonecall: { icon: "C" },
 };
@@ -4473,10 +4474,13 @@ const styles = StyleSheet.create({
   },
   typeCardGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   typeCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: "47%",
+    maxWidth: "49%",
     minHeight: 82,
     borderRadius: 10,
     borderWidth: 1,

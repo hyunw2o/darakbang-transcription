@@ -152,7 +152,7 @@ const MIME_BY_EXT = {
   webm: "audio/webm",
 };
 
-const TRANSCRIPTION_TYPES = ["sermon", "phonecall", "conversation"];
+const TRANSCRIPTION_TYPES = ["sermon", "prayer", "phonecall", "conversation"];
 const RECORD_CATEGORIES = ["meeting_keywords", "clinical_notes", "sermon_core_summary"];
 const APP_TABS = ["transcribe", "history", "records", "settings"];
 

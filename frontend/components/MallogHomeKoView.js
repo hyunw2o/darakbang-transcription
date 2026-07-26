@@ -717,6 +717,7 @@ export default function MallogHomeKoView(props) {
                       className="nm-input w-full"
                     >
                       <option value="sermon">설교 녹취</option>
+                      <option value="prayer">기도문 전용</option>
                       <option value="phonecall">통화 기록</option>
                       <option value="conversation">대화/회의 기록</option>
                     </select>
