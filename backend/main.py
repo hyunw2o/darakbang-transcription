@@ -5040,6 +5040,75 @@ def _is_suspiciously_incomplete_correction(source_text: str, corrected_text: str
     return unit_ratio < 0.65 and length_ratio < 0.78
 
 
+def _transcript_ngram_repetition_ratio(text: str, ngram_size: int = 6) -> float:
+    """Measure duplicated token windows without assuming every spoken repetition is an error."""
+    tokens = _transcript_tokens(text)
+    if len(tokens) < ngram_size * 2:
+        return 0.0
+
+    counts: dict[tuple[str, ...], int] = {}
+    window_count = len(tokens) - ngram_size + 1
+    for index in range(window_count):
+        window = tuple(tokens[index:index + ngram_size])
+        counts[window] = counts.get(window, 0) + 1
+    duplicate_windows = sum(max(0, count - 1) for count in counts.values())
+    return duplicate_windows / max(1, window_count)
+
+
+def _correction_introduces_repetition(source_text: str, corrected_text: str) -> bool:
+    """
+    Detect repetition inflation introduced by a correction model.
+
+    Source repetition is intentionally used as the baseline so a speaker's real repeated
+    wording is preserved. Only a materially longer and more repetitive correction is rejected.
+    """
+    source_len = _compact_transcript_length(source_text)
+    corrected_len = _compact_transcript_length(corrected_text)
+    if source_len < 20 or corrected_len <= source_len * 1.12:
+        return False
+
+    source_pathological = _contains_pathological_repeats(source_text)
+    corrected_pathological = _contains_pathological_repeats(corrected_text)
+    if corrected_pathological and not source_pathological:
+        return True
+
+    source_ratio = _transcript_ngram_repetition_ratio(source_text)
+    corrected_ratio = _transcript_ngram_repetition_ratio(corrected_text)
+    return (
+        corrected_len > max(source_len + 500, int(source_len * 1.25))
+        and corrected_ratio >= 0.18
+        and corrected_ratio >= source_ratio + 0.08
+    )
+
+
+def _guard_correction_fidelity(source_text: str, corrected_text: str) -> tuple[str, str]:
+    """
+    Keep correction output aligned with the source transcript.
+
+    Returns the accepted text and an audit action. A generated repetition is collapsed only
+    when doing so leaves a complete result; otherwise the original source segment wins.
+    """
+    source = (source_text or "").strip()
+    candidate = (corrected_text or "").strip()
+    if not source:
+        return candidate, "accepted"
+    if not candidate:
+        return source, "empty_fallback"
+    if _is_suspiciously_incomplete_correction(source, candidate):
+        return source, "incomplete_fallback"
+    if not _correction_introduces_repetition(source, candidate):
+        return candidate, "accepted"
+
+    collapsed = _collapse_pathological_repeats(candidate).strip()
+    if (
+        collapsed
+        and not _is_suspiciously_incomplete_correction(source, collapsed)
+        and not _correction_introduces_repetition(source, collapsed)
+    ):
+        return collapsed, "generated_repeat_collapsed"
+    return source, "repetition_fallback"
+
+
 def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
     """
     Overlapped audio chunks can produce a repeated boundary phrase.
@@ -5824,11 +5893,12 @@ def _get_slurred_speech_prompt_hint(language: str) -> str:
         )
     return (
         "발음이 뭉개지거나 연음되어 들릴 수 있습니다. "
-        "들린 소리를 그대로 이상한 단어로 만들지 말고, 문장 주제와 앞뒤 문맥에 맞는 정상 단어로 복원하세요. "
-        "받침 탈락, 모음 약화, 빠른 발화, 작은 목소리, 이어 말하기가 있어도 의미 단위로 다시 나누어 기록하세요. "
+        "연음·비음화·유음화·구개음화·된소리되기·두음법칙 후보를 조사와 서술어까지 포함한 앞뒤 문맥으로 비교하세요. "
+        "들린 소리를 그대로 이상한 단어로 만들지 말고, 문맥상 의도가 명확할 때만 표준 맞춤법으로 복원하세요. "
+        "받침 탈락, 모음 약화, 빠른 발화, 작은 목소리, 이어 말하기가 있어도 의미 단위로 다시 나누고 조사와 어미까지 기록하세요. "
         "특히 렘넌트, 그리스도, 무교병, 드로아교회, 기도수첩, 심방, 교역자, 대학부, 유초등부, "
         "RVS, RUTC, WRC, RRTS, RSTS 같은 도메인 용어는 발음이 조금 달라도 문맥이 맞으면 정확한 표기로 복원하세요. "
-        "정말 판별할 수 없는 짧은 부분만 [불명확]으로 한 번 표시하고, 임의의 이상한 고유명사나 깨진 음절을 만들지 마세요."
+        "정말 판별할 수 없는 짧은 부분만 [불명확]으로 한 번 표시하고, 사전 단어에 억지로 맞추거나 임의의 고유명사를 만들지 마세요."
     )
 
 
@@ -6057,7 +6127,8 @@ def _build_compact_whisper_prompt(
     suffix = (
         "핵심 용어는 정확한 표기로 유지하세요. 비음화·유음화·연음·두음법칙은 들린 음가가 아니라 표준 맞춤법으로 기록하세요. "
         "예: 장노님→장로님, 성녕→성령, 능녁→능력, 동닙→독립, 어냐글→언약을, 보그믈→복음을, 력사→역사, 리유→이유. "
-        "다만 리더·류광수 같은 외래어·고유명사는 바꾸지 말고, 이상한 고유명사나 깨진 음절을 만들지 마세요. "
+        "조사·어미·부정 표현은 약하게 들려도 삭제하지 마세요. 다만 리더·류광수 같은 외래어·고유명사는 바꾸지 말고, "
+        "문맥 확신이 낮은 소리를 사전 단어에 억지로 맞추거나 이상한 고유명사로 만들지 마세요. "
         "부분 인명이나 애매한 호칭에 성/직함을 추정해 붙이지 마세요."
     )
     return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "핵심 용어")
@@ -6549,8 +6620,10 @@ async def gemini_correct_and_structure(
         )
         correction_prompt += (
             "\n\n[뭉개진 발음 복원]\n"
-            "- 원본 ASR에는 발음 뭉개짐, 연음, 받침 탈락, 작은 목소리 때문에 깨진 단어가 있을 수 있다.\n"
-            "- 깨진 음절을 그대로 두거나 이상한 고유명사로 만들지 말고, 앞뒤 문맥상 명확한 정상 단어로만 복원하라.\n"
+            "- 원본 ASR에는 발음 뭉개짐, 연음, 비음화, 유음화, 구개음화, 된소리되기, 받침 탈락, 두음법칙, 작은 목소리 때문에 깨진 단어가 있을 수 있다.\n"
+            "- 깨진 음절 후보를 앞뒤 조사·서술어·주제와 함께 비교하고, 문맥상 의도가 명확할 때만 표준 맞춤법으로 복원하라.\n"
+            "- 조사, 어미, 부정 표현과 짧은 기능어를 발음이 약하다는 이유로 삭제하지 마라.\n"
+            "- 문맥 확신이 낮으면 특정 사전 단어에 억지로 맞추거나 이상한 고유명사로 만들지 말고 원문 표기를 유지하라.\n"
             "- 예배/설교/교회 문맥에서는 렘넌트, 그리스도, 무교병, 드로아교회, 기도수첩, 심방, 교역자, 대학부, 유초등부, "
             "RVS, RUTC, WRC, RRTS, RSTS 같은 도메인 용어를 우선 검토하라.\n"
             "- 문맥 확신이 없으면 억지로 치환하지 말고 원문을 유지하거나 짧게 [불명확]으로 표시하라."
@@ -6658,16 +6731,14 @@ async def gemini_correct_and_structure(
                 [correction_prompt, chunk_instruction, f"[{label} {index}/{len(chunks)}]", chunk],
                 f"chunk {index}/{len(chunks)}",
             )
-            if _is_suspiciously_incomplete_correction(chunk, corrected_chunk):
+            corrected_chunk, fidelity_action = _guard_correction_fidelity(chunk, corrected_chunk)
+            if fidelity_action != "accepted":
                 source_len = _compact_transcript_length(chunk)
                 corrected_len = _compact_transcript_length(corrected_chunk)
                 print(
-                    f"[{task_id}] Gemini correction chunk {index}/{len(chunks)} looks incomplete "
-                    f"({corrected_len}/{source_len} compact chars). Keeping raw chunk."
+                    f"[{task_id}] Gemini correction chunk {index}/{len(chunks)} fidelity guard: "
+                    f"{fidelity_action} ({corrected_len}/{source_len} compact chars)."
                 )
-                corrected_chunk = chunk.strip()
-            elif not corrected_chunk and chunk.strip():
-                corrected_chunk = chunk.strip()
             return index, corrected_chunk
 
         if worker_count <= 1:
@@ -6693,14 +6764,14 @@ async def gemini_correct_and_structure(
         return ""
 
     corrected_single = await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
-    if _is_suspiciously_incomplete_correction(chunks[0], corrected_single):
+    corrected_single, fidelity_action = _guard_correction_fidelity(chunks[0], corrected_single)
+    if fidelity_action != "accepted":
         source_len = _compact_transcript_length(chunks[0])
         corrected_len = _compact_transcript_length(corrected_single)
         print(
-            f"[{task_id}] Gemini correction single result looks incomplete "
-            f"({corrected_len}/{source_len} compact chars). Keeping raw transcript."
+            f"[{task_id}] Gemini correction single fidelity guard: "
+            f"{fidelity_action} ({corrected_len}/{source_len} compact chars)."
         )
-        return chunks[0].strip()
     return corrected_single or chunks[0].strip()
 
 
@@ -6894,6 +6965,7 @@ def _transcribe_with_gemini_only(
             transcription_type,
             language,
             correction_mode,
+            source_text=raw_text,
         )
         return raw_text, corrected_text
     finally:
@@ -6908,6 +6980,7 @@ def _postprocess_transcript(
     transcription_type: str,
     language: str,
     correction_mode: str,
+    source_text: str | None = None,
 ) -> str:
     normalized_mode = (correction_mode or "normal").strip().lower()
     if normalized_mode == "raw":
@@ -6921,7 +6994,10 @@ def _postprocess_transcript(
     )
     if normalized_mode == "strict":
         corrected = _enforce_speaker_separation(corrected, transcription_type, language)
-    corrected = _collapse_pathological_repeats(corrected)
+    if source_text is not None:
+        corrected, _ = _guard_correction_fidelity(source_text, corrected)
+    else:
+        corrected = _collapse_pathological_repeats(corrected)
     return _normalize_transcript_line_breaks(corrected)
 
 
@@ -7027,6 +7103,7 @@ def _apply_fine_tuned_correction_if_enabled(
         transcription_type,
         language,
         correction_mode,
+        source_text=normalized_text,
     )
     return corrected, corrected != text
 
@@ -7190,6 +7267,7 @@ def _process_transcription_sync(
                     transcription_type,
                     language,
                     correction_mode,
+                    source_text=correction_source_text,
                 )
                 _log_stage_memory(task_id, "after_postprocess")
             except Exception as whisper_error:
@@ -7272,9 +7350,17 @@ def _process_transcription_sync(
             engine = f"{engine}+fine-tuned-correction"
             _log_stage_memory(task_id, "after_fine_tuned_correction")
 
-        corrected_text = _normalize_transcript_line_breaks(
-            _collapse_pathological_repeats(corrected_text)
+        fidelity_source_text = _collapse_pathological_repeats(raw_text)
+        corrected_text, final_fidelity_action = _guard_correction_fidelity(
+            fidelity_source_text,
+            corrected_text,
         )
+        if final_fidelity_action != "accepted":
+            print(
+                f"[{task_id}] Final transcript fidelity guard: {final_fidelity_action} "
+                f"(source={len(fidelity_source_text)}, corrected={len(corrected_text)} chars)."
+            )
+        corrected_text = _normalize_transcript_line_breaks(corrected_text)
 
         # 결과 저장
         report_pipeline_progress("saving_result")
