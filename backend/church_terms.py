@@ -1599,6 +1599,7 @@ def get_gemini_content_prompt(custom_terms: list[str] = None):
 
 [구조화 - 반드시 지켜라]
 - 설교 흐름에 따라 아래 섹션 구분자를 반드시 별도 줄에 삽입하라:
+  "서론" — 본문 소개와 메시지 도입이 시작되는 지점
   "본론" — 서론이 끝나고 본격적인 메시지가 시작되는 지점
   "결론" — 설교의 마무리/정리 부분
   "기도" — 마지막 기도가 시작되는 지점
@@ -1714,6 +1715,7 @@ def get_gemini_correction_prompt(custom_terms: list[str] = None):
 
 [구조화 - 반드시 적용]
 - 설교 흐름에 따라 아래 구분자를 반드시 별도 줄에 삽입하라:
+  "서론" — 본문 소개와 메시지 도입이 시작되는 지점
   "본론" — 서론이 끝나고 본격적인 메시지 시작 지점
   "결론" — 설교의 마무리/정리 부분
   "기도" — 마지막 기도 시작 지점
@@ -2146,6 +2148,7 @@ Correct and structure this text following the rules below.
 
 [Structuring - Must Apply]
 - Insert section markers on separate lines based on the sermon flow:
+  "Introduction" — where the scripture introduction or opening message begins
   "Main Body" — where the main message begins after the introduction
   "Conclusion" — the closing/summary section
   "Prayer" — where the closing prayer begins
@@ -2381,6 +2384,7 @@ def get_ja_sermon_correction_prompt(custom_terms: list[str] = None):
 
 [構成整理]
 - 説教や講義の流れが明確なら、必要に応じて次の見出しを独立行で入れてください:
+  序論
   本論
   結論
   祈り
@@ -3422,24 +3426,107 @@ def _normalize_japanese_contextual_terms(text: str) -> str:
     return "".join(normalized_segments)
 
 
+def get_prayer_correction_prompt(custom_terms: list[str] = None) -> str:
+    """한국어 기도문 전용 교정 프롬프트."""
+    return """당신은 한국어 기도 음성을 원문 충실하게 정리하는 전문 속기사입니다.
+
+아래 [원본 텍스트]는 기도 음성의 STT 결과입니다. 설교 요약이 아니라 실제 기도문으로 교정하세요.
+
+[가장 중요한 규칙 - 1:1 내용 보존]
+- 원본에 있는 모든 기도 문장을 시간 순서대로 유지하고, 문장을 요약·삭제·추가하지 마라.
+- 하나님을 부르는 호칭, 감사, 찬양, 회개와 고백, 간구, 중보, 축복, 마침과 아멘을 들린 순서 그대로 보존하라.
+- 화자가 실제로 같은 표현을 반복했다면 유지하되, 모델이 빈 구간을 채우려고 같은 문장을 새로 반복해서는 안 된다.
+- 들리지 않은 기도 제목, 성경 구절, 이름, 결론을 추정해 만들지 마라.
+
+[연음과 불명확 발음]
+- 연음·비음화·유음화·구개음화·된소리되기·받침 탈락·두음법칙으로 뭉개진 발음은 조사와 서술어를 포함한 문맥으로 비교하라.
+- 문맥상 의도가 명확할 때만 표준 맞춤법으로 복원하고, 확신이 낮으면 원문 표기를 유지하거나 [불명확]으로 한 번만 표시하라.
+- 조사, 어미, 부정 표현, 짧은 간구를 약하게 들린다는 이유로 삭제하지 마라.
+- 렘넌트, 그리스도, 복음, 언약, 성령, 기도수첩, RVS, RUTC, WRC, RRTS, RSTS 등 실제로 언급된 사역 용어는 정확히 표기하라.
+- 인명과 호칭은 들린 범위만 보존하고 성, 직함, 정식 이름을 추정해 붙이지 마라.
+
+[기도문 전용 구조]
+- 첫 줄에 "기도문"을 단독으로 적고, 그 아래부터 실제 기도 내용을 기록하라.
+- 기도의 흐름이 바뀔 때만 빈 줄로 문단을 나누어라.
+- "서론", "본론", "결론", "요약", "기도 제목" 섹션을 새로 만들지 마라.
+- 기도에 없는 해설, 분석, 화자 설명, 목록, 마크다운을 추가하지 마라.
+
+[출력 형식]
+- 순수 텍스트만 출력하라.
+- 문장 중간에서 임의로 줄바꿈하지 마라.
+- 원문 분량과 의미를 유지하고, 자연스러운 문장부호와 표준 맞춤법만 보정하라.
+
+[원본 텍스트]를 위 규칙대로 교정하세요.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + get_korean_phonological_recovery_prompt()
+
+
+def get_en_prayer_correction_prompt(custom_terms: list[str] = None) -> str:
+    """English spoken-prayer correction prompt."""
+    return """You are a verbatim editor for spoken Christian prayers.
+
+The [Original Text] below is an STT transcript of a prayer.
+
+[Source Fidelity]
+- Preserve every prayer sentence in chronological order. Do not summarize, omit, or invent content.
+- Keep invocation, thanksgiving, praise, confession, petitions, intercession, blessing, closing, and amen only when they are present.
+- Preserve repetition that exists in the source, but never loop a sentence to fill silence or uncertainty.
+- Recover reduced or linked speech only when sentence context is clear. Keep uncertain wording or mark a short span [unclear] once.
+- Do not expand partial names, titles, scripture references, or prayer topics beyond what the source contains.
+
+[Prayer-only Structure]
+- Put "Prayer Transcript" on the first line and place the prayer below it.
+- Use paragraph breaks only when the prayer naturally changes focus.
+- Do not add Introduction, Main Body, Conclusion, Summary, or Prayer Topics sections.
+- Output plain text only, without markdown, commentary, analysis, or lists.
+
+Correct the [Original Text] without shortening it.""" + get_special_term_prompt_hint("en") + _build_name_correction_instruction(custom_terms, "en")
+
+
+def get_ja_prayer_correction_prompt(custom_terms: list[str] = None) -> str:
+    """日本語の祈り専用補正プロンプト。"""
+    return """あなたは日本語の祈りを忠実に整える専門エディターです。
+
+以下の[元の文字起こし]は祈りのSTT結果です。
+
+[原文保持]
+- 祈りの全文を時系列で保持し、要約・削除・創作をしないでください。
+- 呼びかけ、感謝、賛美、告白、願い、執り成し、祝福、結び、アーメンは原文にある場合だけ残してください。
+- 実際の反復は保持しますが、無音や不明瞭な箇所を埋めるために同じ文を繰り返さないでください。
+- 連音や不明瞭な発音は文脈が明確な場合のみ自然な標準表記へ補正し、不確かな短い箇所は一度だけ[不明瞭]としてください。
+- 名前、肩書き、聖書箇所、祈りの課題を推測して追加しないでください。
+
+[祈り専用の構成]
+- 最初の行に「祈祷文」とだけ書き、その下に祈りを記録してください。
+- 祈りの焦点が変わる箇所だけ空行で段落を分けてください。
+- 序論、本論、結論、要約、祈りの課題を新しく作らないでください。
+- プレーンテキストのみを出力し、Markdown、解説、分析、一覧を追加しないでください。
+
+[元の文字起こし]を短くせずに補正してください。""" + get_special_term_prompt_hint("ja") + _build_name_correction_instruction(custom_terms, "ja")
+
+
 def get_correction_prompt_by_type(transcription_type: str = "sermon", language: str = "ko", custom_terms: list[str] = None) -> str:
     """녹취 유형별 + 언어별 Gemini 교정 프롬프트 반환"""
     if language == "en":
-        if transcription_type == "phonecall":
+        if transcription_type == "prayer":
+            return get_en_prayer_correction_prompt(custom_terms)
+        elif transcription_type == "phonecall":
             return get_en_phonecall_correction_prompt(custom_terms)
         elif transcription_type == "conversation":
             return get_en_conversation_correction_prompt(custom_terms)
         else:
             return get_en_sermon_correction_prompt(custom_terms)
     elif language == "ja":
-        if transcription_type == "phonecall":
+        if transcription_type == "prayer":
+            return get_ja_prayer_correction_prompt(custom_terms)
+        elif transcription_type == "phonecall":
             return get_ja_phonecall_correction_prompt(custom_terms)
         elif transcription_type == "conversation":
             return get_ja_conversation_correction_prompt(custom_terms)
         else:
             return get_ja_sermon_correction_prompt(custom_terms)
     else:
-        if transcription_type == "phonecall":
+        if transcription_type == "prayer":
+            return get_prayer_correction_prompt(custom_terms)
+        elif transcription_type == "phonecall":
             return get_phonecall_correction_prompt(custom_terms)
         elif transcription_type == "conversation":
             return get_conversation_correction_prompt(custom_terms)
@@ -3455,7 +3542,7 @@ def correct_text(
 ) -> str:
     """
     1차 텍스트 교정 (규칙 기반)
-    transcription_type: "sermon" | "phonecall" | "conversation"
+    transcription_type: "sermon" | "prayer" | "phonecall" | "conversation"
     language: "ko" | "en" | "ja"
     """
     corrected = text
@@ -3522,7 +3609,7 @@ def correct_text(
         corrected = re.sub(r"\n{3,}", "\n\n", corrected)
     else:
         # ===== 한국어 교정 =====
-        if transcription_type == "sermon":
+        if transcription_type in {"sermon", "prayer"}:
             # 설교: strict 모드에서만 전체 교정(강한 치환)을 적용
             if normalized_mode == "strict":
                 for wrong, right in COMMON_MISTAKES.items():
@@ -3660,6 +3747,39 @@ def _ko_sermon_summary_prompt(summary_type: str = "short") -> str:
 1) 원문에 없는 사실/용어/단체명/교단명은 추가하지 마세요.
 2) "특정 용어가 없다" 같은 메타 평가 문장을 쓰지 마세요.
 3) 원문 근거가 없는 추측/판단을 하지 마세요."""
+
+
+def _ko_prayer_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """다음 기도문을 원문에 나온 기도 내용만으로 간결하게 정리하세요.
+
+출력 형식:
+기도문 핵심:
+1) 감사·찬양 (원문에 있을 때만)
+2) 회개·고백 (원문에 있을 때만)
+3) 간구·중보 (원문에 있을 때만)
+4) 축복·마침 (원문에 있을 때만)
+
+규칙:
+1) 원문에 없는 기도 제목, 이름, 성경 구절, 응답을 추가하지 마세요.
+2) 비어 있는 항목은 출력하지 마세요.
+3) 기도문을 설교의 서론·본론·결론으로 재구성하지 마세요.
+4) 원문의 의미와 기도 대상을 바꾸지 마세요."""
+
+    return """다음 기도문을 원문에 나온 순서와 내용에 따라 상세 정리하세요.
+
+출력 형식:
+1. 기도의 흐름
+2. 감사·찬양
+3. 회개·고백
+4. 간구·중보
+5. 축복·마침
+
+규칙:
+1) 원문에 있는 항목만 출력하고, 없는 항목은 생략하세요.
+2) 원문에 없는 기도 제목, 사람, 단체, 성경 구절을 만들지 마세요.
+3) 설교 요약이나 해설을 추가하지 마세요.
+4) 원문의 의미와 기도 대상을 바꾸지 마세요."""
 
 
 def _ko_lecture_summary_prompt(summary_type: str = "short") -> str:
@@ -3841,6 +3961,39 @@ Rules:
 3) Avoid unsupported inference."""
 
 
+def _en_prayer_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """Summarize only the prayer content present in the source.
+
+Output format:
+Prayer Highlights:
+1) Thanksgiving and praise (only if present)
+2) Confession (only if present)
+3) Petitions and intercession (only if present)
+4) Blessing and closing (only if present)
+
+Rules:
+1) Omit empty sections.
+2) Do not invent prayer topics, names, scripture, or answers.
+3) Do not restructure the prayer as a sermon.
+4) Preserve the meaning and intended recipients of the prayer."""
+
+    return """Provide a detailed source-grounded outline of the prayer.
+
+Output format:
+1. Prayer flow
+2. Thanksgiving and praise
+3. Confession
+4. Petitions and intercession
+5. Blessing and closing
+
+Rules:
+1) Include a section only when it appears in the source.
+2) Do not invent topics, people, organizations, scripture, or answers.
+3) Do not add sermon commentary or analysis.
+4) Preserve the meaning and intended recipients of the prayer."""
+
+
 def _en_lecture_summary_prompt(summary_type: str = "short") -> str:
     if summary_type == "short":
         return """Summarize the lecture transcript for learning/execution.
@@ -4018,6 +4171,39 @@ def _ja_sermon_summary_prompt(summary_type: str = "short") -> str:
 2) メタ評価文を書かないでください。"""
 
 
+def _ja_prayer_summary_prompt(summary_type: str = "short") -> str:
+    if summary_type == "short":
+        return """次の祈祷文を、原文にある祈りの内容だけで簡潔に整理してください。
+
+出力形式:
+祈りの要点
+1. 感謝・賛美（原文にある場合のみ）
+2. 悔い改め・告白（原文にある場合のみ）
+3. 願い・執り成し（原文にある場合のみ）
+4. 祝福・結び（原文にある場合のみ）
+
+規則:
+1) 空の項目は出力しないでください。
+2) 原文にない祈りの課題、名前、聖書箇所、応答を追加しないでください。
+3) 祈りを説教の構成に変えないでください。
+4) 原文の意味と祈りの対象を変えないでください。"""
+
+    return """次の祈祷文を、原文の順序と内容に基づいて詳しく整理してください。
+
+出力形式:
+1. 祈りの流れ
+2. 感謝・賛美
+3. 悔い改め・告白
+4. 願い・執り成し
+5. 祝福・結び
+
+規則:
+1) 原文にある項目だけを出力してください。
+2) 原文にない課題、人物、組織、聖書箇所を作らないでください。
+3) 説教の要約や解説を追加しないでください。
+4) 原文の意味と祈りの対象を変えないでください。"""
+
+
 def _ja_lecture_summary_prompt(summary_type: str = "short") -> str:
     if summary_type == "short":
         return """次の講義記録を学習・教育の観点で要約してください。
@@ -4170,7 +4356,7 @@ def _normalize_summary_content_style(
     content_style: str = "",
 ) -> str:
     normalized_type = (transcription_type or "sermon").strip().lower()
-    if normalized_type not in {"sermon", "phonecall", "conversation"}:
+    if normalized_type not in {"sermon", "prayer", "phonecall", "conversation"}:
         normalized_type = "sermon"
 
     normalized_style = (content_style or "").strip().lower()
@@ -4179,11 +4365,13 @@ def _normalize_summary_content_style(
 
     allowed_style_by_type = {
         "sermon": {"sermon", "lecture"},
+        "prayer": {"prayer"},
         "phonecall": {"phonecall"},
         "conversation": {"meeting", "forum", "debate"},
     }
     default_style_by_type = {
         "sermon": "sermon",
+        "prayer": "prayer",
         "phonecall": "phonecall",
         "conversation": "meeting",
     }
@@ -4217,6 +4405,7 @@ def get_summary_prompt(
     if is_en:
         prompt_map = {
             "sermon": _en_sermon_summary_prompt,
+            "prayer": _en_prayer_summary_prompt,
             "lecture": _en_lecture_summary_prompt,
             "phonecall": _en_phonecall_summary_prompt,
             "meeting": _en_conversation_summary_prompt,
@@ -4226,6 +4415,7 @@ def get_summary_prompt(
     elif is_ja:
         prompt_map = {
             "sermon": _ja_sermon_summary_prompt,
+            "prayer": _ja_prayer_summary_prompt,
             "lecture": _ja_lecture_summary_prompt,
             "phonecall": _ja_phonecall_summary_prompt,
             "meeting": _ja_conversation_summary_prompt,
@@ -4235,6 +4425,7 @@ def get_summary_prompt(
     else:
         prompt_map = {
             "sermon": _ko_sermon_summary_prompt,
+            "prayer": _ko_prayer_summary_prompt,
             "lecture": _ko_lecture_summary_prompt,
             "phonecall": _ko_phonecall_summary_prompt,
             "meeting": _ko_conversation_summary_prompt,

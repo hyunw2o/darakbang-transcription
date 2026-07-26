@@ -156,9 +156,9 @@ LANDING_STATS_TIME_SAVING_EN = (os.getenv("LANDING_STATS_TIME_SAVING_EN") or "")
 LANDING_STATS_UPDATED_AT = (os.getenv("LANDING_STATS_UPDATED_AT") or "").strip()
 
 ALLOWED_LANGUAGES = {"ko", "en", "ja"}
-ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "phonecall", "conversation"}
+ALLOWED_TRANSCRIPTION_TYPES = {"sermon", "prayer", "phonecall", "conversation"}
 ALLOWED_CORRECTION_MODES = {"strict", "normal", "raw"}
-ALLOWED_CONTENT_STYLES = {"sermon", "lecture", "phonecall", "meeting", "forum", "debate"}
+ALLOWED_CONTENT_STYLES = {"sermon", "prayer", "lecture", "phonecall", "meeting", "forum", "debate"}
 
 SERMON_CONTEXT_HINTS = (
     "설교", "말씀", "본문", "은혜", "복음", "기도", "예배", "목사", "아멘",
@@ -4227,9 +4227,21 @@ def _build_gemini_only_system_instruction(
     custom_terms: list[str] | None = None,
 ) -> str:
     if language == "ko":
+        if transcription_type == "prayer":
+            return (
+                f"{get_correction_prompt_by_type('prayer', language, custom_terms)}\n\n"
+                f"{_gemini_audio_continuity_guard(language)}"
+            )
         return f"{get_gemini_prompt(custom_terms)}\n\n{_gemini_audio_continuity_guard(language)}"
     special_term_hint = get_special_term_prompt_hint(language)
     if language == "ja":
+        if transcription_type == "prayer":
+            return (
+                "あなたは日本語の祈りを忠実に全文文字起こしするエンジンです。"
+                "祈りの順序と表現を保ち、説教構成や要約を加えないでください。"
+                "連音や不明瞭な語は文脈が明確な場合のみ補正してください。"
+                f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
+            )
         if transcription_type == "phonecall":
             return (
                 "あなたは日本語通話録音の高精度文字起こしエンジンです。"
@@ -4248,6 +4260,13 @@ def _build_gemini_only_system_instruction(
             "あなたは日本語説教・講義録音の高精度文字起こしエンジンです。"
             "一人の話者の長い発話も途切れさせず、内容を省略せず全文を書き起こしてください。"
             "不明瞭な語は文脈から復元し、不要な説明や要約は加えないでください。"
+            f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
+        )
+    if transcription_type == "prayer":
+        return (
+            "You are a high-accuracy English spoken-prayer transcription engine. "
+            "Transcribe every audible prayer sentence in order without sermon sections, "
+            "summaries, invented prayer topics, or repeated filler content."
             f"{special_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
         )
     if transcription_type == "phonecall":
@@ -4278,6 +4297,13 @@ def _build_gemini_only_content_prompt(
     custom_terms: list[str] | None = None,
 ) -> str:
     if language == "ko":
+        if transcription_type == "prayer":
+            return (
+                "이 기도 음성을 한국어 기도문으로 처음부터 끝까지 받아쓰세요. "
+                "감사·고백·간구·중보·마침의 실제 순서를 유지하고, 설교의 서론·본론·결론이나 요약을 만들지 마세요. "
+                "첫 줄에는 '기도문'만 적고, 실제로 들린 문장을 생략하거나 반복 생성하지 마세요."
+                f"\n\n{_gemini_audio_continuity_guard(language)}"
+            )
         return f"{get_gemini_content_prompt(custom_terms)}\n\n{_gemini_audio_continuity_guard(language)}"
     custom_term_hint = ""
     if custom_terms:
@@ -4290,12 +4316,14 @@ def _build_gemini_only_content_prompt(
     if language == "ja":
         base_prompt = {
             "sermon": "この音声を日本語で全文文字起こししてください。説教または講義として自然な段落で整理し、内容を省略しないでください。",
+            "prayer": "この祈りの音声を日本語で全文文字起こししてください。最初の行を「祈祷文」とし、説教構成や要約を追加せず、祈りの順序を保持してください。",
             "phonecall": "この音声を日本語の通話記録として全文文字起こししてください。話者交代を保ち、日程・数量・固有名詞を正確に書いてください。",
             "conversation": "この音声を日本語の会議記録として全文文字起こししてください。話者交代を保ち、決定・担当・期限に関わる情報を落とさないでください。",
         }.get(transcription_type, "この音声を日本語で全文文字起こししてください。内容を省略しないでください。")
         return f"{base_prompt}{custom_term_hint}\n\n{_gemini_audio_continuity_guard(language)}"
     base_prompt = {
         "sermon": "Transcribe this audio fully in English. Treat it as a sermon or lecture, keep natural paragraph breaks, and do not summarize.",
+        "prayer": "Transcribe this spoken prayer fully in English. Put 'Prayer Transcript' on the first line, preserve the prayer order, and do not add sermon sections or a summary.",
         "phonecall": "Transcribe this audio fully in English as a phone call. Preserve speaker turns and keep names, times, numbers, and commitments accurate.",
         "conversation": "Transcribe this audio fully in English as a meeting or discussion. Preserve speaker turns and keep decisions, owners, and deadlines intact.",
     }.get(transcription_type, "Transcribe this audio fully in English without summarizing.")
@@ -4372,6 +4400,8 @@ def _infer_content_style(
 
     if normalized_type == "phonecall":
         return "phonecall"
+    if normalized_type == "prayer":
+        return "prayer"
 
     if speaker_count <= 1:
         if _contains_context_hint(lower_text, SERMON_CONTEXT_HINTS):
@@ -5639,7 +5669,7 @@ def split_audio_file(
         source_duration=round(source_duration, 3),
     )
     prepared_path = f"{file_path}_whisper.mp3"
-    highpass_freq = "90" if transcription_type == "sermon" else "80"
+    highpass_freq = "90" if transcription_type in {"sermon", "prayer"} else "80"
     initial_pad_ms = int(WHISPER_INITIAL_PADDING_SECONDS * 1000)
     tail_pad_seconds = max(WHISPER_BOUNDARY_PADDING_SECONDS, WHISPER_INITIAL_PADDING_SECONDS)
     filter_parts = [
@@ -5959,6 +5989,8 @@ def _build_compact_whisper_prompt(
         prefix = (
             "English sermon or lecture audio."
             if transcription_type == "sermon"
+            else "English spoken prayer audio."
+            if transcription_type == "prayer"
             else "English phone call audio."
             if transcription_type == "phonecall"
             else "English meeting or conversation audio."
@@ -6004,6 +6036,8 @@ def _build_compact_whisper_prompt(
         prefix = (
             "日本語の説教または講義音声です。"
             if transcription_type == "sermon"
+            else "日本語の祈りの音声です。"
+            if transcription_type == "prayer"
             else "日本語の通話録音です。"
             if transcription_type == "phonecall"
             else "日本語の会議または会話録音です。"
@@ -6038,6 +6072,8 @@ def _build_compact_whisper_prompt(
     prefix = (
         "한국어 설교 또는 강의 음성입니다."
         if transcription_type == "sermon"
+        else "한국어 기도문 음성입니다."
+        if transcription_type == "prayer"
         else "한국어 전화 통화 녹음입니다."
         if transcription_type == "phonecall"
         else "한국어 회의 또는 대화 녹음입니다."
@@ -7375,7 +7411,7 @@ def _process_transcription_sync(
             "raw_text": raw_text,
             "corrected_text": corrected_text,
             "characters": len(corrected_text),
-            "darakbang_optimized": transcription_type == "sermon",
+            "darakbang_optimized": transcription_type in {"sermon", "prayer"},
             "engine": engine,
             "transcription_type": transcription_type,
             "content_style": _infer_content_style(
@@ -7497,7 +7533,7 @@ async def transcribe_audio(
     x_mallog24_client_platform: str | None = Header(default=None),
     x_mallog24_upload_id: str | None = Header(default=None),
 ):
-    """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/phonecall/conversation"""
+    """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/prayer/phonecall/conversation"""
     temp_file_path = ""
     queued_for_processing = False
     try:
@@ -7604,7 +7640,7 @@ async def transcribe_audio(
             "raw_text": "",
             "corrected_text": "",
             "characters": 0,
-            "darakbang_optimized": normalized_transcription_type == "sermon",
+            "darakbang_optimized": normalized_transcription_type in {"sermon", "prayer"},
             "engine": "whisper+gemini" if openai_client else "gemini-only",
             "transcription_type": normalized_transcription_type,
             "correction_mode": normalized_correction_mode,
@@ -7621,13 +7657,18 @@ async def transcribe_audio(
                 "raw_text": "",
                 "corrected_text": "",
                 "characters": 0,
-                "darakbang_optimized": normalized_transcription_type == "sermon",
+                "darakbang_optimized": normalized_transcription_type in {"sermon", "prayer"},
                 "engine": "whisper+gemini" if openai_client else "gemini-only",
                 "transcription_type": normalized_transcription_type,
                 "error": None,
             })
 
-        type_labels = {"sermon": "설교 녹취", "phonecall": "통화 기록", "conversation": "대화/회의 기록"}
+        type_labels = {
+            "sermon": "설교 녹취",
+            "prayer": "기도문",
+            "phonecall": "통화 기록",
+            "conversation": "대화/회의 기록",
+        }
         engine_name = "whisper+gemini" if openai_client else "gemini-only"
         queue_state_persisted = job_state_persisted or state_persisted
         should_return_inline = (
