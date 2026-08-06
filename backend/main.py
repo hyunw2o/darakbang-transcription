@@ -2752,6 +2752,10 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool
     payload.pop("user_id", None)
     payload.pop("progress", None)
     payload.pop("chunk_manifest", None)
+    # Older deployments constrain this compatibility table to terminal/queued states.
+    # Fine-grained worker progress remains authoritative in transcription_jobs.
+    if payload.get("status") == "processing":
+        payload["status"] = "queued"
     if not payload:
         return False
 
