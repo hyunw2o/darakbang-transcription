@@ -2741,10 +2741,26 @@ def _build_transcription_status_response(row: dict, task_id: str, runtime_status
     }
 
 
+def _legacy_transcription_task_id(task_id: str) -> str | None:
+    """Map queue task IDs to the UUID used by the legacy history table."""
+    candidate = str(task_id or "").strip()
+    if candidate.startswith("upload-"):
+        candidate = candidate.removeprefix("upload-")
+    try:
+        return str(uuid.UUID(candidate))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool:
     """transcriptions 상태를 안전하게 갱신/생성한다."""
     global TRANSCRIPTION_SCOPE_VALIDATED
     if not patch:
+        return False
+
+    legacy_task_id = _legacy_transcription_task_id(task_id)
+    if not legacy_task_id:
+        print(f"Skipping legacy transcription state for non-UUID task ID: {task_id}")
         return False
 
     payload = dict(patch)
@@ -2764,7 +2780,7 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool
         existing = (
             client.table("transcriptions")
             .select("task_id")
-            .eq("task_id", task_id)
+            .eq("task_id", legacy_task_id)
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -2774,14 +2790,14 @@ def _upsert_transcription_state(task_id: str, user_id: str, patch: dict) -> bool
             (
                 client.table("transcriptions")
                 .update(payload)
-                .eq("task_id", task_id)
+                .eq("task_id", legacy_task_id)
                 .eq("user_id", user_id)
                 .execute()
             )
             return True
 
         insert_payload = {
-            "task_id": task_id,
+            "task_id": legacy_task_id,
             "user_id": user_id,
             "created_at": datetime.now().isoformat(),
             "status": "queued",
@@ -8124,10 +8140,14 @@ async def get_task_status(
             }
         return {"task_id": task_id, "status": "not_found"}
 
+    legacy_task_id = _legacy_transcription_task_id(task_id)
+    if not legacy_task_id:
+        return {"task_id": task_id, "status": runtime_status or "not_found"}
+
     query = (
         _get_supabase_client().table("transcriptions")
         .select("*")
-        .eq("task_id", task_id)
+        .eq("task_id", legacy_task_id)
         .eq("user_id", user_id)
     )
     response = await asyncio.to_thread(query.execute)
