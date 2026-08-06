@@ -2673,10 +2673,33 @@ def _coerce_job_json(value, fallback):
     return fallback
 
 
+def _resolve_transcription_progress(row: dict, task_id: str, row_status: str) -> dict:
+    persisted_progress = _coerce_job_json(row.get("progress"), {})
+    runtime_progress = _coerce_job_json(task_progress.get(task_id), {})
+
+    if row_status in {"completed", "error"}:
+        if str(persisted_progress.get("stage") or "") == row_status:
+            return persisted_progress
+        return _build_transcription_progress(row_status)
+
+    if not runtime_progress:
+        return persisted_progress
+    if not persisted_progress:
+        return runtime_progress
+
+    runtime_updated_at = _parse_iso_datetime(runtime_progress.get("updated_at"))
+    persisted_updated_at = _parse_iso_datetime(persisted_progress.get("updated_at"))
+    if runtime_updated_at and persisted_updated_at:
+        return runtime_progress if runtime_updated_at > persisted_updated_at else persisted_progress
+    if runtime_updated_at and not persisted_updated_at:
+        return runtime_progress
+    return persisted_progress
+
+
 def _build_transcription_status_response(row: dict, task_id: str, runtime_status: str | None = None) -> dict:
     row_status = str(row.get("status") or runtime_status or "")
     normalized_type = str(row.get("transcription_type") or "conversation")
-    progress = task_progress.get(task_id) or _coerce_job_json(row.get("progress"), {}) or {}
+    progress = _resolve_transcription_progress(row, task_id, row_status)
     if not progress:
         fallback_stage = row_status if row_status in {"queued", "completed", "error"} else "transcribing"
         progress = _build_transcription_progress(fallback_stage)
@@ -7943,6 +7966,7 @@ async def transcribe_audio(
                     os.unlink(temp_file_path)
                 temp_file_path = ""
                 queued_for_processing = True
+                _clear_task_runtime_state(task_id)
                 _release_active_source_job(task_id)
                 active_source_reserved = False
                 return {

@@ -1489,7 +1489,7 @@ function App() {
           },
         }
       );
-      setNotice("");
+      setNotice(data?.duplicate_active_job ? copy.notices.duplicateActiveJob : "");
       if (!isLoggedIn && data?.quota) {
         setGuestUsage(data.quota);
       }

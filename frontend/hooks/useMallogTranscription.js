@@ -79,6 +79,7 @@ const TRANSCRIPTION_MESSAGES = {
     recordingReady: '녹음 파일이 준비되었습니다. 변환하기를 눌러 진행해 주세요.',
     recordingCanceled: '녹음을 취소했습니다.',
     uploadRetrying: '네트워크 연결이 불안정해 파일 업로드를 안전하게 다시 시도하고 있습니다.',
+    duplicateActiveJob: '동일한 파일의 기존 변환 작업을 이어서 확인합니다. 변환 버튼을 다시 누르지 않아도 됩니다.',
     transcribeFailed: '변환 실패',
     loadHistoryFailed: '해당 기록을 불러올 수 없습니다.',
     loadHistoryGeneric: '불러오기 실패',
@@ -139,6 +140,7 @@ const TRANSCRIPTION_MESSAGES = {
     recordingReady: 'Recording is ready. Press Start Transcription to continue.',
     recordingCanceled: 'Recording canceled.',
     uploadRetrying: 'The connection is unstable. Retrying the file upload safely.',
+    duplicateActiveJob: 'Continuing the existing job for this file. You do not need to press the transcription button again.',
     transcribeFailed: 'Transcription failed.',
     loadHistoryFailed: 'Unable to load this record.',
     loadHistoryGeneric: 'Failed to load record.',
@@ -1267,7 +1269,7 @@ export default function useMallogTranscription({
         }
       )
       const data = await readResponseData(response, messages.transcribeFailed)
-      setNotice(null)
+      setNotice(data?.duplicate_active_job ? messages.duplicateActiveJob : null)
       if (!authToken && data?.quota) {
         setGuestUsage(data.quota)
       }
