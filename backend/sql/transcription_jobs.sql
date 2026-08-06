@@ -13,6 +13,7 @@ create table if not exists public.transcription_jobs (
   storage_bucket text,
   storage_object_path text,
   source_mime_type text,
+  source_sha256 text,
   worker_id text,
   claimed_at timestamptz,
   language text,
@@ -40,6 +41,7 @@ alter table if exists public.transcription_jobs
   add column if not exists storage_bucket text,
   add column if not exists storage_object_path text,
   add column if not exists source_mime_type text,
+  add column if not exists source_sha256 text,
   add column if not exists worker_id text,
   add column if not exists claimed_at timestamptz,
   add column if not exists language text,
@@ -133,3 +135,14 @@ create index if not exists idx_transcription_jobs_owner_created_at
 
 create index if not exists idx_transcription_jobs_user_created_at
   on public.transcription_jobs (user_id, created_at desc);
+
+create index if not exists idx_transcription_jobs_active_source
+  on public.transcription_jobs (
+    owner_key,
+    source_sha256,
+    language,
+    transcription_type,
+    correction_mode,
+    created_at
+  )
+  where source_sha256 is not null and status in ('queued', 'processing');
