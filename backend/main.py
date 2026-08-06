@@ -577,9 +577,12 @@ task_status = {}
 task_owner = {}
 task_updated_at: dict[str, float] = {}
 task_progress: dict[str, dict] = {}
+active_source_jobs: dict[tuple[str, str, str, str, str], str] = {}
+task_source_keys: dict[str, tuple[str, str, str, str, str]] = {}
 mock_checkout_sessions: dict[str, dict] = {}
 portone_checkout_sessions: dict[str, dict] = {}
 transcription_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTIONS)
+active_source_jobs_lock = threading.Lock()
 if TRANSCRIPTION_ENGINE_MODE not in {"auto", "whisper_gemini", "gemini_only"}:
     print(
         "Warning: TRANSCRIPTION_ENGINE_MODE is invalid. "
@@ -606,6 +609,7 @@ APP_REVIEW_DEMO_EMAILS = {
 TRANSCRIPTION_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE = True
+TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE = True
 USAGE_SCOPE_VALIDATED = False
 USAGE_TRIAL_COLUMNS_AVAILABLE = True
 BILLING_SCOPE_VALIDATED = False
@@ -736,6 +740,26 @@ def _clear_task_runtime_state(task_id: str) -> None:
     task_progress.pop(task_id, None)
 
 
+def _reserve_active_source_job(
+    source_key: tuple[str, str, str, str, str],
+    task_id: str,
+) -> str:
+    with active_source_jobs_lock:
+        existing_task_id = active_source_jobs.get(source_key)
+        if existing_task_id:
+            return existing_task_id
+        active_source_jobs[source_key] = task_id
+        task_source_keys[task_id] = source_key
+        return task_id
+
+
+def _release_active_source_job(task_id: str) -> None:
+    with active_source_jobs_lock:
+        source_key = task_source_keys.pop(task_id, None)
+        if source_key and active_source_jobs.get(source_key) == task_id:
+            active_source_jobs.pop(source_key, None)
+
+
 TRANSCRIPTION_PROGRESS_BASE_PERCENT = {
     "queued": 5,
     "loading_glossary": 8,
@@ -774,6 +798,7 @@ def _build_transcription_progress(stage: str, payload: dict | None = None) -> di
     for key in (
         "current_chunk",
         "total_chunks",
+        "source_chunk",
         "retried_chunks",
         "retry_reasons",
         "silence_count",
@@ -2379,7 +2404,9 @@ def _upsert_transcription_job(
     user_id: str | None,
     is_guest: bool,
 ) -> bool:
-    global TRANSCRIPTION_JOBS_SCOPE_VALIDATED, TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE
+    global TRANSCRIPTION_JOBS_SCOPE_VALIDATED
+    global TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE
+    global TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE
     if not task_id or not owner_key or not patch:
         return False
     if not _ensure_transcription_jobs_scope_ready():
@@ -2394,6 +2421,8 @@ def _upsert_transcription_job(
     if not TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE:
         payload.pop("progress", None)
         payload.pop("chunk_manifest", None)
+    if not TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE:
+        payload.pop("source_sha256", None)
     if not payload:
         return False
     payload["updated_at"] = datetime.now().isoformat()
@@ -2463,6 +2492,31 @@ def _upsert_transcription_job(
                     is_guest=is_guest,
                 )
             return False
+        optional_source_hash_error = (
+            "source_sha256" in error_text
+            and (
+                "column" in error_text
+                or "schema cache" in error_text
+                or "pgrst204" in error_text
+            )
+        )
+        if optional_source_hash_error and TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE:
+            TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE = False
+            reduced_patch = dict(patch)
+            reduced_patch.pop("source_sha256", None)
+            print(
+                "Warning: transcription source hash column is not ready; "
+                "continuing without cross-request duplicate detection until transcription_jobs.sql is applied."
+            )
+            if reduced_patch:
+                return _upsert_transcription_job(
+                    task_id,
+                    owner_key,
+                    reduced_patch,
+                    user_id=user_id,
+                    is_guest=is_guest,
+                )
+            return False
         if "column" in error_text and any(
             column_name in error_text
             for column_name in (
@@ -2503,6 +2557,61 @@ def _fetch_transcription_job(task_id: str, owner_key: str) -> dict | None:
             return response.data[0]
     except Exception as e:
         print(f"Failed to fetch transcription job ({task_id}): {e}")
+    return None
+
+
+def _find_active_duplicate_transcription_job(
+    owner_key: str,
+    source_sha256: str,
+    *,
+    language: str,
+    transcription_type: str,
+    correction_mode: str,
+    exclude_task_id: str = "",
+) -> dict | None:
+    global TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE
+    if (
+        not owner_key
+        or not source_sha256
+        or not TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE
+        or not _ensure_transcription_jobs_scope_ready()
+    ):
+        return None
+    try:
+        response = (
+            _get_supabase_client()
+            .table(TRANSCRIPTION_JOBS_TABLE_NAME)
+            .select("*")
+            .eq("owner_key", owner_key)
+            .eq("source_sha256", source_sha256)
+            .eq("language", language)
+            .eq("transcription_type", transcription_type)
+            .eq("correction_mode", correction_mode)
+            .in_("status", ["queued", "processing"])
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+        for row in response.data or []:
+            if (
+                str(row.get("task_id") or "") != exclude_task_id
+                and not _has_task_exceeded_timeout(row.get("created_at"))
+            ):
+                return row
+    except Exception as e:
+        error_text = str(e).lower()
+        if "source_sha256" in error_text and (
+            "column" in error_text
+            or "schema cache" in error_text
+            or "pgrst204" in error_text
+        ):
+            TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE = False
+            print(
+                "Warning: transcription source hash column is not ready; "
+                "active duplicate detection is disabled until transcription_jobs.sql is applied."
+            )
+            return None
+        print(f"Failed to find an active duplicate transcription job: {e}")
     return None
 
 
@@ -6450,11 +6559,16 @@ def whisper_transcribe(
         )
         low_confidence_indexes: list[int] = []
         if WHISPER_SELECTIVE_RETRY_ENABLED:
+            retry_candidates: list[tuple[int, list[str]]] = []
             for index, (chunk, result) in enumerate(zip(chunks, all_results)):
                 reasons = _transcription_retry_reasons(result, chunk, len(chunks))
-                if not reasons:
-                    continue
-                low_confidence_indexes.append(index)
+                if reasons:
+                    retry_candidates.append((index, reasons))
+            low_confidence_indexes = [index for index, _ in retry_candidates]
+
+            for retry_position, (index, reasons) in enumerate(retry_candidates, start=1):
+                chunk = chunks[index]
+                result = all_results[index]
                 chunks[index]["status"] = "retrying"
                 previous_context = ""
                 if index > 0:
@@ -6474,8 +6588,9 @@ def whisper_transcribe(
                 _notify_pipeline_progress(
                     progress_callback,
                     "retranscribing",
-                    current_chunk=index + 1,
-                    total_chunks=len(chunks),
+                    current_chunk=retry_position,
+                    total_chunks=len(retry_candidates),
+                    source_chunk=index + 1,
                     retry_reasons=reasons,
                     chunk_manifest=_chunk_manifest(chunks),
                 )
@@ -7477,6 +7592,7 @@ def _process_transcription_sync(
         _log_stage_memory(task_id, "error")
         return error_payload
     finally:
+        _release_active_source_job(task_id)
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
@@ -7536,6 +7652,7 @@ async def transcribe_audio(
     """음성 → 텍스트 변환 (Whisper + Gemini 2단계). 유형: sermon/prayer/phonecall/conversation"""
     temp_file_path = ""
     queued_for_processing = False
+    active_source_reserved = False
     try:
         owner = await _resolve_transcription_owner(authorization, x_guest_session_id, request)
         user = owner["user"]
@@ -7594,6 +7711,7 @@ async def transcribe_audio(
         file_signature = b""
         total_bytes = 0
         chunk_size = 1024 * 1024  # 1MB
+        source_hasher = hashlib.sha256()
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".upload") as temp_file:
             temp_file_path = temp_file.name
@@ -7607,6 +7725,7 @@ async def transcribe_audio(
                 if len(file_signature) < 4096:
                     remain = 4096 - len(file_signature)
                     file_signature += chunk[:remain]
+                source_hasher.update(chunk)
                 temp_file.write(chunk)
 
         if expected_size_bytes > 0 and total_bytes != expected_size_bytes:
@@ -7624,6 +7743,67 @@ async def transcribe_audio(
         temp_file_path = normalized_temp_path
 
         audio_seconds = _extract_audio_duration_seconds(temp_file_path)
+        source_sha256 = source_hasher.hexdigest()
+        duplicate_job = _find_active_duplicate_transcription_job(
+            user_id,
+            source_sha256,
+            language=normalized_language,
+            transcription_type=normalized_transcription_type,
+            correction_mode=normalized_correction_mode,
+            exclude_task_id=task_id,
+        )
+        if duplicate_job:
+            os.unlink(temp_file_path)
+            temp_file_path = ""
+            return {
+                **_build_transcription_status_response(
+                    duplicate_job,
+                    str(duplicate_job.get("task_id") or task_id),
+                ),
+                "success": True,
+                "guest": is_guest,
+                "idempotent_replay": True,
+                "duplicate_active_job": True,
+                "message": "동일한 파일의 변환이 이미 진행 중이어서 기존 작업을 이어서 확인합니다.",
+            }
+
+        source_key = (
+            user_id,
+            source_sha256,
+            normalized_language,
+            normalized_transcription_type,
+            normalized_correction_mode,
+        )
+        active_task_id = _reserve_active_source_job(source_key, task_id)
+        if active_task_id != task_id:
+            active_job = _fetch_transcription_job(active_task_id, user_id)
+            active_status = str((active_job or {}).get("status") or "").strip().lower()
+            if active_status in {"completed", "error"}:
+                _release_active_source_job(active_task_id)
+                active_task_id = _reserve_active_source_job(source_key, task_id)
+            if active_task_id != task_id:
+                os.unlink(temp_file_path)
+                temp_file_path = ""
+                runtime_status = str(task_status.get(active_task_id) or "queued").strip().lower()
+                active_response = (
+                    _build_transcription_status_response(active_job, active_task_id)
+                    if active_job and str(active_job.get("task_id") or "") == active_task_id
+                    else {
+                        "task_id": active_task_id,
+                        "status": runtime_status if runtime_status in {"queued", "processing"} else "queued",
+                        "progress": task_progress.get(active_task_id)
+                        or _build_transcription_progress("queued"),
+                    }
+                )
+                return {
+                    **active_response,
+                    "success": True,
+                    "guest": is_guest,
+                    "idempotent_replay": True,
+                    "duplicate_active_job": True,
+                    "message": "동일한 파일의 변환이 이미 진행 중이어서 기존 작업을 이어서 확인합니다.",
+                }
+        active_source_reserved = True
         usage_snapshot = (
             _enforce_guest_upload_quota_or_raise(user_id, audio_seconds, request)
             if is_guest
@@ -7645,6 +7825,7 @@ async def transcribe_audio(
             "transcription_type": normalized_transcription_type,
             "correction_mode": normalized_correction_mode,
             "audio_seconds": audio_seconds,
+            "source_sha256": source_sha256,
             "error": None,
             "progress": queued_progress,
         }, user_id=None if is_guest else user_id, is_guest=is_guest)
@@ -7762,6 +7943,8 @@ async def transcribe_audio(
                     os.unlink(temp_file_path)
                 temp_file_path = ""
                 queued_for_processing = True
+                _release_active_source_job(task_id)
+                active_source_reserved = False
                 return {
                     "success": True,
                     "task_id": task_id,
@@ -7813,10 +7996,14 @@ async def transcribe_audio(
         }
 
     except HTTPException:
+        if active_source_reserved and not queued_for_processing:
+            _release_active_source_job(task_id)
         if temp_file_path and (not queued_for_processing) and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
         raise
     except Exception as e:
+        if active_source_reserved and not queued_for_processing:
+            _release_active_source_job(task_id)
         if temp_file_path and (not queued_for_processing) and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
         raise HTTPException(status_code=500, detail=_sanitize_transcription_error(e))
@@ -11007,6 +11194,11 @@ async def health_check():
         "terms_loaded": len(ALL_CHURCH_TERMS),
         "darakbang_terms": len(DARAKBANG_CORE),
         "engine": "whisper+gemini" if openai_client else "gemini-only",
+        "transcription": {
+            "worker_queue_configured": _can_use_worker_queue(),
+            "max_concurrent_jobs": MAX_CONCURRENT_TRANSCRIPTIONS,
+            "chunk_concurrency_per_job": WHISPER_CHUNK_CONCURRENCY,
+        },
         "apis": {
             "gemini": bool(GEMINI_API_KEY),
             "openai_whisper": bool(OPENAI_API_KEY),
