@@ -306,8 +306,15 @@ AUTH_COOKIE_MAX_AGE_SECONDS = max(
     int(os.getenv("AUTH_COOKIE_MAX_AGE_SECONDS", str(30 * 24 * 60 * 60))),
 )
 TASK_STUCK_TIMEOUT_SECONDS = max(900, int(os.getenv("TASK_STUCK_TIMEOUT_SECONDS", "7200")))
+DUPLICATE_JOB_STALE_SECONDS = max(
+    900,
+    int(os.getenv("DUPLICATE_JOB_STALE_SECONDS", "1800")),
+)
 TASK_STUCK_ERROR_MESSAGE = (
     "처리 시간이 비정상적으로 길어 작업이 자동 종료되었습니다. 다시 시도해 주세요."
+)
+DUPLICATE_JOB_STALE_ERROR_MESSAGE = (
+    "이전 동일 파일 작업의 진행이 중단되어 자동 종료되었습니다. 새 변환을 시작해 주세요."
 )
 TRANSCRIPTION_ENGINE_MODE = (os.getenv("TRANSCRIPTION_ENGINE_MODE", "auto").strip().lower() or "auto")
 ENABLE_MEMORY_STAGE_LOG = (os.getenv("ENABLE_MEMORY_STAGE_LOG", "false").strip().lower() == "true")
@@ -786,7 +793,9 @@ def _build_transcription_progress(stage: str, payload: dict | None = None) -> di
     current_chunk = max(0, int(details.get("current_chunk") or 0))
     total_chunks = max(0, int(details.get("total_chunks") or 0))
     percent = int(TRANSCRIPTION_PROGRESS_BASE_PERCENT.get(normalized_stage, 5))
-    if total_chunks > 0 and normalized_stage == "transcribing":
+    if total_chunks > 0 and normalized_stage == "splitting_audio":
+        percent = 18 + round(4 * min(current_chunk, total_chunks) / total_chunks)
+    elif total_chunks > 0 and normalized_stage == "transcribing":
         percent = 25 + round(40 * min(current_chunk, total_chunks) / total_chunks)
     elif total_chunks > 0 and normalized_stage == "retranscribing":
         percent = 70 + round(8 * min(current_chunk, total_chunks) / total_chunks)
@@ -2593,11 +2602,50 @@ def _find_active_duplicate_transcription_job(
             .execute()
         )
         for row in response.data or []:
-            if (
-                str(row.get("task_id") or "") != exclude_task_id
-                and not _has_task_exceeded_timeout(row.get("created_at"))
+            row_task_id = str(row.get("task_id") or "")
+            if not row_task_id or row_task_id == exclude_task_id:
+                continue
+
+            heartbeat_at = row.get("updated_at") or row.get("claimed_at") or row.get("created_at")
+            if _has_task_exceeded_timeout(
+                heartbeat_at,
+                timeout_seconds=DUPLICATE_JOB_STALE_SECONDS,
             ):
-                return row
+                row_user_id = str(row.get("user_id") or "").strip() or None
+                row_is_guest = bool(row.get("is_guest"))
+                _clear_task_runtime_state(row_task_id)
+                _release_active_source_job(row_task_id)
+                _upsert_transcription_job(
+                    row_task_id,
+                    owner_key,
+                    {
+                        "status": "error",
+                        "error": DUPLICATE_JOB_STALE_ERROR_MESSAGE,
+                        "progress": _build_transcription_progress("error"),
+                        "worker_id": None,
+                        "claimed_at": None,
+                        "storage_bucket": None,
+                        "storage_object_path": None,
+                    },
+                    user_id=row_user_id,
+                    is_guest=row_is_guest,
+                )
+                if row_user_id and not row_is_guest:
+                    _upsert_transcription_state(
+                        row_task_id,
+                        row_user_id,
+                        {
+                            "status": "error",
+                            "error": DUPLICATE_JOB_STALE_ERROR_MESSAGE,
+                        },
+                    )
+                _delete_transcription_input_from_storage(
+                    str(row.get("storage_bucket") or ""),
+                    str(row.get("storage_object_path") or ""),
+                )
+                continue
+
+            return row
     except Exception as e:
         error_text = str(e).lower()
         if "source_sha256" in error_text and (
@@ -3152,11 +3200,15 @@ def _resolve_billing_reference_datetime(row: dict | None) -> datetime | None:
     )
 
 
-def _has_task_exceeded_timeout(created_at_value: str | None) -> bool:
-    created_dt = _parse_iso_datetime(created_at_value)
-    if not created_dt:
+def _has_task_exceeded_timeout(
+    activity_at_value: str | None,
+    *,
+    timeout_seconds: int = TASK_STUCK_TIMEOUT_SECONDS,
+) -> bool:
+    activity_dt = _parse_iso_datetime(activity_at_value)
+    if not activity_dt:
         return False
-    return (datetime.utcnow() - created_dt) > timedelta(seconds=TASK_STUCK_TIMEOUT_SECONDS)
+    return (datetime.utcnow() - activity_dt) > timedelta(seconds=max(1, timeout_seconds))
 
 
 def _is_refund_window_open(row: dict | None) -> bool:
@@ -6006,6 +6058,13 @@ def split_audio_file(
                 "actual_duration": actual_duration,
                 "status": "pending",
             })
+            _notify_pipeline_progress(
+                progress_callback,
+                "splitting_audio",
+                current_chunk=len(chunks),
+                total_chunks=len(plans),
+                source_duration=round(source_duration, 3),
+            )
     except Exception as exc:
         for created in created_paths:
             try:
@@ -7807,6 +7866,7 @@ async def transcribe_audio(
                 "guest": is_guest,
                 "idempotent_replay": True,
                 "duplicate_active_job": True,
+                "resumed_existing_job": True,
                 "message": "동일한 파일의 변환이 이미 진행 중이어서 기존 작업을 이어서 확인합니다.",
             }
 
@@ -7844,6 +7904,7 @@ async def transcribe_audio(
                     "guest": is_guest,
                     "idempotent_replay": True,
                     "duplicate_active_job": True,
+                    "resumed_existing_job": True,
                     "message": "동일한 파일의 변환이 이미 진행 중이어서 기존 작업을 이어서 확인합니다.",
                 }
         active_source_reserved = True
@@ -8154,7 +8215,9 @@ async def get_task_status(
     if response.data:
         row = response.data[0]
         row_status = str(row.get("status") or runtime_status or "")
-        if row_status in {"queued", "processing"} and _has_task_exceeded_timeout(row.get("created_at")):
+        if row_status in {"queued", "processing"} and _has_task_exceeded_timeout(
+            row.get("updated_at") or row.get("created_at")
+        ):
             _clear_task_runtime_state(task_id)
             _upsert_transcription_job(task_id, user_id, {
                 "status": "error",
