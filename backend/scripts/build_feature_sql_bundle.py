@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 TABLE_SQL_FILES = {
+    "transcription_usage_metrics": "backend/sql/transcription_usage_metrics.sql",
     "user_glossary_terms": "backend/sql/user_glossary_terms.sql",
     "user_correction_samples": "backend/sql/user_correction_samples.sql",
     "training_audio_assets": "backend/sql/training_data_assets.sql",
@@ -109,6 +110,7 @@ def parse_args() -> argparse.Namespace:
 def run_self_test() -> int:
     bundle = build_bundle(DEFAULT_SQL_FILES, include_notify=True)
     assert "create table if not exists public.user_glossary_terms" in bundle
+    assert "create table if not exists public.transcription_usage_metrics" in bundle
     assert "create table if not exists public.user_correction_samples" in bundle
     assert "create table if not exists public.training_audio_assets" in bundle
     assert "create table if not exists public.training_text_samples" in bundle

@@ -10,7 +10,7 @@ import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
 import UserGlossaryPanel from './UserGlossaryPanel'
 import { KO_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
-import { formatSecondsToHourMinute } from '../utils/format'
+import { formatSecondsCompact, formatSecondsToHourMinute } from '../utils/format'
 import {
   getTranscriptionProgressText,
   normalizeTranscriptionProgress,
@@ -1135,6 +1135,33 @@ export default function MallogHomeKoView(props) {
                                   </svg>
                                 </div>
                               </button>
+                              {item.api_usage && (
+                                <div className="mt-3 border-t border-nm-dark/10 pt-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="break-keep text-[11px] font-bold text-nm-text-primary">관리자 전용 API 사용량</p>
+                                    <span className={`whitespace-nowrap text-[10px] font-semibold ${item.api_usage.complete_token_reporting ? 'text-green-600' : 'text-amber-600'}`}>
+                                      {item.api_usage.complete_token_reporting ? '전체 집계' : '일부 응답 미집계'}
+                                    </span>
+                                  </div>
+                                  <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                                    {[
+                                      ['총 토큰', Number(item.api_usage.total_reported_tokens || 0).toLocaleString('ko-KR')],
+                                      ['OpenAI 토큰', Number(item.api_usage.openai?.total_tokens || 0).toLocaleString('ko-KR')],
+                                      ['Gemini 토큰', Number(item.api_usage.gemini?.total_tokens || 0).toLocaleString('ko-KR')],
+                                      ['API 요청', `${Number(item.api_usage.total_requests || 0).toLocaleString('ko-KR')}회`],
+                                      ['원본 음성', formatSecondsCompact(item.api_usage.source_audio_seconds, 'ko')],
+                                      ['처리된 음성', formatSecondsCompact(item.api_usage.openai?.processed_seconds, 'ko')],
+                                      ['추가 처리', formatSecondsCompact(item.api_usage.additional_audio_processing_seconds, 'ko')],
+                                      ['작업 소요', formatSecondsCompact(item.api_usage.wall_seconds, 'ko')],
+                                    ].map(([label, value]) => (
+                                      <div key={label} className="min-w-0">
+                                        <dt className="break-keep text-[10px] leading-4 text-nm-text-secondary">{label}</dt>
+                                        <dd className="whitespace-nowrap text-xs font-semibold text-nm-text-primary">{value}</dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                </div>
+                              )}
                               <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-nm-dark/10 pt-3">
                                 {pendingDeleteTaskId === item.task_id && historyDeletingTaskId !== item.task_id && (
                                   <p className="mr-auto text-[11px] leading-4 text-red-500">다시 누르면 이 계정의 기록에서 바로 제거됩니다.</p>

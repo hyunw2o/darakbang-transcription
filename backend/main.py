@@ -206,6 +206,7 @@ GUEST_RESULT_TTL_SECONDS = max(600, int(os.getenv("GUEST_RESULT_TTL_SECONDS", "7
 GUEST_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
 UPLOAD_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
 TRANSCRIPTION_JOBS_TABLE_NAME = "transcription_jobs"
+TRANSCRIPTION_USAGE_METRICS_TABLE_NAME = "transcription_usage_metrics"
 USAGE_TABLE_NAME = "user_usage_quotas"
 USER_GLOSSARY_TABLE_NAME = "user_glossary_terms"
 USER_CORRECTION_SAMPLES_TABLE_NAME = "user_correction_samples"
@@ -584,12 +585,14 @@ task_status = {}
 task_owner = {}
 task_updated_at: dict[str, float] = {}
 task_progress: dict[str, dict] = {}
+task_api_usage: dict[str, dict] = {}
 active_source_jobs: dict[tuple[str, str, str, str, str], str] = {}
 task_source_keys: dict[str, tuple[str, str, str, str, str]] = {}
 mock_checkout_sessions: dict[str, dict] = {}
 portone_checkout_sessions: dict[str, dict] = {}
 transcription_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TRANSCRIPTIONS)
 active_source_jobs_lock = threading.Lock()
+task_api_usage_lock = threading.Lock()
 if TRANSCRIPTION_ENGINE_MODE not in {"auto", "whisper_gemini", "gemini_only"}:
     print(
         "Warning: TRANSCRIPTION_ENGINE_MODE is invalid. "
@@ -615,6 +618,7 @@ APP_REVIEW_DEMO_EMAILS = {
 }
 TRANSCRIPTION_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOBS_SCOPE_VALIDATED = False
+TRANSCRIPTION_USAGE_METRICS_SCOPE_VALIDATED = False
 TRANSCRIPTION_JOB_PROGRESS_COLUMNS_AVAILABLE = True
 TRANSCRIPTION_JOB_SOURCE_HASH_COLUMN_AVAILABLE = True
 USAGE_SCOPE_VALIDATED = False
@@ -2403,6 +2407,94 @@ def _ensure_transcription_jobs_scope_ready(required: bool = False) -> bool:
             )
             return False
         raise
+
+
+def _ensure_transcription_usage_metrics_scope_ready(required: bool = False) -> bool:
+    """관리자 전용 API 사용량 테이블의 준비 상태를 확인한다."""
+    global TRANSCRIPTION_USAGE_METRICS_SCOPE_VALIDATED
+    if TRANSCRIPTION_USAGE_METRICS_SCOPE_VALIDATED:
+        return True
+
+    try:
+        (
+            _get_supabase_client()
+            .table(TRANSCRIPTION_USAGE_METRICS_TABLE_NAME)
+            .select("task_id,user_id,usage_summary")
+            .limit(1)
+            .execute()
+        )
+        TRANSCRIPTION_USAGE_METRICS_SCOPE_VALIDATED = True
+        return True
+    except Exception as exc:
+        if required:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Supabase 설정 필요: backend/sql/transcription_usage_metrics.sql 을 실행한 뒤 "
+                    "SQL Editor에서 `NOTIFY pgrst, 'reload schema';` 를 실행하세요."
+                ),
+            ) from exc
+        print(
+            "Warning: transcription_usage_metrics table is not ready. "
+            "Run backend/sql/transcription_usage_metrics.sql and reload PostgREST schema."
+        )
+        return False
+
+
+def _persist_transcription_usage_summary(task_id: str, user_id: str, usage_summary: dict) -> bool:
+    """서비스 역할만 접근 가능한 테이블에 작업별 API 사용량을 저장한다."""
+    if not task_id or not user_id or not usage_summary:
+        return False
+    if not _ensure_transcription_usage_metrics_scope_ready():
+        return False
+
+    history_task_id = _legacy_transcription_task_id(task_id) or str(task_id)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "task_id": history_task_id,
+        "user_id": user_id,
+        "usage_summary": usage_summary,
+        "updated_at": now_iso,
+    }
+    try:
+        (
+            _get_supabase_client()
+            .table(TRANSCRIPTION_USAGE_METRICS_TABLE_NAME)
+            .upsert(payload, on_conflict="task_id")
+            .execute()
+        )
+        return True
+    except Exception as exc:
+        print(f"Failed to persist transcription API usage ({task_id}): {exc}")
+        return False
+
+
+def _fetch_transcription_usage_summaries(task_ids: list[str]) -> dict[str, dict]:
+    """관리자 기록 화면에 결합할 사용량 요약을 task_id 기준으로 조회한다."""
+    normalized_ids = list(dict.fromkeys(str(task_id or "").strip() for task_id in task_ids))
+    normalized_ids = [task_id for task_id in normalized_ids if task_id]
+    if not normalized_ids or not _ensure_transcription_usage_metrics_scope_ready():
+        return {}
+
+    try:
+        response = (
+            _get_supabase_client()
+            .table(TRANSCRIPTION_USAGE_METRICS_TABLE_NAME)
+            .select("task_id,usage_summary")
+            .in_("task_id", normalized_ids)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"Failed to fetch transcription API usage summaries: {exc}")
+        return {}
+
+    summaries: dict[str, dict] = {}
+    for row in response.data or []:
+        task_id = str(row.get("task_id") or "").strip()
+        usage_summary = _coerce_job_json(row.get("usage_summary"), {})
+        if task_id and usage_summary:
+            summaries[task_id] = usage_summary
+    return summaries
 
 
 def _upsert_transcription_job(
@@ -5489,6 +5581,9 @@ def _transcribe_with_whisper_timestamp_audit(
     audio_path: str,
     language: str,
     prompt_text: str,
+    *,
+    task_id: str | None = None,
+    processed_seconds: int | float = 0,
 ) -> dict | None:
     if not WHISPER_TIMESTAMP_AUDIT_ENABLED or openai_client is None:
         return None
@@ -5504,6 +5599,13 @@ def _transcribe_with_whisper_timestamp_audit(
                 temperature=0,
                 timeout=WHISPER_CHUNK_TIMEOUT_SECONDS,
             )
+        _record_openai_api_usage(
+            task_id,
+            response,
+            model="whisper-1",
+            operation="timestamp_audit",
+            processed_seconds=processed_seconds,
+        )
     except Exception as exc:
         print(f"  Whisper timestamp audit failed: {exc}")
         return None
@@ -5625,6 +5727,225 @@ def _response_to_mapping(response) -> dict:
         except Exception:
             return {}
     return {}
+
+
+def _usage_value(source, *keys, default=None):
+    if source is None:
+        return default
+    for key in keys:
+        if isinstance(source, dict) and key in source:
+            value = source.get(key)
+        else:
+            value = getattr(source, key, None)
+        if value is not None:
+            return value
+    return default
+
+
+def _nonnegative_usage_int(value) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _nonnegative_usage_float(value) -> float:
+    try:
+        return max(0.0, float(value or 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _new_task_api_usage(source_audio_seconds: int | float = 0) -> dict:
+    return {
+        "version": 1,
+        "source_audio_seconds": round(_nonnegative_usage_float(source_audio_seconds), 3),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "openai": {
+            "requests": 0,
+            "input_tokens": 0,
+            "audio_tokens": 0,
+            "text_input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "processed_seconds": 0.0,
+            "unreported_requests": 0,
+            "models": {},
+            "operations": {},
+        },
+        "gemini": {
+            "requests": 0,
+            "prompt_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "cached_tokens": 0,
+            "total_tokens": 0,
+            "unreported_requests": 0,
+            "models": {},
+            "operations": {},
+        },
+    }
+
+
+def _start_task_api_usage(task_id: str, source_audio_seconds: int | float = 0) -> None:
+    if not task_id:
+        return
+    with task_api_usage_lock:
+        task_api_usage[task_id] = _new_task_api_usage(source_audio_seconds)
+
+
+def _increment_usage_bucket(bucket: dict, key: str, amount: int | float = 1) -> None:
+    if not key:
+        return
+    bucket[key] = bucket.get(key, 0) + amount
+
+
+def _record_openai_api_usage(
+    task_id: str | None,
+    response,
+    *,
+    model: str,
+    operation: str,
+    processed_seconds: int | float = 0,
+) -> None:
+    if not task_id:
+        return
+    response_data = _response_to_mapping(response)
+    usage = response_data.get("usage") or getattr(response, "usage", None)
+    input_details = _usage_value(usage, "input_token_details", "inputTokenDetails", default={})
+    raw_input_tokens = _usage_value(usage, "input_tokens", "prompt_tokens", "inputTokens")
+    raw_output_tokens = _usage_value(usage, "output_tokens", "completion_tokens", "outputTokens")
+    raw_total_tokens = _usage_value(usage, "total_tokens", "totalTokens")
+    token_usage_reported = any(
+        value is not None for value in (raw_input_tokens, raw_output_tokens, raw_total_tokens)
+    )
+    input_tokens = _nonnegative_usage_int(raw_input_tokens)
+    output_tokens = _nonnegative_usage_int(raw_output_tokens)
+    total_tokens = _nonnegative_usage_int(raw_total_tokens)
+    if total_tokens <= 0:
+        total_tokens = input_tokens + output_tokens
+    audio_tokens = _nonnegative_usage_int(_usage_value(input_details, "audio_tokens", "audioTokens"))
+    text_input_tokens = _nonnegative_usage_int(_usage_value(input_details, "text_tokens", "textTokens"))
+    reported_seconds = _nonnegative_usage_float(_usage_value(usage, "seconds", "duration"))
+    effective_seconds = reported_seconds or _nonnegative_usage_float(processed_seconds)
+    normalized_model = str(model or "unknown").strip() or "unknown"
+    normalized_operation = str(operation or "transcription").strip() or "transcription"
+
+    with task_api_usage_lock:
+        summary = task_api_usage.setdefault(task_id, _new_task_api_usage())
+        provider = summary["openai"]
+        provider["requests"] += 1
+        provider["input_tokens"] += input_tokens
+        provider["audio_tokens"] += audio_tokens
+        provider["text_input_tokens"] += text_input_tokens
+        provider["output_tokens"] += output_tokens
+        provider["total_tokens"] += total_tokens
+        provider["processed_seconds"] = round(provider["processed_seconds"] + effective_seconds, 3)
+        if not token_usage_reported:
+            provider["unreported_requests"] += 1
+        _increment_usage_bucket(provider["models"], normalized_model)
+        _increment_usage_bucket(provider["operations"], normalized_operation)
+
+
+def _record_gemini_api_usage(
+    task_id: str | None,
+    response,
+    *,
+    model: str,
+    operation: str,
+) -> None:
+    if not task_id:
+        return
+    response_data = _response_to_mapping(response)
+    usage = (
+        response_data.get("usage_metadata")
+        or response_data.get("usageMetadata")
+        or getattr(response, "usage_metadata", None)
+        or getattr(response, "usageMetadata", None)
+    )
+    raw_prompt_tokens = _usage_value(
+        usage, "prompt_token_count", "promptTokenCount", "input_tokens", "inputTokens"
+    )
+    raw_output_tokens = _usage_value(
+        usage, "candidates_token_count", "candidatesTokenCount", "output_tokens", "outputTokens"
+    )
+    raw_thoughts_tokens = _usage_value(usage, "thoughts_token_count", "thoughtsTokenCount")
+    raw_cached_tokens = _usage_value(usage, "cached_content_token_count", "cachedContentTokenCount")
+    raw_total_tokens = _usage_value(
+        usage, "total_token_count", "totalTokenCount", "total_tokens", "totalTokens"
+    )
+    token_usage_reported = any(
+        value is not None
+        for value in (
+            raw_prompt_tokens,
+            raw_output_tokens,
+            raw_thoughts_tokens,
+            raw_cached_tokens,
+            raw_total_tokens,
+        )
+    )
+    prompt_tokens = _nonnegative_usage_int(raw_prompt_tokens)
+    output_tokens = _nonnegative_usage_int(raw_output_tokens)
+    thoughts_tokens = _nonnegative_usage_int(raw_thoughts_tokens)
+    cached_tokens = _nonnegative_usage_int(raw_cached_tokens)
+    total_tokens = _nonnegative_usage_int(raw_total_tokens)
+    if total_tokens <= 0:
+        total_tokens = prompt_tokens + output_tokens + thoughts_tokens
+    normalized_model = str(model or "unknown").strip() or "unknown"
+    normalized_operation = str(operation or "generation").strip() or "generation"
+
+    with task_api_usage_lock:
+        summary = task_api_usage.setdefault(task_id, _new_task_api_usage())
+        provider = summary["gemini"]
+        provider["requests"] += 1
+        provider["prompt_tokens"] += prompt_tokens
+        provider["output_tokens"] += output_tokens
+        provider["thoughts_tokens"] += thoughts_tokens
+        provider["cached_tokens"] += cached_tokens
+        provider["total_tokens"] += total_tokens
+        if not token_usage_reported:
+            provider["unreported_requests"] += 1
+        _increment_usage_bucket(provider["models"], normalized_model)
+        _increment_usage_bucket(provider["operations"], normalized_operation)
+
+
+def _finalize_task_api_usage(task_id: str) -> dict:
+    with task_api_usage_lock:
+        summary = task_api_usage.get(task_id)
+        if not summary:
+            return {}
+        finalized = json.loads(json.dumps(summary))
+
+    started_at = _parse_iso_datetime(finalized.get("started_at"))
+    finished_at = datetime.now(timezone.utc)
+    finalized["finished_at"] = finished_at.isoformat()
+    if started_at:
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        finalized["wall_seconds"] = round(max(0.0, (finished_at - started_at).total_seconds()), 3)
+    else:
+        finalized["wall_seconds"] = 0.0
+    openai_usage = finalized.get("openai") or {}
+    gemini_usage = finalized.get("gemini") or {}
+    finalized["total_reported_tokens"] = int(openai_usage.get("total_tokens") or 0) + int(
+        gemini_usage.get("total_tokens") or 0
+    )
+    finalized["total_requests"] = int(openai_usage.get("requests") or 0) + int(
+        gemini_usage.get("requests") or 0
+    )
+    source_seconds = _nonnegative_usage_float(finalized.get("source_audio_seconds"))
+    processed_seconds = _nonnegative_usage_float(openai_usage.get("processed_seconds"))
+    finalized["additional_audio_processing_seconds"] = round(max(0.0, processed_seconds - source_seconds), 3)
+    finalized["complete_token_reporting"] = (
+        int(openai_usage.get("unreported_requests") or 0) == 0
+        and int(gemini_usage.get("unreported_requests") or 0) == 0
+    )
+    return finalized
+
+
+def _discard_task_api_usage(task_id: str) -> None:
+    with task_api_usage_lock:
+        task_api_usage.pop(task_id, None)
 
 
 def _extract_transcription_logprob_stats(response) -> dict:
@@ -6430,7 +6751,14 @@ def whisper_transcribe(
         "Do not omit short or quiet speech at the beginning; transcribe it in chronological order."
     )
 
-    def transcribe_audio_path(chunk_index: int, audio_path: str, prompt_text: str) -> dict:
+    def transcribe_audio_path(
+        chunk_index: int,
+        audio_path: str,
+        prompt_text: str,
+        *,
+        usage_operation: str,
+        processed_seconds: int | float,
+    ) -> dict:
         last_error: Exception | None = None
         for model_index, model_name in enumerate(transcription_models):
             try:
@@ -6459,6 +6787,13 @@ def whisper_transcribe(
                         file=audio_file,
                         **request_kwargs,
                     )
+                _record_openai_api_usage(
+                    task_id,
+                    response,
+                    model=model_name,
+                    operation=usage_operation,
+                    processed_seconds=processed_seconds,
+                )
                 text = _extract_transcription_response_text(response)
                 if not text:
                     raise RuntimeError(f"{model_name} returned empty text.")
@@ -6501,7 +6836,13 @@ def whisper_transcribe(
             if chunk_index == 0:
                 prompt_text = f"{opening_guard_prompt} {prompt_text}"
             try:
-                chunk_result = transcribe_audio_path(chunk_index, chunk_path, prompt_text)
+                chunk_result = transcribe_audio_path(
+                    chunk_index,
+                    chunk_path,
+                    prompt_text,
+                    usage_operation="primary_transcription" if attempt == 0 else "chunk_retry",
+                    processed_seconds=chunk_duration_sec,
+                )
                 chunk_text = str(chunk_result.get("text") or "")
                 if chunk_text:
                     best_result = _prefer_retry_transcription(best_result, chunk_result) if best_result else chunk_result
@@ -6557,7 +6898,13 @@ def whisper_transcribe(
             if guard_path:
                 try:
                     guard_prompt = f"{opening_guard_prompt} {rapid_retry_prompt} {whisper_prompt}"
-                    guard_result = transcribe_audio_path(chunk_index, guard_path, guard_prompt)
+                    guard_result = transcribe_audio_path(
+                        chunk_index,
+                        guard_path,
+                        guard_prompt,
+                        usage_operation="opening_guard",
+                        processed_seconds=guard_duration,
+                    )
                     guard_text = str(guard_result.get("text") or "")
                     merged_text = _merge_opening_guard_text(guard_text, best_text)
                     if merged_text != best_text:
@@ -6586,7 +6933,13 @@ def whisper_transcribe(
             if source_guard_path:
                 try:
                     source_guard_prompt = f"{opening_guard_prompt} {rapid_retry_prompt} {whisper_prompt}"
-                    source_guard_result = transcribe_audio_path(chunk_index, source_guard_path, source_guard_prompt)
+                    source_guard_result = transcribe_audio_path(
+                        chunk_index,
+                        source_guard_path,
+                        source_guard_prompt,
+                        usage_operation="source_opening_guard",
+                        processed_seconds=source_guard_duration,
+                    )
                     source_guard_text = str(source_guard_result.get("text") or "")
                     merged_text = _merge_opening_guard_text(source_guard_text, best_text)
                     if merged_text != best_text:
@@ -6697,7 +7050,13 @@ def whisper_transcribe(
                     chunk_manifest=_chunk_manifest(chunks),
                 )
                 try:
-                    retry_result = transcribe_audio_path(index, str(chunk["path"]), retry_prompt)
+                    retry_result = transcribe_audio_path(
+                        index,
+                        str(chunk["path"]),
+                        retry_prompt,
+                        usage_operation="selective_retry",
+                        processed_seconds=float(chunk.get("duration") or 0.0),
+                    )
                     chosen = _prefer_retry_transcription(result, retry_result)
                 except Exception as exc:
                     print(f"  Chunk {index+1}: selective retry failed; keeping primary transcript: {exc}")
@@ -6709,6 +7068,8 @@ def whisper_transcribe(
                         str(chunk["path"]),
                         language,
                         retry_prompt,
+                        task_id=task_id,
+                        processed_seconds=float(chunk.get("duration") or 0.0),
                     )
                     if audit:
                         offset = float(chunk.get("start") or 0.0)
@@ -6906,6 +7267,12 @@ async def gemini_correct_and_structure(
                     model.generate_content,
                     prompt_parts,
                     request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
+                )
+                _record_gemini_api_usage(
+                    task_id,
+                    response,
+                    model=target_model,
+                    operation="correction_chunk" if run_label.startswith("chunk ") else "correction",
                 )
                 _touch_task_runtime_state(task_id)
                 response_text = _extract_gemini_response_text(
@@ -7183,6 +7550,12 @@ def _transcribe_with_gemini_only(
                     [content_prompt, audio_file],
                     request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
                 )
+                _record_gemini_api_usage(
+                    task_id,
+                    response,
+                    model=target_model,
+                    operation="audio_transcription",
+                )
                 _touch_task_runtime_state(task_id)
                 raw_text = _extract_gemini_response_text(
                     response,
@@ -7340,6 +7713,13 @@ def _apply_fine_tuned_correction_if_enabled(
             max_completion_tokens=max(1024, min(16000, len(normalized_text) + 1000)),
             timeout=FINE_TUNED_CORRECTION_TIMEOUT_SECONDS,
         )
+        _record_openai_api_usage(
+            task_id,
+            response,
+            model=CORRECTION_FINE_TUNED_MODEL,
+            operation="fine_tuned_correction",
+            processed_seconds=0,
+        )
         corrected = (response.choices[0].message.content or "").strip()
     except Exception as e:
         print(f"[{task_id}] Fine-tuned correction failed; keeping Gemini result: {e}")
@@ -7389,6 +7769,8 @@ def _process_transcription_sync(
             user_id=persisted_user_id,
             is_guest=is_guest,
         )
+
+    _start_task_api_usage(task_id, audio_seconds)
 
     try:
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
@@ -7619,6 +8001,7 @@ def _process_transcription_sync(
         report_pipeline_progress("saving_result")
         created_at = datetime.now().isoformat()
         completed_progress = _build_transcription_progress("completed")
+        usage_summary = _finalize_task_api_usage(task_id)
 
         completed_payload = {
             "task_id": task_id,
@@ -7645,6 +8028,7 @@ def _process_transcription_sync(
         else:
             _upsert_transcription_state(task_id, user_id, completed_payload)
             _increment_user_usage_seconds(user_id, audio_seconds)
+            _persist_transcription_usage_summary(task_id, user_id, usage_summary)
         _upsert_transcription_job(
             task_id,
             user_id,
@@ -7675,6 +8059,7 @@ def _process_transcription_sync(
             "characters": 0,
             "progress": error_progress,
         }
+        usage_summary = _finalize_task_api_usage(task_id)
         _set_task_runtime_state(task_id, "error", owner_id=user_id)
         task_progress[task_id] = error_progress
         try:
@@ -7682,6 +8067,7 @@ def _process_transcription_sync(
                 _set_guest_task_result(task_id, user_id, error_payload)
             else:
                 _upsert_transcription_state(task_id, user_id, error_payload)
+                _persist_transcription_usage_summary(task_id, user_id, usage_summary)
             _upsert_transcription_job(
                 task_id,
                 user_id,
@@ -7694,6 +8080,7 @@ def _process_transcription_sync(
         _log_stage_memory(task_id, "error")
         return error_payload
     finally:
+        _discard_task_api_usage(task_id)
         _release_active_source_job(task_id)
         if temp_file_path and os.path.exists(temp_file_path):
             try:
@@ -8262,6 +8649,29 @@ async def get_terms():
     }
 
 
+def _build_history_items(rows: list[dict], usage_summaries: dict[str, dict] | None = None) -> list[dict]:
+    """일반 기록 응답에는 관리자 전용 API 사용량을 절대 포함하지 않는다."""
+    include_admin_usage = usage_summaries is not None
+    history: list[dict] = []
+    for row in rows:
+        task_id = str(row.get("task_id") or "")
+        item = {
+            "task_id": task_id,
+            "status": row.get("status"),
+            "created_at": row.get("created_at"),
+            "characters": row.get("characters") or 0,
+            "engine": row.get("engine") or "unknown",
+            "summary_preview": "",
+            "transcription_type": row.get("transcription_type", "conversation"),
+        }
+        if include_admin_usage:
+            usage_summary = (usage_summaries or {}).get(task_id)
+            if usage_summary:
+                item["api_usage"] = usage_summary
+        history.append(item)
+    return history
+
+
 @app.get("/api/history")
 async def get_history(authorization: str | None = Header(default=None)):
     """변환 기록 목록 조회"""
@@ -8276,20 +8686,14 @@ async def get_history(authorization: str | None = Header(default=None)):
         .order("created_at", desc=True)
     )
     response = await asyncio.to_thread(query.execute)
-
-    history = []
-    for row in response.data:
-        history.append({
-            "task_id": row["task_id"],
-            "status": row["status"],
-            "created_at": row["created_at"],
-            "characters": row.get("characters") or 0,
-            "engine": row.get("engine") or "unknown",
-            "summary_preview": "",
-            "transcription_type": row.get("transcription_type", "conversation"),
-        })
-
-    return history
+    rows = response.data or []
+    usage_summaries = None
+    if _is_admin_bypass_user(user=user):
+        usage_summaries = await asyncio.to_thread(
+            _fetch_transcription_usage_summaries,
+            [str(row.get("task_id") or "") for row in rows],
+        )
+    return _build_history_items(rows, usage_summaries)
 
 
 @app.delete("/api/history/{task_id}")

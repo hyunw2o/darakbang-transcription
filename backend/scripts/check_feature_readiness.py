@@ -17,6 +17,7 @@ from export_correction_finetune_dataset import DEFAULT_SELECT, DEFAULT_SYSTEM_PR
 
 
 REQUIRED_TABLES = {
+    "transcription_usage_metrics": "backend/sql/transcription_usage_metrics.sql",
     "user_glossary_terms": "backend/sql/user_glossary_terms.sql",
     "user_correction_samples": "backend/sql/user_correction_samples.sql",
     "training_audio_assets": "backend/sql/training_data_assets.sql",
@@ -242,6 +243,7 @@ def parse_args() -> argparse.Namespace:
 
 def run_self_test() -> int:
     tables = [
+        TableReadiness(table="transcription_usage_metrics", ok=True, count=2, sql_file=REQUIRED_TABLES["transcription_usage_metrics"]),
         TableReadiness(table="user_glossary_terms", ok=True, count=3, sql_file=REQUIRED_TABLES["user_glossary_terms"]),
         TableReadiness(table="user_correction_samples", ok=False, sql_file=REQUIRED_TABLES["user_correction_samples"], error="PGRST205"),
         TableReadiness(table="training_audio_assets", ok=True, count=0, sql_file=REQUIRED_TABLES["training_audio_assets"]),

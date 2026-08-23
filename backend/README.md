@@ -97,8 +97,8 @@ uvicorn main:app --reload
    - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)
    - `OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS` (기본 5초, 학습 후보 저장 같은 선택적 DB 쓰기 제한)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
-   - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회)
-   - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준)
+   - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회 및 변환 기록의 관리자 전용 API 사용량 확인)
+   - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준, 관리자 전용 API 사용량 확인)
    - `BILLING_PROVIDER` (권장 기본 `portone`, 필요 시 `stripe`)
    - `BILLING_TEST_MODE` (테스트 플로우 확인 시 `true`)
    - `MOCK_CHECKOUT_SESSION_TTL_SECONDS` (기본 1800초)
@@ -110,6 +110,11 @@ uvicorn main:app --reload
    - `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `BILLING_PORTAL_RETURN_URL` (선택)
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
+
+변환 기록별 API 사용량을 저장하려면 Supabase SQL Editor에서
+`backend/sql/transcription_usage_metrics.sql`을 한 번 실행해야 합니다. 이 테이블은
+`anon`/`authenticated` 직접 접근이 차단되어 있으므로 백엔드의 `SUPABASE_KEY`에는
+service role 키를 사용해야 하며, 기록 API는 위 관리자 목록에 등록된 계정에만 사용량을 반환합니다.
 
 ### Worker 분리 운영
 

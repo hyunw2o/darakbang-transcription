@@ -15,7 +15,7 @@ function formatSecondsToHourMinute(totalSeconds) {
 }
 
 function formatSecondsToHourMinuteSecond(totalSeconds) {
-  const safe = Math.max(0, Number(totalSeconds) || 0);
+  const safe = Math.max(0, Math.round(Number(totalSeconds) || 0));
   const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
   const seconds = safe % 60;

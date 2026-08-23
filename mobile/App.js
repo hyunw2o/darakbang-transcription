@@ -58,7 +58,7 @@ import {
   UI_THEME_MODE_KEY,
 } from "./config";
 import { getExtension, inferMimeFromAsset } from "./utils/file";
-import { formatDate, formatSecondsToHourMinute, sanitizeFileName } from "./utils/format";
+import { formatDate, formatSecondsToHourMinute, formatSecondsToHourMinuteSecond, sanitizeFileName } from "./utils/format";
 import { buildDocxBase64 } from "./utils/docx";
 import { requestApi, requestApiWithNetworkRetry } from "./utils/network";
 import useMobileAuth from "./hooks/useMobileAuth";
@@ -3294,6 +3294,48 @@ function App() {
                         <Text numberOfLines={2} style={[styles.previewText, { color: activeTheme.textPrimary }]}>
                           {item.summary_preview || (uiLanguage === "en" ? "Open the transcript to view details." : "완료된 전사 결과를 열어 확인하세요.")}
                         </Text>
+                        {item.api_usage ? (
+                          <View style={[styles.adminUsagePanel, { borderTopColor: activeTheme.inputBorder }]}>
+                            <View style={styles.adminUsageHeader}>
+                              <Text style={[styles.adminUsageTitle, { color: activeTheme.textPrimary }]}>
+                                {uiLanguage === "en" ? "Admin-only API usage" : "관리자 전용 API 사용량"}
+                              </Text>
+                              <Text style={[styles.adminUsageStatus, { color: item.api_usage.complete_token_reporting ? "#16a34a" : "#d97706" }]}>
+                                {item.api_usage.complete_token_reporting
+                                  ? uiLanguage === "en" ? "Complete" : "전체 집계"
+                                  : uiLanguage === "en" ? "Partially reported" : "일부 미집계"}
+                              </Text>
+                            </View>
+                            <View style={styles.adminUsageMetrics}>
+                              <View style={styles.adminUsageRow}>
+                                <Text style={[styles.adminUsageLabel, { color: activeTheme.textSecondary }]}>{uiLanguage === "en" ? "Total tokens" : "총 토큰"}</Text>
+                                <Text style={[styles.adminUsageValue, { color: activeTheme.textPrimary }]}>{Number(item.api_usage.total_reported_tokens || 0).toLocaleString()}</Text>
+                              </View>
+                              <View style={styles.adminUsageRow}>
+                                <Text style={[styles.adminUsageLabel, { color: activeTheme.textSecondary }]}>OpenAI / Gemini</Text>
+                                <Text style={[styles.adminUsageValue, { color: activeTheme.textPrimary }]}>
+                                  {Number(item.api_usage.openai?.total_tokens || 0).toLocaleString()} / {Number(item.api_usage.gemini?.total_tokens || 0).toLocaleString()}
+                                </Text>
+                              </View>
+                              <View style={styles.adminUsageRow}>
+                                <Text style={[styles.adminUsageLabel, { color: activeTheme.textSecondary }]}>{uiLanguage === "en" ? "API requests" : "API 요청"}</Text>
+                                <Text style={[styles.adminUsageValue, { color: activeTheme.textPrimary }]}>{Number(item.api_usage.total_requests || 0).toLocaleString()}</Text>
+                              </View>
+                              <View style={styles.adminUsageRow}>
+                                <Text style={[styles.adminUsageLabel, { color: activeTheme.textSecondary }]}>{uiLanguage === "en" ? "Source / processed audio" : "원본 / 처리 음성"}</Text>
+                                <Text style={[styles.adminUsageValue, { color: activeTheme.textPrimary }]}>
+                                  {formatSecondsToHourMinuteSecond(item.api_usage.source_audio_seconds)} / {formatSecondsToHourMinuteSecond(item.api_usage.openai?.processed_seconds)}
+                                </Text>
+                              </View>
+                              <View style={styles.adminUsageRow}>
+                                <Text style={[styles.adminUsageLabel, { color: activeTheme.textSecondary }]}>{uiLanguage === "en" ? "Extra / elapsed" : "추가 처리 / 소요"}</Text>
+                                <Text style={[styles.adminUsageValue, { color: activeTheme.textPrimary }]}>
+                                  {formatSecondsToHourMinuteSecond(item.api_usage.additional_audio_processing_seconds)} / {formatSecondsToHourMinuteSecond(item.api_usage.wall_seconds)}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : null}
                         <View style={styles.historyActionRow}>
                           <NmPressable
                             style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
@@ -5153,6 +5195,52 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontSize: 12,
     lineHeight: 18,
+  },
+  adminUsagePanel: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    gap: 7,
+  },
+  adminUsageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  adminUsageTitle: {
+    flexShrink: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "800",
+  },
+  adminUsageStatus: {
+    flexShrink: 0,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
+  adminUsageMetrics: {
+    gap: 3,
+  },
+  adminUsageRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  adminUsageLabel: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  adminUsageValue: {
+    flexShrink: 0,
+    maxWidth: "58%",
+    textAlign: "right",
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "700",
   },
   modalOverlayCompact: {
     paddingHorizontal: 12,
