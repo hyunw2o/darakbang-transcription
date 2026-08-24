@@ -94,6 +94,7 @@ uvicorn main:app --reload
    - `GEMINI_CORRECTION_SKIP_OVER_CHARS` (기본 0, 0보다 크면 해당 글자 수 초과 원문은 Gemini 교정을 생략하고 로컬 후처리만 수행)
    - `TRANSCRIPTION_USE_WORKER_QUEUE` (`true`면 긴 작업을 스토리지+워커 대기열로 분리)
    - `TRANSCRIPTION_STORAGE_BUCKET` (기본 `transcription-inputs`)
+   - `TRANSCRIPTION_WORKER_CONCURRENCY` (Worker가 동시에 처리할 파일 수, 권장 시작값 2)
    - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)
    - `OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS` (기본 5초, 학습 후보 저장 같은 선택적 DB 쓰기 제한)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
@@ -129,6 +130,12 @@ python worker.py
 ```
 
 4. Worker에도 동일한 환경변수(`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` 등)를 넣습니다.
+5. Worker 서비스에는 `TRANSCRIPTION_WORKER_CONCURRENCY=2`를 명시하고 다시 배포합니다. 이 값은 웹 서비스와 자동 공유되지 않습니다.
+
+동시 처리 수는 파일 내부 병렬도와 곱해집니다. 예를 들어 Worker 2건과
+`WHISPER_CHUNK_CONCURRENCY=2`를 함께 사용하면 OpenAI 전사 요청은 최대 4건까지
+동시에 발생할 수 있으므로, 처음에는 `2 x 2`로 운영한 뒤 API 제한과 메모리를
+확인하면서 한 단계씩 조정하세요.
 
 ## 교정 파인튜닝 데이터셋 준비
 

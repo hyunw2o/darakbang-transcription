@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from main import (
-    MAX_CONCURRENT_TRANSCRIPTIONS,
     TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS,
     _can_use_worker_queue,
     _claim_transcription_job,
@@ -24,18 +23,19 @@ from main import (
 
 
 WORKER_ID = (os.getenv("TRANSCRIPTION_WORKER_ID") or f"worker-{uuid.uuid4().hex[:8]}").strip()
+DEFAULT_TRANSCRIPTION_WORKER_CONCURRENCY = 2
 
 
 def _parse_worker_concurrency() -> int:
     raw_value = (
         os.getenv("TRANSCRIPTION_WORKER_CONCURRENCY")
         or os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS")
-        or str(MAX_CONCURRENT_TRANSCRIPTIONS)
+        or str(DEFAULT_TRANSCRIPTION_WORKER_CONCURRENCY)
     )
     try:
         value = int(str(raw_value).strip())
     except Exception:
-        value = MAX_CONCURRENT_TRANSCRIPTIONS
+        value = DEFAULT_TRANSCRIPTION_WORKER_CONCURRENCY
     return max(1, min(8, value))
 
 
@@ -109,8 +109,15 @@ def process_claimed_job(job: dict) -> None:
         _delete_transcription_input_from_storage(storage_bucket, storage_object_path)
 
 
-def _claim_next_job(fetch_limit: int) -> dict | None:
-    for job in _fetch_queued_transcription_jobs(limit=fetch_limit):
+def _claim_next_job(fetch_limit: int, active_owner_keys: set[str] | None = None) -> dict | None:
+    jobs = _fetch_queued_transcription_jobs(limit=fetch_limit)
+    excluded_owners = active_owner_keys or set()
+    preferred_jobs = [job for job in jobs if str(job.get("owner_key") or "") not in excluded_owners]
+    fallback_jobs = [job for job in jobs if str(job.get("owner_key") or "") in excluded_owners]
+
+    # Give another account a free slot first, while still allowing one account to
+    # use all idle slots when nobody else is waiting.
+    for job in [*preferred_jobs, *fallback_jobs]:
         if not job.get("storage_object_path"):
             continue
         claimed_job = _claim_transcription_job(str(job.get("task_id") or ""), WORKER_ID)
@@ -119,10 +126,11 @@ def _claim_next_job(fetch_limit: int) -> dict | None:
     return None
 
 
-def _finish_completed(in_flight: dict[Future, str], completed: set[Future] | None = None) -> None:
+def _finish_completed(in_flight: dict[Future, dict[str, str]], completed: set[Future] | None = None) -> None:
     futures = list(completed) if completed is not None else [future for future in in_flight if future.done()]
     for future in futures:
-        task_id = in_flight.pop(future, "")
+        job_meta = in_flight.pop(future, {})
+        task_id = job_meta.get("task_id", "")
         try:
             future.result()
         except Exception as exc:
@@ -142,20 +150,29 @@ def run_forever() -> None:
     )
     fetch_limit = max(10, TRANSCRIPTION_WORKER_CONCURRENCY * 4)
     with ThreadPoolExecutor(max_workers=TRANSCRIPTION_WORKER_CONCURRENCY) as executor:
-        in_flight: dict[Future, str] = {}
+        in_flight: dict[Future, dict[str, str]] = {}
         while True:
             _finish_completed(in_flight)
 
             claimed_any = False
             while len(in_flight) < TRANSCRIPTION_WORKER_CONCURRENCY:
-                claimed_job = _claim_next_job(fetch_limit)
+                active_owner_keys = {
+                    job_meta.get("owner_key", "")
+                    for job_meta in in_flight.values()
+                    if job_meta.get("owner_key")
+                }
+                claimed_job = _claim_next_job(fetch_limit, active_owner_keys)
                 if not claimed_job:
                     break
 
                 task_id = str(claimed_job.get("task_id") or "").strip()
+                owner_key = str(claimed_job.get("owner_key") or "").strip()
                 print(f"[{WORKER_ID}] Claimed job {task_id or 'unknown'}")
                 future = executor.submit(process_claimed_job, claimed_job)
-                in_flight[future] = task_id
+                in_flight[future] = {
+                    "task_id": task_id,
+                    "owner_key": owner_key,
+                }
                 claimed_any = True
 
             if not in_flight:
