@@ -29,7 +29,6 @@ DEFAULT_TRANSCRIPTION_WORKER_CONCURRENCY = 2
 def _parse_worker_concurrency() -> int:
     raw_value = (
         os.getenv("TRANSCRIPTION_WORKER_CONCURRENCY")
-        or os.getenv("MAX_CONCURRENT_TRANSCRIPTIONS")
         or str(DEFAULT_TRANSCRIPTION_WORKER_CONCURRENCY)
     )
     try:

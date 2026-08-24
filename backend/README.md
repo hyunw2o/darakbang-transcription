@@ -130,7 +130,7 @@ python worker.py
 ```
 
 4. Worker에도 동일한 환경변수(`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` 등)를 넣습니다.
-5. Worker 서비스에는 `TRANSCRIPTION_WORKER_CONCURRENCY=2`를 명시하고 다시 배포합니다. 이 값은 웹 서비스와 자동 공유되지 않습니다.
+5. Worker 서비스에는 `TRANSCRIPTION_WORKER_CONCURRENCY=2`를 명시하고 다시 배포합니다. 이 값은 웹 서비스의 `MAX_CONCURRENT_TRANSCRIPTIONS`와 별도로 적용됩니다.
 
 동시 처리 수는 파일 내부 병렬도와 곱해집니다. 예를 들어 Worker 2건과
 `WHISPER_CHUNK_CONCURRENCY=2`를 함께 사용하면 OpenAI 전사 요청은 최대 4건까지
