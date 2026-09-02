@@ -60,6 +60,7 @@ from church_terms import (
     get_summary_prompt,
     ALL_CHURCH_TERMS,
     DARAKBANG_CORE,
+    REFERENCE_PERSON_NAMES,
     COMMON_MISTAKES,
     print_terms_summary
 )
@@ -4940,8 +4941,10 @@ def _repeat_detection_key(value: str) -> str:
     return re.sub(r"\s+", " ", compact).strip().lower()
 
 
-PATHOLOGICAL_CLAUSE_REPEAT_MIN_RUN = 8
-PATHOLOGICAL_TOKEN_REPEAT_MIN_RUN = 8
+# 2~3회의 실제 강조 발화는 보존하되, 동일 구절이 5회 이상 이어지는
+# ASR/LLM 루프는 재인식 및 축약 대상으로 분류한다.
+PATHOLOGICAL_CLAUSE_REPEAT_MIN_RUN = 5
+PATHOLOGICAL_TOKEN_REPEAT_MIN_RUN = 5
 PATHOLOGICAL_REPEAT_MIN_KEY_CHARS = 8
 PATHOLOGICAL_REPEAT_MAX_TOKEN_UNIT = 18
 
@@ -5084,7 +5087,7 @@ def _collapse_pathological_repeats(text: str) -> str:
     """
     STT/LLM이 같은 구간을 여러 번 반복 생성하는 경우만 보수적으로 접는다.
     실제 반복 발화를 보존하기 위해 블록/라인은 기존 3회 기준을 유지하고,
-    짧은 구절/토큰 반복은 8회 이상 이어질 때만 1회로 축약한다.
+    짧은 구절/토큰 반복은 5회 이상 이어질 때만 1회로 축약한다.
     """
     if not text:
         return text
@@ -6612,6 +6615,7 @@ def _build_compact_whisper_prompt(
     )
     terms = [
         *custom_terms,
+        *REFERENCE_PERSON_NAMES,
         "렘넌트",
         "그리스도",
         "예수 그리스도",

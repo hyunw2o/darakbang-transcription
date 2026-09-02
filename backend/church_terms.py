@@ -578,6 +578,18 @@ PASTORS = [
     "서경", "김소영", "장대원", "송미솔", "엄희숙",
 ]
 
+# 음성 인식 시 표기만 참고하는 인명입니다. 직분이나 전체 이름을 추정해
+# 강제 치환하지 않도록 PASTORS와 분리해 관리합니다.
+REFERENCE_PERSON_NAMES = [
+    "김성빈",
+    "김준서",
+    "박수경",
+    "양하준",
+    "이세라",
+    "한세희",
+    "이정민",
+]
+
 # ===== 4. 예배 용어 =====
 WORSHIP_TERMS = [
     "교독", "합독", "교독문",
@@ -1138,6 +1150,7 @@ ALL_CHURCH_TERMS = (
     DARAKBANG_CORE +
     SPECIAL_TERM_TERMS +
     PASTORS +
+    REFERENCE_PERSON_NAMES +
     TRINITY +
     WORSHIP_TERMS +
     HISTORICAL_PEOPLE +
@@ -1499,8 +1512,8 @@ def get_special_term_prompt_hint(language: str = "ko") -> str:
 
 
 def _build_name_correction_instruction(custom_terms: list[str] = None, language: str = "ko") -> str:
-    global PASTORS, HISTORICAL_PEOPLE
-    names = list(PASTORS) + list(HISTORICAL_PEOPLE)
+    global PASTORS, REFERENCE_PERSON_NAMES, HISTORICAL_PEOPLE
+    names = list(PASTORS) + list(REFERENCE_PERSON_NAMES) + list(HISTORICAL_PEOPLE)
     if custom_terms:
         names.extend(custom_terms)
     

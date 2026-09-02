@@ -100,6 +100,9 @@ def run_special_term_sample() -> None:
             "assert mixed_collapsed.count('장노님') == 1, mixed_collapsed; "
             "deliberate=', '.join(['반드시 확인합니다']*3)+'.'; "
             "assert _collapse_pathological_repeats(deliberate) == deliberate; "
+            "short_loop=', '.join(['이 말씀을 꼭 기억해야 합니다']*5)+'.'; "
+            "assert _contains_pathological_repeats(short_loop); "
+            "assert _collapse_pathological_repeats(short_loop).count('이 말씀을 꼭 기억해야 합니다') == 1; "
             "token_loop=('우리 장노님도 있고 '*12).strip(); "
             "assert _contains_pathological_repeats(token_loop); "
             "assert _collapse_pathological_repeats(token_loop).count('우리 장노님도 있고') == 1; "
@@ -123,8 +126,10 @@ def run_special_term_sample() -> None:
             "_discard_task_api_usage('usage-duration-test'); "
             "whisper_prompt=_build_compact_whisper_prompt('ko','sermon'); "
             "assert '장노님→장로님' in whisper_prompt and '두음법칙' in whisper_prompt and 'RVS' in whisper_prompt, whisper_prompt; "
+            "assert all(name in whisper_prompt for name in ['김성빈','김준서','박수경','양하준','이세라','한세희','이정민']), whisper_prompt; "
             "gemini_audio_prompt=_build_gemini_only_system_instruction('ko','sermon'); "
             "assert '장노님→장로님' in gemini_audio_prompt and '원노트' in gemini_audio_prompt, gemini_audio_prompt; "
+            "assert all(name in gemini_audio_prompt for name in ['김성빈','김준서','박수경','양하준','이세라','한세희','이정민']), gemini_audio_prompt; "
             "print('selective-retry-time-merge-and-repeat-guard-ok')"
         ),
     ])
