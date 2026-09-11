@@ -27,11 +27,11 @@ const I18N = {
     guestTrialCta: "로그인 없이 체험하기",
     guestUserTitle: "비로그인 체험",
     guestUserSubtitle: "파일 1개당 최대 10분, 총 30분까지 변환할 수 있습니다.",
-    guestLoginButton: "로그인하고 월 10시간 사용하기",
+    guestLoginButton: "로그인하고 무료로 계속 사용하기",
     guestTrialHint: "비로그인 체험은 히스토리 저장 없이 현재 화면에서만 결과를 확인합니다.",
     authLanding: {
       badges: {
-        free: "무료 월 10시간",
+        free: "로그인 후 무료 무제한",
         beta: "오픈 베타",
       },
       hero: "녹음만 올리세요. 바로 쓰는 구조화 녹취 문서가 나옵니다.",
@@ -242,7 +242,7 @@ const I18N = {
     settingsSupportTitle: "공지 및 도움말",
     settingsSupportHint: "업데이트 공지와 자주 묻는 질문을 앱 내 문서로 확인하세요.",
     settingsUsageTitle: "사용량",
-    settingsUsageHint: "이번 달 남은 사용 시간을 확인할 수 있습니다.",
+    settingsUsageHint: "이번 달 처리량과 무료 이용 상태를 확인할 수 있습니다.",
     settingsGlossaryTitle: "사용자 용어집",
     settingsGlossaryHint: "자주 틀리는 고유명사와 전문 용어를 저장해 변환 품질 개선에 사용합니다.",
     glossaryTermPlaceholder: "정확한 표기",
@@ -270,52 +270,13 @@ const I18N = {
     usageThisMonth: "이번 달 사용량",
     usageRemaining: "남은 시간",
     usageUnlimited: "무제한",
-    usageWelcomeTrial: "신규 가입 Pro 체험",
-    usageWelcomeTrialRemaining: "Pro 체험 {days}일 남음",
     usageLoading: "사용량 정보를 불러오는 중...",
     usageUnavailable: "사용량 정보를 아직 불러오지 못했습니다.",
     usageRefresh: "사용량 새로고침",
-    iosFreeOnlyNotice: "iOS에서는 Apple 인앱결제로 Pro 구독을 사용할 수 있습니다.",
-    iosUsageNotice: "iOS에서는 Apple 인앱결제로 Pro 구독을 사용할 수 있습니다.",
-    appleIapTitle: "Apple Pro 구독",
-    appleIapHint: "iOS에서는 App Store 인앱결제로 Pro를 구독하고 무제한 변환을 사용할 수 있습니다.",
-    appleIapProductName: "mallog24 Pro 월간 구독",
-    appleIapProductPending: "App Store 상품 정보를 불러오는 중...",
-    appleIapSubscriptionInfoTitle: "구독 정보",
-    appleIapSubscriptionLength: "구독 기간: 1개월 자동 갱신",
-    appleIapSubscriptionPriceFallback: "월 ₩8,800",
-    appleIapSubscriptionPriceLabel: "구독 가격",
-    appleIapSubscriptionPriceNote: "최종 가격은 App Store 계정의 국가 또는 지역에 따라 Apple 결제창에서 확인됩니다.",
-    appleIapRequiredInfo: "구독명, 기간, 가격, 개인정보처리방침 및 이용약관을 확인한 뒤 Apple 결제창에서 구독할 수 있습니다.",
-    appleIapOpenPrivacy: "개인정보처리방침",
-    appleIapOpenTerms: "이용약관(EULA)",
-    appleIapStoreUnavailableReady: "App Store 연결을 준비 중입니다. 상품 정보가 늦어도 구독명, 기간, 가격을 확인한 뒤 결제창을 다시 요청할 수 있습니다.",
-    appleIapProductUnavailableTitle: "App Store 결제 정보를 확인 중입니다",
-    appleIapProductTimeout: "App Store 결제 정보 조회가 지연되고 있습니다. 아래 버튼으로 결제창을 다시 요청해 주세요.",
-    appleIapProductIdLabel: "상품 ID",
-    appleIapStorefrontLabel: "스토어 지역",
-    appleIapProductNotReturned: "App Store가 구독 상품을 아직 반환하지 않았습니다. App Store Connect의 상품 ID, 가격/판매 가능 지역, 앱 버전 연결, 유료 앱 계약 상태를 확인해 주세요.",
-    appleIapSimulatorHint: "시뮬레이터에서는 실제 App Store 상품 조회가 제한될 수 있습니다. TestFlight 또는 실제 기기의 Sandbox 계정으로 최종 확인해 주세요.",
-    appleIapUnavailable: "App Store 구독 정보를 아직 확인하지 못했습니다. 상품 정보가 늦게 도착하면 아래 버튼으로 App Store 결제창을 다시 요청해 주세요.",
-    appleIapConnected: "App Store 연결됨",
-    appleIapDisconnected: "App Store 결제 연결을 준비 중입니다. 버튼을 다시 누르면 결제창을 재요청합니다.",
-    appleIapSubscribe: "Apple로 Pro 구독하기",
-    appleIapRestore: "구매 복원",
-    appleIapReload: "상품 다시 불러오기",
-    appleIapManage: "Apple 구독 관리",
-    appleIapManageFailed: "Apple 구독 관리 화면을 열지 못했습니다.",
-    appleIapPurchaseStarted: "Apple 결제창을 여는 중입니다.",
-    appleIapPurchaseDispatchTimeout: "Apple 결제창 응답이 지연되고 있습니다. 버튼은 다시 활성화했으니 결제창이 뜨지 않으면 한 번 더 눌러 주세요.",
-    appleIapPurchaseVerified: "Apple 구독이 확인되었습니다. Pro 권한을 적용했습니다.",
-    appleIapRestoreDone: "Apple 구독 복원이 완료되었습니다.",
-    appleIapNoRestorablePurchase: "복원 가능한 Apple 구독을 찾지 못했습니다.",
-    appleIapPurchaseFailed: "Apple 결제 처리에 실패했습니다.",
-    appleIapVerifyFailed: "Apple 구독 검증에 실패했습니다.",
-    appleIapExpired: "Apple 구독이 만료되어 Free 권한으로 표시됩니다.",
+    signedInFreeNotice: "결제나 구독 없이 전체 변환 기능을 무료로 이용할 수 있습니다.",
     planLabels: {
-      guest: "Guest",
-      free: "Free",
-      pro: "Pro",
+      guest: "비로그인",
+      free: "무료",
       enterprise: "Enterprise",
       admin: "Admin",
     },
@@ -486,11 +447,11 @@ const I18N = {
     guestTrialCta: "Try without signing in",
     guestUserTitle: "Guest trial",
     guestUserSubtitle: "Up to 10 minutes per file and 30 minutes total.",
-    guestLoginButton: "Sign in for 10 free hours/month",
+    guestLoginButton: "Sign in to keep using mallog24 for free",
     guestTrialHint: "Guest trial results are shown only on this screen and are not saved to history.",
     authLanding: {
       badges: {
-        free: "Free 10h/mo",
+        free: "Free unlimited access after sign-in",
         beta: "Open beta",
       },
       hero: "Upload your recording. Get a structured transcript you can use right away.",
@@ -701,7 +662,7 @@ const I18N = {
     settingsSupportTitle: "Notices & Help",
     settingsSupportHint: "Read product updates and frequently asked questions in the in-app document page.",
     settingsUsageTitle: "Usage",
-    settingsUsageHint: "Check remaining monthly time.",
+    settingsUsageHint: "Review this month's processed time and free-access status.",
     settingsGlossaryTitle: "User Glossary",
     settingsGlossaryHint: "Save frequently corrected names and domain terms to improve transcription quality.",
     glossaryTermPlaceholder: "Preferred spelling",
@@ -729,52 +690,13 @@ const I18N = {
     usageThisMonth: "This month usage",
     usageRemaining: "Remaining",
     usageUnlimited: "Unlimited",
-    usageWelcomeTrial: "Welcome Pro trial",
-    usageWelcomeTrialRemaining: "{days} day(s) left in Pro trial",
     usageLoading: "Loading usage information...",
     usageUnavailable: "Usage information is not available yet.",
     usageRefresh: "Refresh usage",
-    iosFreeOnlyNotice: "On iOS, Pro is available through Apple In-App Purchase.",
-    iosUsageNotice: "On iOS, Pro is available through Apple In-App Purchase.",
-    appleIapTitle: "Apple Pro Subscription",
-    appleIapHint: "Subscribe to Pro with App Store In-App Purchase on iOS and use unlimited transcription.",
-    appleIapProductName: "mallog24 Pro Monthly Subscription",
-    appleIapProductPending: "Loading App Store product...",
-    appleIapSubscriptionInfoTitle: "Subscription information",
-    appleIapSubscriptionLength: "Subscription period: 1 month, auto-renewing",
-    appleIapSubscriptionPriceFallback: "KRW 8,800 / month",
-    appleIapSubscriptionPriceLabel: "Subscription price",
-    appleIapSubscriptionPriceNote: "The final price is confirmed in the Apple purchase sheet and may vary by App Store country or region.",
-    appleIapRequiredInfo: "Review the subscription title, duration, price, Privacy Policy, and Terms of Use before subscribing through Apple.",
-    appleIapOpenPrivacy: "Privacy Policy",
-    appleIapOpenTerms: "Terms of Use (EULA)",
-    appleIapStoreUnavailableReady: "Preparing the App Store connection. You can still review the subscription title, duration, and price, then request the purchase sheet again.",
-    appleIapProductUnavailableTitle: "Checking App Store purchase information",
-    appleIapProductTimeout: "Loading App Store purchase information is taking longer than expected. Try opening the purchase sheet again below.",
-    appleIapProductIdLabel: "Product ID",
-    appleIapStorefrontLabel: "Storefront",
-    appleIapProductNotReturned: "The App Store has not returned the subscription product yet. Check the product ID, pricing/availability, app-version attachment, and Paid Apps Agreement in App Store Connect.",
-    appleIapSimulatorHint: "The iOS Simulator may not load live App Store products. Verify the final flow in TestFlight or on a real device with a Sandbox account.",
-    appleIapUnavailable: "App Store subscription information is not ready yet. If it takes longer, try opening the App Store purchase sheet again below.",
-    appleIapConnected: "App Store connected",
-    appleIapDisconnected: "Preparing the App Store purchase connection. Tap again to request the purchase sheet.",
-    appleIapSubscribe: "Subscribe with Apple",
-    appleIapRestore: "Restore Purchases",
-    appleIapReload: "Reload Product",
-    appleIapManage: "Manage Apple Subscription",
-    appleIapManageFailed: "Could not open Apple subscription management.",
-    appleIapPurchaseStarted: "Opening Apple purchase sheet.",
-    appleIapPurchaseDispatchTimeout: "The Apple purchase sheet is taking longer than expected. The button is available again; tap it once more if the sheet does not appear.",
-    appleIapPurchaseVerified: "Apple subscription verified. Pro access is active.",
-    appleIapRestoreDone: "Apple subscription restored.",
-    appleIapNoRestorablePurchase: "No restorable Apple subscription was found.",
-    appleIapPurchaseFailed: "Apple purchase failed.",
-    appleIapVerifyFailed: "Apple subscription verification failed.",
-    appleIapExpired: "Apple subscription is expired, so Free access is shown.",
+    signedInFreeNotice: "Use the full transcription workflow for free without payment or a subscription.",
     planLabels: {
       guest: "Guest",
       free: "Free",
-      pro: "Pro",
       enterprise: "Enterprise",
       admin: "Admin",
     },
@@ -952,19 +874,19 @@ const LEGAL_DOCUMENTS = {
     privacy: {
       title: "개인정보처리방침",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 5월 23일",
+      updatedAt: "최종 업데이트: 2026년 9월 11일",
       sections: [
         {
           title: "1. 처리 항목",
           body: [
             "회원정보(이메일/UID), 소셜로그인(Google/Kakao/Apple ID) 정보, 업로드 음성, 변환 텍스트, 기록본, 접속/오류 로그를 처리할 수 있습니다.",
-            "구독 기능 제공을 위해 결제 상태, 상품 ID, 구독 기간, Apple/결제사 거래 식별자를 처리할 수 있으며 카드번호 등 결제수단 원문은 저장하지 않습니다.",
+            "과거 결제 기능 운영 기간에 생성된 거래 식별자와 처리 상태는 법령 준수 및 분쟁 대응에 필요한 기간만 보관하며, 신규 결제 정보는 수집하지 않습니다.",
           ],
         },
         {
           title: "2. 처리 목적",
           body: [
-            "로그인/계정보호, 전사·교정·요약·기록본 기능 제공, 무료/유료 사용량 관리, iOS App Store 인앱구독 확인, 서비스 보안 및 고객지원 목적입니다.",
+            "로그인/계정보호, 전사·교정·요약·기록본 기능 제공, 서비스 사용량 측정, 보안 및 고객지원 목적입니다.",
           ],
         },
         {
@@ -977,7 +899,7 @@ const LEGAL_DOCUMENTS = {
         {
           title: "4. 위탁 및 국외 처리",
           body: [
-            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini), Apple(Sign in with Apple/App Store 구독)을 이용하며 API 처리 과정에서 국외 서버 처리가 발생할 수 있습니다.",
+            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini), Apple(Sign in with Apple)을 이용하며 API 처리 과정에서 국외 서버 처리가 발생할 수 있습니다.",
           ],
         },
         {
@@ -996,7 +918,7 @@ const LEGAL_DOCUMENTS = {
     terms: {
       title: "이용약관",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "시행일: 2026년 5월 23일",
+      updatedAt: "시행일: 2026년 9월 11일",
       sections: [
         {
           title: "1. 서비스 범위",
@@ -1006,11 +928,11 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "2. 사용량 안내",
+          title: "2. 무료 이용 안내",
           body: [
-            "계정·세션 관리 책임은 이용자에게 있으며, 월간 사용량 한도가 적용됩니다.",
-            "남은 사용 시간은 설정 화면에서 확인할 수 있습니다.",
-            "iOS 앱에서는 Apple App Store 인앱구독으로 Pro를 이용할 수 있으며, 가격·해지·환불은 Apple 결제창과 App Store 정책을 따릅니다.",
+            "mallog24는 웹, Android, iOS에서 유료 요금제, 정기 구독 및 인앱결제를 운영하지 않습니다.",
+            "로그인 사용자는 전체 변환 기능을 무료로 이용할 수 있고, 비로그인 체험에는 남용 방지를 위한 짧은 한도가 적용됩니다.",
+            "서비스 안정성 또는 비정상 이용 방지를 위해 일시적인 기술 제한이 적용될 수 있습니다.",
           ],
         },
         {
@@ -1062,7 +984,7 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "회사 정책",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 5월 23일",
+      updatedAt: "최종 업데이트: 2026년 9월 11일",
       sections: [
         {
           title: "1. 운영 원칙",
@@ -1076,7 +998,7 @@ const LEGAL_DOCUMENTS = {
           title: "2. 데이터/보안 정책",
           body: [
             "최소 데이터 처리, 권한 분리, HTTPS, 토큰 검증, 요청 제한을 기본 통제로 적용합니다.",
-            "Apple ID 로그인과 App Store 구독 정보는 인증·구독 확인 목적에 필요한 범위로만 처리합니다.",
+            "Apple ID 로그인 정보는 인증 목적에 필요한 범위로만 처리합니다.",
           ],
         },
         {
@@ -1097,7 +1019,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "기능 또는 정책 변경 시 문서 버전·적용일을 포함해 공지합니다.",
             "주요 변경은 앱 내 문서 또는 웹 공지로 안내합니다.",
-            "iOS 인앱구독은 Apple 심사, 샌드박스 테스트, 영수증/거래 검증 흐름을 별도 점검합니다.",
+            "mallog24는 유료 요금제와 인앱결제를 운영하지 않고 로그인 사용자에게 전체 기능을 무료로 제공합니다.",
           ],
         },
         {
@@ -1119,7 +1041,7 @@ const LEGAL_DOCUMENTS = {
     notice: {
       title: "공지사항",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 5월 23일",
+      updatedAt: "최종 업데이트: 2026년 9월 11일",
       sections: [
         {
           title: "1. 서비스 안정화 안내",
@@ -1146,7 +1068,7 @@ const LEGAL_DOCUMENTS = {
     faq: {
       title: "자주 묻는 질문 (FAQ)",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 5월 23일",
+      updatedAt: "최종 업데이트: 2026년 9월 11일",
       sections: [
         {
           title: "Q1. 로그인은 되는데 처리 시작이 느립니다.",
@@ -1176,19 +1098,19 @@ const LEGAL_DOCUMENTS = {
     privacy: {
       title: "Privacy Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: May 23, 2026",
+      updatedAt: "Last updated: September 11, 2026",
       sections: [
         {
           title: "1. Data We Process",
           body: [
             "We may process account data (email/UID), social-login data (Google/Kakao/Apple ID), uploaded audio, transcript text, saved records, and access/error logs.",
-            "For subscriptions, we may process payment status, product ID, subscription period, and Apple/payment-provider transaction identifiers. We do not store raw card numbers or full payment credentials.",
+            "Legacy transaction identifiers and status created while billing was previously available are retained only as required for legal compliance and dispute handling. No new payment data is collected.",
           ],
         },
         {
           title: "2. Purpose",
           body: [
-            "Used for authentication, account security, transcription/correction/summarization, records, free/paid quota management, iOS App Store in-app subscription verification, support, and service protection.",
+            "Used for authentication, account security, transcription/correction/summarization, records, usage measurement, support, and service protection.",
           ],
         },
         {
@@ -1201,7 +1123,7 @@ const LEGAL_DOCUMENTS = {
         {
           title: "4. Processors and Overseas Processing",
           body: [
-            "We use Supabase (auth/DB), OpenAI (Whisper), Google (Gemini), and Apple (Sign in with Apple/App Store subscriptions). API processing may involve overseas infrastructure.",
+            "We use Supabase (auth/DB), OpenAI (Whisper), Google (Gemini), and Apple (Sign in with Apple). API processing may involve overseas infrastructure.",
           ],
         },
         {
@@ -1219,7 +1141,7 @@ const LEGAL_DOCUMENTS = {
     terms: {
       title: "Terms of Service",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Effective date: May 23, 2026",
+      updatedAt: "Effective date: September 11, 2026",
       sections: [
         {
           title: "1. Service Scope",
@@ -1229,11 +1151,11 @@ const LEGAL_DOCUMENTS = {
           ],
         },
         {
-          title: "2. Usage Quotas",
+          title: "2. Free Access",
           body: [
-            "Users are responsible for account/session security. Monthly usage quotas apply.",
-            "Remaining time can be checked in Settings.",
-            "On iOS, Pro may be purchased through Apple App Store in-app subscriptions. Pricing, cancellation, and refunds follow Apple checkout and App Store policies.",
+            "mallog24 does not offer paid plans, recurring subscriptions, or in-app purchases on web, Android, or iOS.",
+            "Signed-in users can use the full transcription workflow for free. A short abuse-prevention limit applies to guest trials.",
+            "Temporary technical limits may be applied to preserve service stability or prevent abnormal use.",
           ],
         },
         {
@@ -1285,7 +1207,7 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "Company Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: May 23, 2026",
+      updatedAt: "Last updated: September 11, 2026",
       sections: [
         {
           title: "1. Operating Principles",
@@ -1298,7 +1220,7 @@ const LEGAL_DOCUMENTS = {
           title: "2. Data and Security Standards",
           body: [
             "We apply data minimization, role separation, HTTPS, token validation, and request throttling as baseline controls.",
-            "Apple ID sign-in and App Store subscription data are processed only as needed for authentication and subscription verification.",
+            "Apple ID sign-in data is processed only as needed for authentication.",
           ],
         },
         {
@@ -1319,7 +1241,7 @@ const LEGAL_DOCUMENTS = {
           body: [
             "Policy and feature changes are announced with document version and effective date when needed.",
             "Major changes are shared through web or in-app notices.",
-            "iOS in-app subscriptions are managed with a separate checklist for Apple review, sandbox testing, and receipt/transaction verification.",
+            "mallog24 does not offer paid plans or in-app purchases and provides the full workflow free to signed-in users.",
           ],
         },
         {
@@ -1341,7 +1263,7 @@ const LEGAL_DOCUMENTS = {
     notice: {
       title: "Notices",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: May 23, 2026",
+      updatedAt: "Last updated: September 11, 2026",
       sections: [
         {
           title: "1. Service Stability Notice",
@@ -1368,7 +1290,7 @@ const LEGAL_DOCUMENTS = {
     faq: {
       title: "Frequently Asked Questions (FAQ)",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: May 23, 2026",
+      updatedAt: "Last updated: September 11, 2026",
       sections: [
         {
           title: "Q1. Login works, but processing starts slowly.",

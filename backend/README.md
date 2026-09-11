@@ -57,8 +57,7 @@ uvicorn main:app --reload
    - `backend/sql/user_correction_samples.sql` (사용자 수정 결과 학습 데이터 + RLS 정책)
    - `backend/sql/training_data_assets.sql` (장기 학습 후보 음원/최종 정답 샘플 분리 보관)
    - `backend/sql/transcriptions_user_scope.sql` (사용자별 히스토리 + RLS 정책)
-   - `backend/sql/user_usage_quota.sql` (월간 사용량 추적 + 무료 플랜 한도)
-   - `backend/sql/billing_subscriptions.sql` (구독 결제 상태 저장 + RLS 정책)
+   - `backend/sql/user_usage_quota.sql` (월간 사용량 통계 추적)
 5. SQL 실행 후 스키마 반영
    - `NOTIFY pgrst, 'reload schema';`
 
@@ -76,7 +75,6 @@ uvicorn main:app --reload
    - `CORS_ALLOW_ORIGINS`
    - `OAUTH_REDIRECT_ALLOW_HOSTS`
    - `OAUTH_REDIRECT_ALLOW_SCHEMES` (예: `http,https,mallog24,exp`)
-   - `FREE_MONTHLY_LIMIT_SECONDS` (기본 36000, 무료 10시간)
    - `INLINE_TRANSCRIPTION_MAX_AUDIO_SECONDS` (기본 0, 로그인 파일은 즉시 queued 응답 후 폴링 처리. 아주 짧은 파일만 인라인 대기시키고 싶으면 소수 초로 조정)
    - `WHISPER_CHUNK_CONCURRENCY` (기본 2, Whisper 청크 병렬 처리 수)
    - `OPENAI_TRANSCRIPTION_MODEL` (기본 `gpt-4o-transcribe`, OpenAI 전사 모델)
@@ -98,17 +96,8 @@ uvicorn main:app --reload
    - `TRANSCRIPTION_WORKER_POLL_INTERVAL_SECONDS` (기본 5초)
    - `OPTIONAL_SUPABASE_WRITE_TIMEOUT_SECONDS` (기본 5초, 학습 후보 저장 같은 선택적 DB 쓰기 제한)
    - `USAGE_TIMEZONE` (기본 `Asia/Seoul`)
-   - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 등록 계정은 무료 한도 우회 및 변환 기록의 관리자 전용 API 사용량 확인)
+   - `ADMIN_BYPASS_EMAILS` (쉼표 구분, 변환 기록의 관리자 전용 API 사용량 확인)
    - `ADMIN_BYPASS_USER_IDS` (쉼표 구분, Supabase auth.users UUID 기준, 관리자 전용 API 사용량 확인)
-   - `BILLING_PROVIDER` (권장 기본 `portone`, 필요 시 `stripe`)
-   - `BILLING_TEST_MODE` (테스트 플로우 확인 시 `true`)
-   - `MOCK_CHECKOUT_SESSION_TTL_SECONDS` (기본 1800초)
-   - `PORTONE_STORE_ID` (또는 `PORTONE_MID`), `PORTONE_CHANNEL_KEY`, `PORTONE_API_SECRET`, `PORTONE_WEBHOOK_SECRET`
-   - `PAID_PLAN_AMOUNT_KRW` (기본 8800, VAT 포함), `PAID_PLAN_PRODUCT_NAME_KO`, `PAID_PLAN_PRODUCT_NAME_EN`
-   - `TOSS_CLIENT_KEY`, `TOSS_SECRET_KEY` (tosspayments 사용 시)
-   - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO` (글로벌 확장 시)
-   - `PAID_PLAN_TIER` (기본 `pro`)
-   - `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `BILLING_PORTAL_RETURN_URL` (선택)
 5. 배포 완료 후 백엔드 URL 확인 (`https://<service-name>.onrender.com`)
 6. 프론트엔드(Vercel) 환경변수 `NEXT_PUBLIC_API_URL`을 Render URL로 변경
 
@@ -392,15 +381,7 @@ python backend/scripts/build_feature_sql_bundle.py \
 - `POST /api/auth/login` : 로그인
 - `GET /api/auth/oauth-url` : 소셜 로그인 URL 발급 (`provider=apple|google|kakao`, `redirect_to` 필요)
 - `GET /api/auth/me` : 현재 사용자 조회
-- `GET /api/usage` : 이번 달 사용량 조회 (무료 한도 10시간)
-- `GET /api/billing/status` : 내 구독 상태 조회
-- `POST /api/billing/checkout` : 결제 체크아웃 생성 (공급자별)
-- `POST /api/billing/portal` : 구독 관리 포털 생성 (공급자별)
-- `POST /api/billing/webhook` : Stripe 웹훅 수신 (BILLING_PROVIDER=stripe일 때 활성)
-- `GET /api/billing/portone/checkout/{session_id}` : PortOne 실결제창 호출 페이지
-- `GET /api/billing/portone/complete/{session_id}` : PortOne 결제 검증 후 구독 반영
-- `GET /api/billing/mock/checkout/{session_id}` : 테스트 결제 화면
-- `GET /api/billing/mock/complete/{session_id}` : 테스트 결제 성공/취소 완료 처리
+- `GET /api/usage` : 이번 달 사용량 통계 조회 (로그인 사용자는 무료 무제한)
 - `POST /api/records/draft` : 기록본 초안 생성 (인증 필요)
 - `POST /api/records` : 기록본 저장 (인증 필요)
 - `PUT /api/records/{record_id}` : 내 저장 기록본 수정 및 `saved_record_edit` 교정 샘플 자동 캡처 (인증 필요)
@@ -419,7 +400,7 @@ python backend/scripts/build_feature_sql_bundle.py \
 - `EXPOSE_TERMS_ENDPOINT=false`: 디버깅용 `/api/terms` 외부 비활성화
 - Supabase SQL에서 RLS 정책 적용 여부 확인
 
-## 월간 무료 한도 초기화 Cron
+## 월간 사용량 통계 초기화 Cron
 
 `backend/jobs/reset_monthly_free_usage.py`를 매월 1일에 실행하세요.
 
@@ -431,20 +412,10 @@ python backend/jobs/reset_monthly_free_usage.py
 
 Render Cron Job 스케줄 예시: `0 0 1 * *` (UTC 기준)
 
-## 국내 PG 우선 + Stripe 확장 전략
+## 무료 서비스 운영
 
-1. 1차 운영(국내): `BILLING_PROVIDER=portone`로 설정하고 국내 PG 키를 적용
-   - 필수값: `PORTONE_CHANNEL_KEY`, `PORTONE_STORE_ID`(또는 `PORTONE_MID`), `PORTONE_API_SECRET`
-   - `BILLING_TEST_MODE=false`일 때 `/api/billing/checkout`이 실제 결제창 URL을 반환
-   - PortOne webhook URL: `https://<backend-domain>/api/billing/portone/webhook`
-   - webhook secret 발급 후 `PORTONE_WEBHOOK_SECRET` 설정
-2. 2차 글로벌: `BILLING_PROVIDER=stripe`로 전환 후 Stripe 키/Price/Webhook 설정
-3. Stripe Webhook URL: `https://<backend-domain>/api/billing/webhook`
-   - 이벤트: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
-
-### 테스트 결제 플로우(실제 과금 없음)
-
-1. `BILLING_TEST_MODE=true` 설정 후 백엔드 재배포
-2. `/pricing` 또는 `/pricing-en`에서 "테스트 결제 시작하기" 클릭
-3. 테스트 결제 화면에서 성공/취소를 눌러 상태 반영 확인
-4. 성공 시 `plan_tier=pro`, 취소 시 `plan_tier=free`로 되돌아갑니다.
+- 로그인 사용자는 요금제나 결제 상태와 관계없이 모든 변환 기능을 무료로 이용합니다.
+- 비로그인 체험에는 오남용 방지를 위한 짧은 제한만 적용합니다.
+- `/api/billing/*` 경로는 `410 Gone`으로 종료되며 OpenAPI 문서에도 노출되지 않습니다.
+- 과거 거래 테이블은 회계, 분쟁 대응, 법정 보존 목적의 이력으로만 유지합니다.
+- 종료 절차와 외부 서비스 정리 항목은 `docs/payment_retirement.md`를 참고합니다.

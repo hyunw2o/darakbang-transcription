@@ -77,7 +77,7 @@ export default function MallogHomeEnView(props) {
     SUPPORT_EMAIL,
     CANONICAL_URL,
     ALTERNATE_URL,
-    UPGRADE_CONTACT_URL,
+    SERVICE_INFO_URL,
     APP_DOWNLOAD_URL,
     IOS_APP_STORE_URL,
     LANGUAGE_SELECT_ID,
@@ -224,7 +224,7 @@ export default function MallogHomeEnView(props) {
 
   const navItems = authToken
     ? [
-        { label: 'Pricing', href: UPGRADE_CONTACT_URL },
+        { label: 'Free Access', href: SERVICE_INFO_URL },
         { label: 'Guides', href: '/en/guides' },
         { label: 'Android Download', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS Download' : 'iOS Review', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
@@ -233,7 +233,7 @@ export default function MallogHomeEnView(props) {
     : [
         { label: 'Features', href: '#features' },
         { label: 'Preview', href: '#preview' },
-        { label: 'Pricing', href: '#pricing' },
+        { label: 'Free Access', href: '#access' },
         { label: 'Guides', href: '/en/guides' },
         { label: 'Android Download', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS Download' : 'iOS Review', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
@@ -272,7 +272,7 @@ export default function MallogHomeEnView(props) {
         <title>mallog24 - AI Speech to Text</title>
         <meta
           name="description"
-          content="AI transcription for sermons, calls, and meetings with structured output. 30-day Pro trial for new signups, free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
+          content="Free AI transcription for sermons, calls, and meetings with structured output. Signed-in users can use the full workflow without payment or a subscription."
         />
         <link rel="canonical" href={CANONICAL_URL} />
         <link rel="alternate" hrefLang="en" href={CANONICAL_URL} />
@@ -282,7 +282,7 @@ export default function MallogHomeEnView(props) {
         <meta property="og:title" content="mallog24 - AI Speech to Text" />
         <meta
           property="og:description"
-          content="AI transcription for sermons, calls, and meetings with structured output. 30-day Pro trial for new signups, free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
+          content="Free AI transcription for sermons, calls, and meetings with structured output. Signed-in users can use the full workflow without payment or a subscription."
         />
         <meta property="og:url" content={CANONICAL_URL} />
         <meta property="og:image" content={OG_IMAGE_URL} />
@@ -290,7 +290,7 @@ export default function MallogHomeEnView(props) {
         <meta name="twitter:title" content="mallog24 - AI Speech to Text" />
         <meta
           name="twitter:description"
-          content="AI transcription for sermons, calls, and meetings with structured output. 30-day Pro trial for new signups, free 10 hours/month, Pro KRW 8,800/month (VAT included) unlimited."
+          content="Free AI transcription for sermons, calls, and meetings with structured output."
         />
         <meta name="twitter:image" content={OG_IMAGE_URL} />
       </Head>
@@ -333,7 +333,7 @@ export default function MallogHomeEnView(props) {
           <MallogLandingSections
             locale="en"
             content={EN_MALLOG_LANDING_CONTENT}
-            pricingUrl={UPGRADE_CONTACT_URL}
+            serviceInfoUrl={SERVICE_INFO_URL}
             oursUrl={OURS_URL}
             stats={landingStats}
             appDownloadUrl={APP_DOWNLOAD_URL}
@@ -523,18 +523,19 @@ export default function MallogHomeEnView(props) {
                         Remaining: {formatSecondsToHourMinute(remainingQuotaSeconds, 'en')}
                       </p>
                     )}
-                    {usage.trial_active && usage.access_source === 'welcome_trial' && (
-                      <p className="text-[11px] text-nm-accent mt-1">
-                        {usage.trial_days_remaining || 1} day(s) left in Pro trial
-                      </p>
-                    )}
                   </div>
-                  <a
-                    href={isGuestMode ? '#auth-card' : UPGRADE_CONTACT_URL}
-                    className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
-                  >
-                    {isGuestMode ? 'Sign in for 10 free hours/month' : usage.trial_active ? 'Pro trial active' : 'Upgrade Subscription'}
-                  </a>
+                  {isGuestMode ? (
+                    <a
+                      href="#auth-card"
+                      className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
+                    >
+                      Sign in to keep using it for free
+                    </a>
+                  ) : (
+                    <span className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold">
+                      Free access active
+                    </span>
+                  )}
                 </div>
                 {isFreeTier && (
                   <div className="mt-3 h-2 rounded-full nm-concave overflow-hidden">
@@ -749,7 +750,7 @@ export default function MallogHomeEnView(props) {
                   {loading
                     ? 'Transcribing...'
                     : uploadBlockedByQuota
-                      ? 'Free quota exceeded (Upgrade required)'
+                      ? 'Guest trial allowance used'
                       : fileExceedsRemainingQuota
                         ? 'Exceeds remaining allowance'
                         : authToken

@@ -21,7 +21,8 @@
 - [ ] Login works with provided review account
 - [ ] Upload/transcription/history/records flow works
 - [ ] Privacy/Terms/Company Policy are accessible inside the app
-- [ ] iOS build does not expose external web checkout buttons for digital subscription flow
+- [ ] The app has no purchase, subscription, restore-purchase, or upgrade controls
+- [ ] Signed-in accounts can use every feature without a paid entitlement
 
 ## 4. Metadata
 
@@ -43,7 +44,7 @@
 
 - [ ] App Privacy answers reviewed based on actual data flow
 - [ ] Audio upload and transcript retention policy matches in-app policy
-- [ ] Third-party processors reviewed: Supabase, OpenAI, Google, payment provider as applicable
+- [ ] Third-party processors reviewed: Supabase, OpenAI, and Google
 
 ## 7. Review information
 
@@ -57,4 +58,4 @@
 - [ ] TestFlight internal test completed
 - [ ] No dead links
 - [ ] No broken OAuth redirect
-- [ ] No payment screen shown that can trigger IAP policy issues
+- [ ] No payment or subscription screen is present

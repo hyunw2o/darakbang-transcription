@@ -204,21 +204,17 @@ def run_special_term_sample() -> None:
         "-c",
         (
             "import sys; "
-            "from datetime import datetime, timedelta; "
             "sys.path.insert(0, 'backend'); "
-            "from main import _build_usage_snapshot, PAID_PLAN_TIER, USAGE_FREE_PLAN; "
+            "from main import _build_usage_snapshot, USAGE_FREE_PLAN; "
             "base={'user_id':'u1','plan_tier':USAGE_FREE_PLAN,'used_audio_seconds':120,"
-            "'usage_month':'2026-05-01','trial_started_at':datetime.utcnow().isoformat(),"
-            "'trial_ends_at':(datetime.utcnow()+timedelta(days=10)).isoformat(),"
+            "'usage_month':'2026-09-01','trial_started_at':'2026-05-24T00:00:00',"
+            "'trial_ends_at':'2099-01-01T00:00:00',"
             "'trial_source':'welcome_signup_30d','trial_consumed':True}; "
-            "trial=_build_usage_snapshot(base); "
-            "assert trial['plan_tier'] == PAID_PLAN_TIER and trial['access_source'] == 'welcome_trial' and trial['remaining_seconds'] is None, trial; "
-            "forced=_build_usage_snapshot(base, force_free_plan=True); "
-            "assert forced['plan_tier'] == USAGE_FREE_PLAN and forced['access_source'] == 'free', forced; "
-            "expired={**base,'trial_ends_at':(datetime.utcnow()-timedelta(seconds=1)).isoformat()}; "
-            "free=_build_usage_snapshot(expired); "
-            "assert free['plan_tier'] == USAGE_FREE_PLAN and free['trial_active'] is False, free; "
-            "print('welcome-trial-usage-snapshot-ok')"
+            "free=_build_usage_snapshot(base); "
+            "assert free['plan_tier'] == USAGE_FREE_PLAN and free['access_source'] == 'free_service', free; "
+            "assert free['monthly_limit_seconds'] is None and free['remaining_seconds'] is None and free['can_upload'] is True, free; "
+            "assert free['trial_active'] is False, free; "
+            "print('free-unlimited-usage-snapshot-ok')"
         ),
     ])
 

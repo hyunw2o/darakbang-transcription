@@ -52,14 +52,14 @@ How to test
 Additional notes
 - Social login may depend on provider availability; email login is recommended for review.
 - Privacy Policy, Terms of Service, and Company Policy are available inside the app.
-- For iOS review builds, external web checkout / subscription-action buttons are intentionally hidden.
+- mallog24 is free to use after sign-in and has no in-app purchases or subscriptions.
 
 ## App privacy drafting note
 Review these categories against actual production behavior before submission:
 - Contact Info: Email Address
 - User Content: Audio Files, Transcripts, Saved Records
 - Identifiers: User ID
-- Usage Data: Usage quota / subscription state if applicable
+- Usage Data: Transcription usage metrics
 
 Typical purposes
 - App Functionality

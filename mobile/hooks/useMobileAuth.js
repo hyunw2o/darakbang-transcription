@@ -8,7 +8,6 @@ import {
   AUTH_REQUEST_TIMEOUT_MS,
   AUTH_SESSION_EXPIRES_AT_KEY,
   AUTH_TOKEN_KEY,
-  FREE_MONTHLY_LIMIT_SECONDS,
   OURS_URL,
   SITE_URL,
 } from "../config";
@@ -113,16 +112,12 @@ export default function useMobileAuth({
         monthly_limit_seconds:
           data?.monthly_limit_seconds === null || data?.monthly_limit_seconds === undefined
             ? null
-            : Number(data?.monthly_limit_seconds) || FREE_MONTHLY_LIMIT_SECONDS,
+            : Math.max(0, Number(data?.monthly_limit_seconds) || 0),
         remaining_seconds:
           data?.remaining_seconds === null || data?.remaining_seconds === undefined
             ? null
             : Math.max(0, Number(data?.remaining_seconds) || 0),
         usage_percent: Math.max(0, Math.min(100, Number(data?.usage_percent) || 0)),
-        trial_active: Boolean(data?.trial_active),
-        trial_ends_at: data?.trial_ends_at || null,
-        trial_days_remaining: Math.max(0, Number(data?.trial_days_remaining) || 0),
-        trial_source: String(data?.trial_source || ""),
       };
       setUsage(normalized);
       return normalized;

@@ -77,7 +77,7 @@ export default function MallogHomeKoView(props) {
     SUPPORT_EMAIL,
     CANONICAL_URL,
     ALTERNATE_URL,
-    UPGRADE_CONTACT_URL,
+    SERVICE_INFO_URL,
     APP_DOWNLOAD_URL,
     IOS_APP_STORE_URL,
     LANGUAGE_SELECT_ID,
@@ -224,7 +224,7 @@ export default function MallogHomeKoView(props) {
 
   const navItems = authToken
     ? [
-        { label: '요금제', href: UPGRADE_CONTACT_URL },
+        { label: '무료 이용', href: SERVICE_INFO_URL },
         { label: '사용 가이드', href: '/guides' },
         { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
@@ -233,7 +233,7 @@ export default function MallogHomeKoView(props) {
     : [
         { label: '기능', href: '#features' },
         { label: '결과 예시', href: '#preview' },
-        { label: '요금제', href: '#pricing' },
+        { label: '무료 이용', href: '#access' },
         { label: '사용 가이드', href: '/guides' },
         { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
         { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
@@ -272,7 +272,7 @@ export default function MallogHomeKoView(props) {
         <title>mallog24 - AI Speech to Text</title>
         <meta
           name="description"
-          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 첫 가입 30일 Pro 체험, 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
+          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 무료 AI 녹취 서비스. 로그인 후 결제나 구독 없이 전체 변환 기능을 이용할 수 있습니다."
         />
         <link rel="canonical" href={CANONICAL_URL} />
         <link rel="alternate" hrefLang="ko" href={CANONICAL_URL} />
@@ -282,7 +282,7 @@ export default function MallogHomeKoView(props) {
         <meta property="og:title" content="mallog24 - AI Speech to Text" />
         <meta
           property="og:description"
-          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 첫 가입 30일 Pro 체험, 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
+          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 무료 AI 녹취 서비스. 로그인 후 결제나 구독 없이 전체 변환 기능을 이용할 수 있습니다."
         />
         <meta property="og:url" content={CANONICAL_URL} />
         <meta property="og:image" content={OG_IMAGE_URL} />
@@ -290,7 +290,7 @@ export default function MallogHomeKoView(props) {
         <meta name="twitter:title" content="mallog24 - AI Speech to Text" />
         <meta
           name="twitter:description"
-          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 AI 녹취 서비스. 무료 월 10시간, Pro 월 8,800원(VAT 포함) 무제한."
+          content="설교, 통화, 회의 음성을 구조화된 문서로 변환하는 무료 AI 녹취 서비스입니다."
         />
         <meta name="twitter:image" content={OG_IMAGE_URL} />
       </Head>
@@ -333,7 +333,7 @@ export default function MallogHomeKoView(props) {
           <MallogLandingSections
             locale="kr"
             content={KO_MALLOG_LANDING_CONTENT}
-            pricingUrl={UPGRADE_CONTACT_URL}
+            serviceInfoUrl={SERVICE_INFO_URL}
             oursUrl={OURS_URL}
             stats={landingStats}
             appDownloadUrl={APP_DOWNLOAD_URL}
@@ -521,18 +521,19 @@ export default function MallogHomeKoView(props) {
                         남은 시간: {formatSecondsToHourMinute(remainingQuotaSeconds)}
                       </p>
                     )}
-                    {usage.trial_active && usage.access_source === 'welcome_trial' && (
-                      <p className="text-[11px] text-nm-accent mt-1">
-                        신규 가입 Pro 체험 {usage.trial_days_remaining || 1}일 남음
-                      </p>
-                    )}
                   </div>
-                  <a
-                    href={isGuestMode ? '#auth-card' : UPGRADE_CONTACT_URL}
-                    className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
-                  >
-                    {isGuestMode ? '로그인하고 월 10시간 사용하기' : usage.trial_active ? 'Pro 체험 중' : '구독 업그레이드하기'}
-                  </a>
+                  {isGuestMode ? (
+                    <a
+                      href="#auth-card"
+                      className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
+                    >
+                      로그인하고 무료로 계속 사용하기
+                    </a>
+                  ) : (
+                    <span className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold">
+                      무료 이용 중
+                    </span>
+                  )}
                 </div>
                 {isFreeTier && (
                   <div className="mt-3 h-2 rounded-full nm-concave overflow-hidden">
@@ -746,7 +747,7 @@ export default function MallogHomeKoView(props) {
                   {loading
                     ? '변환 중...'
                     : uploadBlockedByQuota
-                      ? '무료 한도 초과 (업그레이드 필요)'
+                      ? '비로그인 체험 한도 소진'
                       : fileExceedsRemainingQuota
                         ? '남은 허용 시간 초과'
                         : authToken

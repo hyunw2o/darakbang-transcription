@@ -1,5 +1,5 @@
--- mallog24 monthly usage quota model
--- Run this in Supabase SQL Editor before using /api/usage and quota-based upload guard.
+-- mallog24 monthly usage statistics model.
+-- Signed-in users are free and unlimited; the table remains for usage reporting.
 
 create table if not exists public.user_usage_quotas (
   user_id uuid primary key references auth.users(id) on delete cascade,

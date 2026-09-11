@@ -73,7 +73,7 @@ export default function MallogHomePageContainer({
   const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'ours113814@gmail.com'
   const CANONICAL_URL = isEnglish ? `${SITE_URL}/en` : SITE_URL
   const ALTERNATE_URL = isEnglish ? SITE_URL : `${SITE_URL}/en`
-  const UPGRADE_CONTACT_URL = isEnglish ? '/pricing-en' : '/pricing'
+  const SERVICE_INFO_URL = isEnglish ? '/pricing-en' : '/pricing'
   const HOME_HREF = isEnglish ? '/en' : '/'
   const RECOVERY_HREF = isEnglish ? '/en/recover' : '/recover'
   const LANGUAGE_SELECT_ID = isEnglish ? 'mallog24-language-en' : 'mallog24-language'
@@ -437,7 +437,7 @@ export default function MallogHomePageContainer({
       SUPPORT_EMAIL={SUPPORT_EMAIL}
       CANONICAL_URL={CANONICAL_URL}
       ALTERNATE_URL={ALTERNATE_URL}
-      UPGRADE_CONTACT_URL={UPGRADE_CONTACT_URL}
+      SERVICE_INFO_URL={SERVICE_INFO_URL}
       APP_DOWNLOAD_URL={APP_DOWNLOAD_URL}
       IOS_APP_STORE_URL={IOS_APP_STORE_URL}
       LANGUAGE_SELECT_ID={LANGUAGE_SELECT_ID}

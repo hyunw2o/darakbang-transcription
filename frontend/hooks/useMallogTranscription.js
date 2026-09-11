@@ -15,7 +15,6 @@ import {
   downsampleWaveform,
 } from '../utils/recordingSignal'
 
-const FREE_MONTHLY_LIMIT_SECONDS = 36000
 const GUEST_MONTHLY_LIMIT_SECONDS = 1800
 const GUEST_MAX_AUDIO_SECONDS = 600
 const GUEST_SESSION_STORAGE_KEY = 'mallog24_guest_session_id'
@@ -57,7 +56,7 @@ function buildRecordingFilename(extension) {
 const TRANSCRIPTION_MESSAGES = {
   ko: {
     fileSizeExceeded: '파일 크기는 100MB 이하여야 합니다.',
-    quotaExceeded: '남은 허용 시간을 초과하는 파일입니다.',
+    quotaExceeded: '비로그인 체험의 남은 허용 시간을 초과하는 파일입니다.',
     browserDurationFallback: '브라우저에서 길이 확인에 실패해 업로드는 진행합니다. 서버에서 길이를 다시 검사합니다.',
     pollingSlow: '상태 확인 응답이 지연되고 있습니다. 잠시 후 다시 확인해 주세요.',
     pollingNetwork: '네트워크 오류로 상태 확인이 불안정합니다. 잠시 후 다시 확인해 주세요.',
@@ -112,13 +111,13 @@ const TRANSCRIPTION_MESSAGES = {
     transcriptTitle: '녹취록',
     transcriptFilename: '녹취록',
     copyFailed: '클립보드 복사에 실패했습니다.',
-    usageLimitToast: '이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요.',
+    usageLimitToast: '비로그인 체험 한도를 모두 사용했습니다. 로그인하면 무료로 계속 이용할 수 있습니다.',
     resolveStyleMeetingFallback: 'conversation',
     defaultLanguage: 'ko',
   },
   en: {
     fileSizeExceeded: 'File size must be 100MB or less.',
-    quotaExceeded: 'This file exceeds your remaining free allowance.',
+    quotaExceeded: 'This file exceeds the remaining guest trial allowance.',
     browserDurationFallback: 'Could not read duration in browser. Upload continues and the server will validate duration.',
     pollingSlow: 'Status checks are delayed. Please try again shortly.',
     pollingNetwork: 'Network errors are interrupting status checks. Please try again shortly.',
@@ -173,7 +172,7 @@ const TRANSCRIPTION_MESSAGES = {
     transcriptTitle: 'Transcript',
     transcriptFilename: 'transcript',
     copyFailed: 'Failed to copy to clipboard.',
-    usageLimitToast: 'You have used all 10 free hours for this month. Please upgrade your plan.',
+    usageLimitToast: 'The guest trial allowance is used up. Sign in to keep using mallog24 for free.',
     resolveStyleMeetingFallback: 'conversation',
     defaultLanguage: 'en',
   },
@@ -618,8 +617,8 @@ export default function useMallogTranscription({
 
     const currentUsage = usage || null
     const planTier = currentUsage?.plan_tier || (authToken ? 'free' : 'guest')
-    const isLimitedTier = planTier === 'free' || planTier === 'guest'
-    const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds || (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+    const isLimitedTier = planTier === 'guest'
+    const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds ?? (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : 0)
     const maxAudioSeconds = Number(currentUsage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
     const remainingQuotaSeconds = isLimitedTier
       ? Math.max(0, currentUsage?.remaining_seconds ?? monthlyLimitSeconds)
@@ -1208,8 +1207,8 @@ export default function useMallogTranscription({
     }
 
     const planTier = usage?.plan_tier || (authToken ? 'free' : 'guest')
-    const isLimitedTier = planTier === 'free' || planTier === 'guest'
-    const monthlyLimitSeconds = usage?.monthly_limit_seconds || (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+    const isLimitedTier = planTier === 'guest'
+    const monthlyLimitSeconds = usage?.monthly_limit_seconds ?? (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : 0)
     const maxAudioSeconds = Number(usage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
     const remainingQuotaSeconds = isLimitedTier
       ? Math.max(0, usage?.remaining_seconds ?? monthlyLimitSeconds)
@@ -1816,8 +1815,8 @@ export default function useMallogTranscription({
     return (usage) => {
       const currentUsage = usage || null
       const planTier = currentUsage?.plan_tier || (authToken ? 'free' : 'guest')
-      const isFreeTier = planTier === 'free' || planTier === 'guest'
-      const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds || (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
+      const isFreeTier = planTier === 'guest'
+      const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds ?? (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : 0)
       const maxAudioSeconds = Number(currentUsage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
       const remainingQuotaSeconds = isFreeTier
         ? Math.max(0, currentUsage?.remaining_seconds ?? monthlyLimitSeconds)

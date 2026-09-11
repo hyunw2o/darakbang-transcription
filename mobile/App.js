@@ -29,7 +29,6 @@ import Banner from "./components/Banner";
 import AdMobBanner from "./components/AdMobBanner";
 import SegmentButton from "./components/SegmentButton";
 import SocialAuthButton from "./components/SocialAuthButton";
-import AppleIapSubscriptionCard from "./components/AppleIapSubscriptionCard";
 import {
   APP_TABS,
   BUSINESS_ADDRESS,
@@ -37,7 +36,6 @@ import {
   BUSINESS_NAME,
   BUSINESS_REG_NUMBER,
   ECOMMERCE_REG_NUMBER,
-  FREE_MONTHLY_LIMIT_SECONDS,
   GUEST_MAX_AUDIO_SECONDS,
   GUEST_MONTHLY_LIMIT_SECONDS,
   GUEST_SESSION_KEY,
@@ -296,165 +294,6 @@ function RecordingWaveform({ active, level, levels, label, theme }) {
   );
 }
 
-function getMobileLegalDocuments(baseDocs, language) {
-  const businessSection = baseDocs?.terms?.sections?.find((section) =>
-    String(section?.title || "").includes(language === "en" ? "Business" : "사업자")
-  );
-  const businessBody = Array.isArray(businessSection?.body)
-    ? businessSection.body
-    : [language === "en" ? "See the service website for business disclosure and support contact." : "사업자 정보와 문의처는 서비스 웹사이트에서 확인할 수 있습니다."];
-  const privacy = baseDocs?.privacy;
-  const notice = baseDocs?.notice;
-  const faq = baseDocs?.faq;
-
-  if (language === "en") {
-    return {
-      privacy,
-      terms: {
-        ...baseDocs.terms,
-        sections: [
-          {
-            title: "1. Service Scope",
-            body: [
-              "The app provides speech transcription, text correction, summarization, and structured record features.",
-              "Usage is available within the monthly quota shown in the app.",
-            ],
-          },
-          {
-            title: "2. Usage Quota",
-            body: [
-              "Each account can check remaining monthly time in Settings.",
-              "Guest mode results are shown only on the current device session.",
-            ],
-          },
-          {
-            title: "3. Data and AI Processing",
-            body: [
-              "Uploaded audio and generated text may be processed by Supabase, OpenAI, and Google (Gemini) only to provide app functionality.",
-              "Users must review and agree to the privacy and AI processing notice before using login and transcription features.",
-            ],
-          },
-          {
-            title: "4. User Responsibility",
-            body: [
-              "Users must have lawful rights to uploaded content and must review generated outputs before relying on them.",
-            ],
-          },
-          {
-            title: "5. Business Information",
-            body: businessBody,
-          },
-        ],
-      },
-      companyPolicy: {
-        ...baseDocs.companyPolicy,
-        sections: [
-          {
-            title: "1. Operating Principles",
-            body: [
-              "We prioritize transcript quality, security, and reliability while keeping workflows simple and practical.",
-            ],
-          },
-          {
-            title: "2. Data and Security Standards",
-            body: [
-              "We apply data minimization, HTTPS, token validation, and request throttling as baseline controls.",
-            ],
-          },
-          {
-            title: "3. Responsible AI Use",
-            body: [
-              "Uploaded data is used only for service functionality.",
-              "Machine-generated outputs should be reviewed by users before final use.",
-            ],
-          },
-          {
-            title: "4. Notice and Support",
-            body: [
-              "Major policy, feature, and incident updates are announced via web or in-app notices.",
-            ],
-          },
-        ],
-      },
-      notice,
-      faq,
-    };
-  }
-
-  return {
-    privacy,
-    terms: {
-      ...baseDocs.terms,
-      sections: [
-        {
-          title: "1. 서비스 범위",
-          body: [
-            "앱은 음성 전사, 텍스트 교정, 요약, 구조화 기록 기능을 제공합니다.",
-            "사용량은 앱에 표시되는 월간 한도 내에서 제공됩니다.",
-          ],
-        },
-        {
-          title: "2. 사용량 안내",
-          body: [
-            "계정별 남은 월간 사용 시간은 설정 화면에서 확인할 수 있습니다.",
-            "비로그인 체험 결과는 현재 기기 화면에서만 확인할 수 있습니다.",
-          ],
-        },
-        {
-          title: "3. 데이터 및 AI 처리",
-          body: [
-            "업로드 음성과 생성 텍스트는 앱 기능 제공을 위해 Supabase, OpenAI, Google(Gemini)에서 처리될 수 있습니다.",
-            "로그인과 음성 변환 기능을 사용하기 전에 개인정보 및 AI 처리 안내에 동의해야 합니다.",
-          ],
-        },
-        {
-          title: "4. 이용자 책임",
-          body: [
-            "업로드 자료에 대한 적법한 권리를 보유해야 하며, 자동 생성 결과는 최종 사용 전 직접 검토해야 합니다.",
-          ],
-        },
-        {
-          title: "5. 사업자 정보",
-          body: businessBody,
-        },
-      ],
-    },
-    companyPolicy: {
-      ...baseDocs.companyPolicy,
-      sections: [
-        {
-          title: "1. 운영 원칙",
-          body: [
-            "정확도, 보안, 안정성을 우선으로 제품을 개선합니다.",
-            "사용자가 빠르게 기록을 재활용할 수 있는 단순한 흐름을 유지합니다.",
-          ],
-        },
-        {
-          title: "2. 데이터/보안 정책",
-          body: [
-            "최소 데이터 처리, HTTPS, 토큰 검증, 요청 제한을 기본 통제로 적용합니다.",
-          ],
-        },
-        {
-          title: "3. 책임 있는 AI",
-          body: [
-            "업로드 데이터는 서비스 기능 제공 목적 내에서만 처리합니다.",
-            "자동 생성 결과는 최종 사용 전 이용자의 검토가 필요합니다.",
-          ],
-        },
-        {
-          title: "4. 공지 및 지원",
-          body: [
-            "주요 정책, 기능, 장애 관련 변경은 웹 또는 앱 내 문서로 안내합니다.",
-          ],
-        },
-      ],
-    },
-    notice,
-    faq,
-  };
-}
-
 function App() {
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
   const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
@@ -537,9 +376,6 @@ function App() {
   const [privacyConsentSaving, setPrivacyConsentSaving] = useState(false);
   const [legalModalDocType, setLegalModalDocType] = useState("");
 
-  const isIosAppStoreReviewMode = Platform.OS === "ios";
-  // Apple Review requires paid digital subscriptions to be purchasable in-app on iOS.
-  // Do not allow an environment toggle or review-mode flag to hide the IAP entry point.
   const copy = I18N[uiLanguage] || I18N.ko;
   const recordingDurationSeconds = Math.max(0, Math.floor((audioRecorderState?.durationMillis || 0) / 1000));
   const recordingActive = recordingStatus === "recording" || Boolean(audioRecorderState?.isRecording);
@@ -562,14 +398,7 @@ function App() {
     });
   }, [audioRecorderState?.durationMillis, audioRecorderState?.metering, recordingActive, recordingLevel]);
   const baseLegalDocs = LEGAL_DOCUMENTS[uiLanguage] || LEGAL_DOCUMENTS.ko;
-  const legalDocs = useMemo(
-    () => (
-      isIosAppStoreReviewMode
-        ? getMobileLegalDocuments(baseLegalDocs, uiLanguage)
-        : baseLegalDocs
-    ),
-    [baseLegalDocs, isIosAppStoreReviewMode, uiLanguage]
-  );
+  const legalDocs = baseLegalDocs;
   const activeLegalDoc = legalModalDocType ? legalDocs[legalModalDocType] || null : null;
   const settingsBusinessRows = useMemo(() => {
     if (uiLanguage === "en") {
@@ -779,10 +608,9 @@ function App() {
   const authLandingBadges = useMemo(
     () => [
       copy.authLanding.badges.free,
-      ...(isIosAppStoreReviewMode ? [] : [copy.authLanding.badges.pro]),
       copy.authLanding.badges.beta,
     ],
-    [copy.authLanding.badges.beta, copy.authLanding.badges.free, copy.authLanding.badges.pro, isIosAppStoreReviewMode]
+    [copy.authLanding.badges.beta, copy.authLanding.badges.free]
   );
   const transcriptionTypeOptions = useMemo(
     () => TRANSCRIPTION_TYPE_CARD_ORDER.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
@@ -926,31 +754,23 @@ function App() {
   const effectiveUsage = isGuestMode ? guestUsage : usage;
   const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
   const displayUsagePlan = usagePlan;
-  const isWelcomeTrial = Boolean(effectiveUsage?.trial_active && effectiveUsage?.access_source === "welcome_trial");
-  const trialDaysRemaining = Math.max(0, Number(effectiveUsage?.trial_days_remaining) || 0);
-  const trialRemainingLabel = (copy.usageWelcomeTrialRemaining || "")
-    .replace("{days}", String(trialDaysRemaining || 1));
-  const isFreeUsagePlan = displayUsagePlan === "free" || displayUsagePlan === "guest";
+  const isUsageLimited = displayUsagePlan === "guest";
   const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
-  const monthlyLimitSeconds = Math.max(
-    1,
-    Number(effectiveUsage?.monthly_limit_seconds) || (isGuestMode ? GUEST_MONTHLY_LIMIT_SECONDS : FREE_MONTHLY_LIMIT_SECONDS)
-  );
-  const remainingAudioSeconds = isFreeUsagePlan
+  const monthlyLimitSeconds = isUsageLimited
+    ? Math.max(1, Number(effectiveUsage?.monthly_limit_seconds) || GUEST_MONTHLY_LIMIT_SECONDS)
+    : null;
+  const remainingAudioSeconds = isUsageLimited
     ? Math.max(0, Number(effectiveUsage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
     : null;
-  const usagePercent = isFreeUsagePlan
+  const usagePercent = isUsageLimited
     ? Math.max(0, Math.min(100, Number(effectiveUsage?.usage_percent) || 0))
     : 0;
-  const planLabel = isWelcomeTrial
-    ? (copy.usageWelcomeTrial || copy.planLabels?.pro || "Pro")
-    : (copy.planLabels?.[displayUsagePlan] || displayUsagePlan);
+  const planLabel = copy.planLabels?.[displayUsagePlan] || copy.planLabels?.free || displayUsagePlan;
   const usageSettingsTitle = copy.settingsUsageTitle;
   const usageSettingsHint = copy.settingsUsageHint;
   const shouldShowMobileAds =
     activeTab === "transcribe" &&
-    (isGuestMode || Boolean(effectiveUsage)) &&
-    isFreeUsagePlan;
+    (isGuestMode || Boolean(effectiveUsage));
 
   const handleCreateGlossaryTerm = useCallback(async () => {
     if (!isLoggedIn || !authToken) {
@@ -2251,14 +2071,14 @@ function App() {
 
   const renderUsageSummaryBar = () => {
     const hasUsage = Boolean(effectiveUsage);
-    const usedLabel = isFreeUsagePlan
+    const usedLabel = isUsageLimited
       ? `${formatSecondsToHourMinute(usedAudioSeconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
       : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`;
-    const remainingLabel = isFreeUsagePlan
+    const remainingLabel = isUsageLimited
       ? `${copy.usageRemaining}: ${formatSecondsToHourMinute(remainingAudioSeconds)}`
-      : (isWelcomeTrial ? trialRemainingLabel : copy.usageUnlimited);
-    const progressWidth = isFreeUsagePlan ? `${usagePercent}%` : "100%";
-    const ctaLabel = isFreeUsagePlan ? (copy.planLabels?.pro || "Pro") : planLabel;
+      : copy.usageUnlimited;
+    const progressWidth = isUsageLimited ? `${usagePercent}%` : "100%";
+    const ctaLabel = planLabel;
 
     return (
       <FadeInView delay={40} duration={260}>
@@ -2682,7 +2502,7 @@ function App() {
                   />
                 ) : null}
 
-                {!isIosAppStoreReviewMode ? (
+                {Platform.OS !== "ios" ? (
                   <>
                     <SocialAuthButton
                       provider="google"
@@ -3500,21 +3320,16 @@ function App() {
 
                       <Text style={[styles.metaText, { color: activeTheme.textPrimary }]}>
                         {copy.usageThisMonth}:{" "}
-                        {isFreeUsagePlan
+                        {isUsageLimited
                           ? `${formatSecondsToHourMinute(usedAudioSeconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
                           : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`}
                       </Text>
-                      {isFreeUsagePlan ? (
+                      {isUsageLimited ? (
                         <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
                           {copy.usageRemaining}: {formatSecondsToHourMinute(remainingAudioSeconds)}
                         </Text>
                       ) : null}
-                      {isWelcomeTrial ? (
-                        <Text style={[styles.metaText, { color: activeTheme.accent }]}>
-                          {trialRemainingLabel}
-                        </Text>
-                      ) : null}
-                      {isFreeUsagePlan ? (
+                      {isUsageLimited ? (
                         <View style={[styles.usageProgressTrack, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
                           <View style={[styles.usageProgressFill, { backgroundColor: activeTheme.accent, width: `${usagePercent}%` }]} />
                         </View>
@@ -3528,9 +3343,7 @@ function App() {
                     <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
                   ) : null}
                   {!isGuestMode ? (
-                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
-                      {Platform.OS === "ios" ? copy.iosUsageNotice : copy.iosFreeOnlyNotice}
-                    </Text>
+                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.signedInFreeNotice}</Text>
                   ) : null}
 
                   <View style={styles.usageActionRow}>
@@ -3707,21 +3520,6 @@ function App() {
                       })}
                     </View>
                   </View>
-                </FadeInView>
-              ) : null}
-
-              {isLoggedIn && Platform.OS === "ios" ? (
-                <FadeInView key="settings-apple-iap" delay={70}>
-                  <AppleIapSubscriptionCard
-                    copy={copy}
-                    activeTheme={activeTheme}
-                    authToken={authToken}
-                    fetchUsage={fetchUsage}
-                    setNotice={setNotice}
-                    setError={setError}
-                    onOpenPrivacy={() => openLegalDocument("privacy")}
-                    onOpenTerms={() => openLegalDocument("terms")}
-                  />
                 </FadeInView>
               ) : null}
 

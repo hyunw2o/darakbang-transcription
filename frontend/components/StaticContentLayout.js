@@ -46,7 +46,7 @@ export default function StaticContentLayout({
   const headerLocale = isEnglish ? 'en' : 'kr'
   const homeHref = isEnglish ? '/en' : '/'
   const guidesHref = isEnglish ? '/en/guides' : '/guides'
-  const pricingHref = isEnglish ? '/pricing-en' : '/pricing'
+  const accessHref = isEnglish ? '/pricing-en' : '/pricing'
   const privacyHref = isEnglish ? '/privacy-en' : '/privacy'
   const termsHref = isEnglish ? '/terms-en' : '/terms'
   const companyHref = isEnglish ? '/company-policy-en' : '/company-policy'
@@ -57,7 +57,7 @@ export default function StaticContentLayout({
   const navItems = [
     { label: isEnglish ? 'Home' : '홈', href: homeHref },
     { label: isEnglish ? 'Guides' : '사용 가이드', href: guidesHref },
-    { label: isEnglish ? 'Pricing' : '요금제', href: pricingHref },
+    { label: isEnglish ? 'Free Access' : '무료 이용', href: accessHref },
     { label: isEnglish ? 'Start' : '시작하기', href: `${homeHref}#auth-card` },
   ]
 

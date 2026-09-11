@@ -139,7 +139,7 @@ function PreviewCase({ preview, content, locale, localeTextClass, index }) {
 export default function MallogLandingSections({
   locale = 'kr',
   content,
-  pricingUrl,
+  serviceInfoUrl,
   oursUrl,
   stats,
   appDownloadUrl = '',
@@ -208,7 +208,7 @@ export default function MallogLandingSections({
               {content.hero.primaryCtaLabel}
             </Link>
             <Link
-              href={pricingUrl}
+              href={serviceInfoUrl}
               className="inline-flex min-h-[48px] items-center justify-center rounded-lg border-[0.5px] border-black/[0.14] bg-white px-6 py-3 text-sm font-semibold text-[#1A1916] transition duration-200 hover:-translate-y-[1px] hover:border-[#2D5BE3]/45 dark:border-white/[0.14] dark:bg-[#1A1916] dark:text-[#F0EDE8] whitespace-nowrap"
             >
               {content.hero.secondaryCtaLabel}
@@ -358,9 +358,9 @@ export default function MallogLandingSections({
         </section>
       ) : null}
 
-      <section id="pricing" className="landing-anchor-offset space-y-7">
+      <section id="access" className="landing-anchor-offset space-y-7">
         <SectionHeader
-          eyebrow="Pricing"
+          eyebrow={content.comparison.eyebrow}
           title={content.comparison.title}
           description={content.comparison.description}
           localeTextClass={localeTextClass}
@@ -369,14 +369,14 @@ export default function MallogLandingSections({
           <div className="min-w-[720px]">
             <div className="grid grid-cols-[1.2fr,0.9fr,0.9fr] bg-[#F4F3EF] text-sm font-semibold text-[#6B6860] dark:bg-[#222120] dark:text-[#B7B2A8]">
               <div className="px-5 py-4">{content.comparison.columns.feature}</div>
-              <div className="border-l-[0.5px] border-black/[0.08] px-5 py-4 dark:border-white/[0.08]">{content.comparison.columns.free}</div>
-              <div className="border-l-[0.5px] border-black/[0.08] px-5 py-4 dark:border-white/[0.08]">{content.comparison.columns.pro}</div>
+              <div className="border-l-[0.5px] border-black/[0.08] px-5 py-4 dark:border-white/[0.08]">{content.comparison.columns.guest}</div>
+              <div className="border-l-[0.5px] border-black/[0.08] px-5 py-4 dark:border-white/[0.08]">{content.comparison.columns.signedIn}</div>
             </div>
             {content.comparison.rows.map((row) => (
               <div key={row.feature} className="grid grid-cols-[1.2fr,0.9fr,0.9fr] border-t-[0.5px] border-black/[0.08] text-sm leading-7 text-[#1A1916] dark:border-white/[0.08] dark:text-[#F0EDE8]">
                 <div className={`px-5 py-4 font-semibold ${localeTextClass}`}>{row.feature}</div>
-                <div className={`border-l-[0.5px] border-black/[0.08] px-5 py-4 text-[#6B6860] dark:border-white/[0.08] dark:text-[#B7B2A8] ${localeTextClass}`}>{row.free}</div>
-                <div className={`border-l-[0.5px] border-black/[0.08] px-5 py-4 text-[#6B6860] dark:border-white/[0.08] dark:text-[#B7B2A8] ${localeTextClass}`}>{row.pro}</div>
+                <div className={`border-l-[0.5px] border-black/[0.08] px-5 py-4 text-[#6B6860] dark:border-white/[0.08] dark:text-[#B7B2A8] ${localeTextClass}`}>{row.guest}</div>
+                <div className={`border-l-[0.5px] border-black/[0.08] px-5 py-4 text-[#6B6860] dark:border-white/[0.08] dark:text-[#B7B2A8] ${localeTextClass}`}>{row.signedIn}</div>
               </div>
             ))}
           </div>
@@ -419,7 +419,7 @@ export default function MallogLandingSections({
               {content.ctaBanner.primaryLabel}
             </Link>
             <Link
-              href={pricingUrl}
+              href={serviceInfoUrl}
               className="inline-flex min-h-[48px] items-center justify-center rounded-lg border-[0.5px] border-white/20 px-6 py-3 text-sm font-semibold text-white transition duration-200 hover:-translate-y-[1px] hover:bg-white/[0.06] whitespace-nowrap"
             >
               {content.ctaBanner.secondaryLabel}

@@ -1,5 +1,6 @@
--- mallog24 billing subscription model (multi-provider ready)
--- Run this in Supabase SQL Editor before using /api/billing/* endpoints.
+-- Legacy mallog24 billing subscription records.
+-- Payment features were retired on 2026-09-11. Do not use this schema for new
+-- checkout flows. Keep existing rows only for accounting and dispute records.
 
 create table if not exists public.billing_subscriptions (
   user_id uuid primary key references auth.users(id) on delete cascade,

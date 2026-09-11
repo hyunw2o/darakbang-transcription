@@ -1,7 +1,7 @@
 export const SITE_BASE_URL = 'https://www.mallog24.com'
-export const LEGAL_DOC_VERSION = 'v2026.06.23'
-export const LEGAL_DOC_DATE_KO = '2026년 6월 23일'
-export const LEGAL_DOC_DATE_EN = 'June 23, 2026'
+export const LEGAL_DOC_VERSION = 'v2026.09.11'
+export const LEGAL_DOC_DATE_KO = '2026년 9월 11일'
+export const LEGAL_DOC_DATE_EN = 'September 11, 2026'
 
 export const BUSINESS_INFO = {
   ko: {
@@ -62,7 +62,7 @@ export const LEGAL_PAGES = {
             '회원 인증: 이메일, 비밀번호(이메일 로그인 시), 사용자 식별자, 소셜 로그인 공급자 식별자',
             '소셜 로그인: Google, Kakao, Apple ID에서 전달하는 이메일, 이름 또는 닉네임, Apple 비공개 릴레이 이메일',
             '서비스 데이터: 업로드 음성 파일, 전사 원문, 교정 텍스트, 요약, 저장 기록본, 사용자 용어집',
-            '결제 및 구독 정보: 상품 ID, 구독 상태, 거래 식별자, 결제 플랫폼, 환불 또는 해지 처리 상태',
+            '과거 결제 기록: 결제 기능 운영 기간에 생성된 거래 식별자와 처리 상태를 법령 준수 및 분쟁 대응에 필요한 기간만 별도 보관하며 신규 결제 정보는 수집하지 않습니다.',
             '자동 수집 정보: 접속 IP, 브라우저/기기 정보, 오류 로그, 사용량 산정에 필요한 처리 시간',
           ],
         },
@@ -71,9 +71,9 @@ export const LEGAL_PAGES = {
           body: [
             '계정 생성, 로그인, 본인 식별, 계정 보호 및 고객지원',
             '음성 인식, 텍스트 교정, 요약, 기록본 저장, 사용자 용어집 반영',
-            '무료/유료 사용량 계산, 첫 가입 30일 Pro 체험 적용, 웹/Android/iOS 구독 상태 확인',
+            '서비스 사용량 집계, 시스템 용량 계획 및 부정 사용 방지',
             '서비스 안정화, 장애 분석, 부정 사용 방지, 보안 사고 대응',
-            '공지, 약관 변경, 환불 및 결제 문의 처리',
+            '공지, 약관 변경 및 고객 문의 처리',
           ],
         },
         {
@@ -98,7 +98,7 @@ export const LEGAL_PAGES = {
           title: '5. 제3자 제공, 처리 위탁 및 국외 이전',
           body: [
             '회사는 이용자 동의 없이 개인정보를 판매하지 않습니다.',
-            '서비스 제공을 위해 Supabase(인증/DB), OpenAI(음성 인식), Google Gemini(교정/요약), Apple(App Store 구독/Apple 로그인), Google/Kakao(소셜 로그인) 등 외부 서비스를 사용할 수 있습니다.',
+            '서비스 제공을 위해 Supabase(인증/DB), OpenAI(음성 인식), Google Gemini(교정/요약), Apple(Apple 로그인), Google/Kakao(소셜 로그인) 등 외부 서비스를 사용할 수 있습니다.',
             '외부 API 처리 과정에서 데이터가 국외 서버로 전송될 수 있으며, 서비스 제공에 필요한 최소 범위로만 처리합니다.',
             '법령상 의무 이행, 수사기관의 적법한 요청, 이용자 권리 보호에 필요한 경우 예외적으로 제공될 수 있습니다.',
           ],
@@ -107,7 +107,7 @@ export const LEGAL_PAGES = {
           title: '6. 이용자 권리',
           body: [
             '이용자는 개인정보 열람, 정정, 삭제, 처리정지, 동의 철회를 요청할 수 있습니다.',
-            '계정 삭제, 저장 기록본 삭제, 결제/환불 문의는 고객지원 이메일로 요청할 수 있습니다.',
+            '계정 삭제와 저장 기록본 삭제는 고객지원 이메일로 요청할 수 있습니다.',
             '요청 접수 후 본인 확인이 필요한 경우 추가 정보를 요청할 수 있으며, 합리적인 기간 내 처리 결과를 안내합니다.',
           ],
         },
@@ -116,7 +116,7 @@ export const LEGAL_PAGES = {
           body: [
             'mallog24는 로그인 유지, 보안, 사용량 계산, 장애 분석을 위해 쿠키와 로그를 사용할 수 있습니다.',
             '웹사이트에는 Google AdSense 등 광고 관련 스크립트가 포함될 수 있으며, 광고 개인화 여부는 Google 계정 및 브라우저 설정에 따라 달라질 수 있습니다.',
-            '이용자는 브라우저 설정을 통해 쿠키 저장을 제한할 수 있으나, 일부 로그인 또는 결제 기능이 제한될 수 있습니다.',
+            '이용자는 브라우저 설정을 통해 쿠키 저장을 제한할 수 있으나, 일부 로그인 기능이 제한될 수 있습니다.',
           ],
         },
         {
@@ -133,12 +133,12 @@ export const LEGAL_PAGES = {
       ...koLegalCommon,
       title: '이용약관',
       description: '본 약관은 mallog24 웹, Android 앱, iOS 앱에서 제공하는 음성 인식 및 구조화 문서 생성 서비스의 이용 조건을 규정합니다.',
-      metaDescription: 'mallog24 이용약관: 계정, 업로드 책임, 구독, 환불, 금지 행위, 서비스 제한, AI 결과 검수 책임을 안내합니다.',
+      metaDescription: 'mallog24 이용약관: 무료 서비스, 계정, 업로드 책임, 금지 행위, 서비스 제한, AI 결과 검수 책임을 안내합니다.',
       alternateHref: '/terms-en',
       relatedLinks: [
         { label: '개인정보처리방침', href: '/privacy' },
         { label: '회사 정책', href: '/company-policy' },
-        { label: '요금제', href: '/pricing' },
+        { label: '무료 이용', href: '/pricing' },
       ],
       sections: [
         {
@@ -173,18 +173,18 @@ export const LEGAL_PAGES = {
           ],
         },
         {
-          title: '5. 요금제, 구독 및 환불',
+          title: '5. 무료 이용 정책',
           body: [
-            '무료 플랜은 월 10시간 한도를 기본으로 하며, 첫 가입 계정에는 결제 정보 없이 30일 Pro 체험이 제공될 수 있습니다.',
-            'Pro 상품은 웹/Android 결제 또는 iOS App Store 인앱구독으로 제공될 수 있으며, 결제 경로별 구독 관리와 환불 절차가 다릅니다.',
-            '현재 기본 Pro 상품은 월 8,800원(VAT 포함)이며, iOS 최종 가격은 App Store 국가/지역 기준으로 표시됩니다.',
-            '환불은 결제 수단, 플랫폼 정책, 사용량, 관련 법령에 따라 처리됩니다.',
+            'mallog24는 웹, Android, iOS에서 유료 요금제, 정기 구독 및 인앱결제를 운영하지 않습니다.',
+            '로그인 사용자는 서비스의 전체 변환 기능을 무료로 이용할 수 있습니다.',
+            '비로그인 체험에는 시스템 남용 방지를 위한 파일 길이와 누적 사용량 제한이 적용될 수 있습니다.',
+            '운영 비용과 시스템 용량에 따라 무료 제공 범위가 변경되는 경우 시행 전에 서비스 화면을 통해 안내합니다.',
           ],
         },
         {
           title: '6. 금지 행위',
           body: [
-            '불법 콘텐츠 업로드, 악성코드 유포, 시스템 공격, 자동화 남용, 결제 우회, API 오용을 금지합니다.',
+            '불법 콘텐츠 업로드, 악성코드 유포, 시스템 공격, 자동화 남용, 접근 제한 우회, API 오용을 금지합니다.',
             '서비스 결과를 허위 사실 유포, 명예훼손, 권리침해, 불법 영업 목적으로 사용해서는 안 됩니다.',
             '운영 정책 위반이 확인되면 이용 제한, 계정 정지, 자료 삭제가 이루어질 수 있습니다.',
           ],
@@ -209,7 +209,7 @@ export const LEGAL_PAGES = {
           title: '9. 준거법 및 문의',
           body: [
             '본 약관은 대한민국 법령을 준거법으로 합니다.',
-            '서비스, 결제, 환불, 정책 문의는 ours113814@gmail.com으로 접수합니다.',
+            '서비스와 정책 문의는 ours113814@gmail.com으로 접수합니다.',
           ],
         },
       ],
@@ -218,7 +218,7 @@ export const LEGAL_PAGES = {
       ...koLegalCommon,
       title: '회사 정책',
       description: 'OURS는 mallog24를 신뢰성, 보안성, 책임 있는 AI 사용 원칙에 따라 운영합니다.',
-      metaDescription: 'mallog24 회사 정책: 데이터 처리 원칙, 품질 운영, 보안, 광고, 고객지원, 유료상품 관리 기준을 안내합니다.',
+      metaDescription: 'mallog24 회사 정책: 데이터 처리 원칙, 품질 운영, 보안, 광고, 무료 서비스와 고객지원 기준을 안내합니다.',
       alternateHref: '/company-policy-en',
       relatedLinks: [
         { label: '개인정보처리방침', href: '/privacy' },
@@ -262,16 +262,16 @@ export const LEGAL_PAGES = {
           title: '5. 광고와 수익화 정책',
           body: [
             '광고는 서비스 이용을 방해하지 않는 위치와 방식으로만 배치합니다.',
-            '로그인, 결제, 변환 진행, 민감한 오류 표시 영역에는 사용자가 오인할 수 있는 광고 배치를 지양합니다.',
+            '로그인, 변환 진행, 민감한 오류 표시 영역에는 사용자가 오인할 수 있는 광고 배치를 지양합니다.',
             '광고 네트워크 정책, ads.txt, app-ads.txt, 개인정보 고지 기준을 유지합니다.',
           ],
         },
         {
-          title: '6. 유료상품과 고객지원',
+          title: '6. 무료 서비스와 고객지원',
           body: [
-            '유료상품은 상품명, 가격, 결제주기, 환불 기준, 지원 채널을 명확히 고지한 뒤 운영합니다.',
-            'iOS 인앱구독과 웹/Android 결제는 각각의 플랫폼 정책과 검증 절차를 따릅니다.',
-            '고객지원 이메일은 ours113814@gmail.com이며, 보안·결제 문의를 우선 처리합니다.',
+            'mallog24는 유료 요금제와 인앱결제를 운영하지 않고 로그인 사용자에게 전체 기능을 무료로 제공합니다.',
+            '서비스 범위에 중대한 변경이 생기면 적용 전에 웹과 앱에서 안내합니다.',
+            '고객지원 이메일은 ours113814@gmail.com이며, 보안과 서비스 장애 문의를 우선 처리합니다.',
           ],
         },
       ],
@@ -281,7 +281,7 @@ export const LEGAL_PAGES = {
     privacy: {
       ...enLegalCommon,
       title: 'Privacy Policy',
-      description: 'mallog24 processes only the account, audio, transcription, and billing data needed to provide structured transcription workflows.',
+      description: 'mallog24 processes only the account, audio, transcription, and technical data needed to provide structured transcription workflows.',
       metaDescription: 'mallog24 Privacy Policy covering account data, audio processing, retention, subprocessors, ads, and user rights.',
       alternateHref: '/privacy',
       relatedLinks: [
@@ -296,7 +296,7 @@ export const LEGAL_PAGES = {
             'Account data: email address, password for email login, user identifier, and social login provider identifier.',
             'Social login data: email, name or nickname, Google/Kakao/Apple account identifiers, and Apple private relay email where selected.',
             'Service data: uploaded audio, raw transcript, corrected text, summaries, saved records, and user glossary terms.',
-            'Billing data: product ID, subscription status, transaction identifiers, platform information, refund or cancellation status.',
+            'Legacy billing records: transaction identifiers and status created while billing was previously available are retained only as required for legal compliance and dispute handling. No new payment data is collected.',
             'Technical data: IP address, browser/device information, error logs, and processing duration for usage calculation.',
           ],
         },
@@ -305,7 +305,7 @@ export const LEGAL_PAGES = {
           body: [
             'Account creation, login, user identification, account protection, and customer support.',
             'Speech recognition, text correction, summaries, saved records, and glossary-assisted transcription.',
-            'Usage calculation, 30-day Pro trial eligibility, and web/Android/iOS subscription status checks.',
+            'Usage measurement, capacity planning, and abuse prevention.',
             'Security monitoring, abuse prevention, reliability improvements, and incident response.',
           ],
         },
@@ -331,7 +331,7 @@ export const LEGAL_PAGES = {
           title: '5. Subprocessors and International Transfer',
           body: [
             'mallog24 does not sell personal data.',
-            'The service may use Supabase for authentication/database, OpenAI for speech recognition, Google Gemini for correction/summarization, Apple for App Store subscriptions and Apple login, and Google/Kakao for social login.',
+            'The service may use Supabase for authentication/database, OpenAI for speech recognition, Google Gemini for correction/summarization, Apple for Apple login, and Google/Kakao for social login.',
             'Data may be transferred to servers outside Korea as part of these API workflows and is limited to what is necessary to provide the service.',
           ],
         },
@@ -350,12 +350,12 @@ export const LEGAL_PAGES = {
       ...enLegalCommon,
       title: 'Terms of Service',
       description: 'These terms govern the use of mallog24 on web, Android, and iOS for speech-to-text, correction, summaries, and structured records.',
-      metaDescription: 'mallog24 Terms of Service covering accounts, uploads, subscriptions, refunds, prohibited use, and AI output review.',
+      metaDescription: 'mallog24 Terms of Service covering free access, accounts, uploads, prohibited use, service limits, and AI output review.',
       alternateHref: '/terms',
       relatedLinks: [
         { label: 'Privacy Policy', href: '/privacy-en' },
         { label: 'Company Policy', href: '/company-policy-en' },
-        { label: 'Pricing', href: '/pricing-en' },
+        { label: 'Free Access', href: '/pricing-en' },
       ],
       sections: [
         {
@@ -390,18 +390,18 @@ export const LEGAL_PAGES = {
           ],
         },
         {
-          title: '5. Plans, Subscriptions, and Refunds',
+          title: '5. Free Access Policy',
           body: [
-            'The free plan includes a monthly usage cap. New accounts may receive a 30-day Pro trial without entering payment information.',
-            'Pro may be offered through web/Android checkout or iOS App Store in-app subscriptions; management and refunds differ by platform.',
-            'The default web/Android Pro price is KRW 8,800/month including VAT. iOS pricing is shown by Apple based on App Store country or region.',
-            'Refund handling depends on platform policies, usage status, payment provider rules, and applicable law.',
+            'mallog24 does not offer paid plans, recurring subscriptions, or in-app purchases on web, Android, or iOS.',
+            'Signed-in users can use the full transcription workflow for free.',
+            'Guest access may have file-length and cumulative limits to prevent system abuse.',
+            'If operating costs or capacity require a material change to free access, notice will be provided in the service before it takes effect.',
           ],
         },
         {
           title: '6. Prohibited Use and Service Limits',
           body: [
-            'Illegal uploads, malware, attacks, abnormal automation, payment circumvention, and API abuse are prohibited.',
+            'Illegal uploads, malware, attacks, abnormal automation, access-control circumvention, and API abuse are prohibited.',
             'The service may restrict access, remove content, or suspend accounts when a policy violation or security risk is confirmed.',
             'The service may change or pause features for security, quality, third-party API changes, or legal compliance.',
           ],
@@ -418,7 +418,7 @@ export const LEGAL_PAGES = {
           title: '8. Governing Law and Contact',
           body: [
             'These terms are governed by the laws of the Republic of Korea.',
-            'Contact for service, billing, refund, and policy questions: ours113814@gmail.com',
+            'Contact for service and policy questions: ours113814@gmail.com',
           ],
         },
       ],
@@ -427,7 +427,7 @@ export const LEGAL_PAGES = {
       ...enLegalCommon,
       title: 'Company Policy',
       description: 'OURS operates mallog24 under reliability, security, responsible AI, advertising, and customer support principles.',
-      metaDescription: 'mallog24 Company Policy covering data governance, quality, security, ads, subscriptions, and support standards.',
+      metaDescription: 'mallog24 Company Policy covering data governance, quality, security, ads, free access, and support standards.',
       alternateHref: '/company-policy',
       relatedLinks: [
         { label: 'Privacy Policy', href: '/privacy-en' },
@@ -463,8 +463,8 @@ export const LEGAL_PAGES = {
           title: '4. Security, Ads, and Support',
           body: [
             'HTTPS, token validation, permission separation, request limiting, and error-log review are baseline controls.',
-            'Ads are placed only where they do not interfere with login, payment, transcription progress, or important error messages.',
-            'Customer support and billing questions are handled through ours113814@gmail.com.',
+            'Ads are placed only where they do not interfere with login, transcription progress, or important error messages.',
+            'mallog24 does not offer paid plans or in-app purchases. Service and security questions are handled through ours113814@gmail.com.',
           ],
         },
       ],

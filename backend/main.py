@@ -179,9 +179,8 @@ DEBATE_CONTEXT_HINTS = (
     "debate", "motion", "proposition", "opposition", "rebuttal",
     "counterargument", "cross examination", "closing statement",
 )
-FREE_MONTHLY_LIMIT_SECONDS = max(1, int(os.getenv("FREE_MONTHLY_LIMIT_SECONDS", "36000")))
-FREE_LIMIT_EXCEEDED_MESSAGE = "이번 달 무료 제공량(10시간)을 모두 사용했습니다. 요금제를 업그레이드해 주세요."
-IOS_FREE_ONLY_LIMIT_EXCEEDED_MESSAGE = "iOS 앱에서는 무료 제공량 한도 내에서만 사용할 수 있습니다."
+# 결제 기능 종료 이후 로그인 계정은 사용량을 기록만 하고 변환을 제한하지 않는다.
+MONETIZATION_ENABLED = False
 GUEST_TRANSCRIPTION_ENABLED = os.getenv("GUEST_TRANSCRIPTION_ENABLED", "true").strip().lower() == "true"
 GUEST_MONTHLY_LIMIT_SECONDS = max(60, int(os.getenv("GUEST_MONTHLY_LIMIT_SECONDS", "1800")))
 GUEST_MAX_AUDIO_SECONDS = max(60, int(os.getenv("GUEST_MAX_AUDIO_SECONDS", "600")))
@@ -273,7 +272,7 @@ BILLING_SUCCESS_URL = (os.getenv("BILLING_SUCCESS_URL") or "").strip()
 BILLING_CANCEL_URL = (os.getenv("BILLING_CANCEL_URL") or "").strip()
 BILLING_PORTAL_RETURN_URL = (os.getenv("BILLING_PORTAL_RETURN_URL") or "").strip()
 PAID_PLAN_TIER = (os.getenv("PAID_PLAN_TIER") or "pro").strip().lower() or "pro"
-WELCOME_TRIAL_ENABLED = os.getenv("WELCOME_TRIAL_ENABLED", "true").strip().lower() == "true"
+WELCOME_TRIAL_ENABLED = False
 WELCOME_TRIAL_DAYS = max(0, int(os.getenv("WELCOME_TRIAL_DAYS", "30")))
 WELCOME_TRIAL_SOURCE = (os.getenv("WELCOME_TRIAL_SOURCE") or "welcome_signup_30d").strip()
 WELCOME_TRIAL_NEW_USER_CUTOFF_ISO = (
@@ -518,12 +517,7 @@ async def startup_event():
         print("OpenAI Whisper: Ready")
     else:
         print("OpenAI Whisper: Not configured (Gemini fallback)")
-    try:
-        billing_provider = _get_billing_provider_or_raise()
-        billing_enabled = _is_billing_enabled()
-        print(f"Billing provider: {billing_provider} ({'enabled' if billing_enabled else 'disabled'})")
-    except Exception as billing_err:
-        print(f"Billing provider configuration error: {billing_err}")
+    print("Monetization: disabled (signed-in accounts have unlimited access)")
     if LOG_GEMINI_MODELS_ON_STARTUP:
         try:
             if GEMINI_API_KEY:
@@ -965,7 +959,7 @@ def _enforce_guest_upload_quota_or_raise(owner_id: str, upload_audio_seconds: in
                 status_code=403,
                 detail=(
                     f"비로그인 체험 제공량({max(1, GUEST_MONTHLY_LIMIT_SECONDS // 60)}분)을 모두 사용했습니다. "
-                    "로그인하면 무료 월 10시간을 사용할 수 있습니다."
+                    "로그인하면 전체 변환 기능을 무료로 계속 사용할 수 있습니다."
                 ),
             )
 
@@ -1448,6 +1442,16 @@ def _apply_security_headers(response, scheme: str) -> None:
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     path = request.url.path
+    if path.startswith("/api/billing"):
+        response = JSONResponse(
+            status_code=410,
+            content={
+                "detail": "mallog24의 결제 및 구독 기능은 종료되었습니다. 로그인 사용자는 무료로 이용할 수 있습니다.",
+                "monetization_enabled": False,
+            },
+        )
+        _apply_security_headers(response, request.url.scheme)
+        return response
     if path.startswith("/api/"):
         bucket_key, limit = _resolve_rate_limit_bucket(path, _get_client_ip(request))
         blocked, retry_after = _check_rate_limit(bucket_key, limit)
@@ -3718,9 +3722,6 @@ def _extract_primary_price_id(subscription_obj: dict) -> str:
 
 
 def _resolve_plan_tier_from_subscription_status(status: str | None) -> str:
-    normalized = (status or "").strip().lower()
-    if normalized in STRIPE_ACTIVE_SUBSCRIPTION_STATUSES:
-        return PAID_PLAN_TIER
     return USAGE_FREE_PLAN
 
 
@@ -3735,7 +3736,7 @@ def _is_admin_bypass_user(user: dict | None = None, user_id: str | None = None, 
 
 
 def _set_user_plan_tier(user_id: str, plan_tier: str) -> None:
-    safe_plan = (plan_tier or USAGE_FREE_PLAN).strip().lower() or USAGE_FREE_PLAN
+    safe_plan = USAGE_FREE_PLAN
     row = _get_or_create_usage_row(user_id)
     if row["plan_tier"] == safe_plan:
         return
@@ -3874,11 +3875,6 @@ def _create_usage_row(user_id: str, user: dict | None = None) -> None:
         "usage_month": current_month,
         "updated_at": datetime.utcnow().isoformat(),
     }
-    if USAGE_TRIAL_COLUMNS_AVAILABLE:
-        trial_payload = _build_welcome_trial_payload(user)
-        if trial_payload:
-            payload.update(trial_payload)
-
     try:
         _get_supabase_client().table(USAGE_TABLE_NAME).insert(payload).execute()
     except Exception as e:
@@ -3955,7 +3951,7 @@ def _get_or_create_usage_row(user_id: str, user: dict | None = None) -> dict:
         }
         normalized = _normalize_usage_row(updated, user_id)
 
-    return _grant_welcome_trial_if_eligible(normalized, user=user)
+    return normalized
 
 
 def _is_ios_client_request(request: Request | None = None, platform_header: str | None = None) -> bool:
@@ -4006,13 +4002,7 @@ def _should_force_ios_free_plan(
     request: Request | None = None,
     platform_header: str | None = None,
 ) -> bool:
-    if not _is_ios_client_request(request, platform_header):
-        return False
-    if _has_active_welcome_trial(user_id):
-        return False
-    # App Store 심사 정책상 iOS에서는 Apple IAP로 확인된 구독만 Pro 권한으로 인정한다.
-    # 단, 결제가 수반되지 않는 신규 가입 웰컴 혜택은 서버 프로모션 권한으로 허용한다.
-    return not _has_active_apple_iap_subscription(user_id)
+    return False
 
 
 def _decode_base64url_json(value: str) -> dict:
@@ -4144,12 +4134,16 @@ def _extract_apple_subscription_from_jws(purchase_token: str) -> dict:
 
 
 def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_plan: bool = False) -> dict:
-    trial_state = _resolve_welcome_trial_state(row)
-    trial_active = bool(trial_state["trial_active"] and not force_free_plan)
-    plan_tier = USAGE_FREE_PLAN if force_free_plan else (PAID_PLAN_TIER if trial_active else row["plan_tier"])
     used_seconds = int(row["used_audio_seconds"])
+    retired_trial_state = {
+        "trial_active": False,
+        "trial_started_at": None,
+        "trial_ends_at": None,
+        "trial_source": "",
+        "trial_days_remaining": 0,
+    }
 
-    if is_admin_bypass and not force_free_plan:
+    if is_admin_bypass:
         return {
             "plan_tier": USAGE_ADMIN_PLAN,
             "access_source": "admin",
@@ -4160,29 +4154,12 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_p
             "usage_month": row["usage_month"],
             "can_upload": True,
             "is_admin_bypass": True,
-            **trial_state,
-        }
-
-    if plan_tier == USAGE_FREE_PLAN:
-        limit_seconds = FREE_MONTHLY_LIMIT_SECONDS
-        remaining_seconds = max(0, limit_seconds - used_seconds)
-        usage_percent = min(100.0, round((used_seconds / limit_seconds) * 100, 2))
-        return {
-            "plan_tier": plan_tier,
-            "access_source": "free",
-            "used_audio_seconds": used_seconds,
-            "monthly_limit_seconds": limit_seconds,
-            "remaining_seconds": remaining_seconds,
-            "usage_percent": usage_percent,
-            "usage_month": row["usage_month"],
-            "can_upload": remaining_seconds > 0,
-            "is_admin_bypass": False,
-            **trial_state,
+            **retired_trial_state,
         }
 
     return {
-        "plan_tier": plan_tier,
-        "access_source": "welcome_trial" if trial_active else "subscription",
+        "plan_tier": USAGE_FREE_PLAN,
+        "access_source": "free_service",
         "used_audio_seconds": used_seconds,
         "monthly_limit_seconds": None,
         "remaining_seconds": None,
@@ -4190,7 +4167,7 @@ def _build_usage_snapshot(row: dict, is_admin_bypass: bool = False, force_free_p
         "usage_month": row["usage_month"],
         "can_upload": True,
         "is_admin_bypass": False,
-        **trial_state,
+        **retired_trial_state,
     }
 
 
@@ -4205,12 +4182,6 @@ def _enforce_upload_quota_or_raise(user: dict, upload_audio_seconds: int, force_
         is_admin_bypass=_is_admin_bypass_user(user=user),
         force_free_plan=force_free_plan,
     )
-
-    if snapshot["plan_tier"] == USAGE_FREE_PLAN:
-        projected = int(snapshot["used_audio_seconds"]) + upload_audio_seconds
-        if projected > FREE_MONTHLY_LIMIT_SECONDS:
-            detail = IOS_FREE_ONLY_LIMIT_EXCEEDED_MESSAGE if force_free_plan else FREE_LIMIT_EXCEEDED_MESSAGE
-            raise HTTPException(status_code=403, detail=detail)
 
     return snapshot
 
@@ -9163,7 +9134,7 @@ async def delete_user_glossary_term(
     }
 
 
-@app.post("/api/billing/apple/verify")
+@app.post("/api/billing/apple/verify", include_in_schema=False)
 async def verify_apple_iap_subscription(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -9252,7 +9223,7 @@ async def verify_apple_iap_subscription(
     }
 
 
-@app.get("/api/billing/status")
+@app.get("/api/billing/status", include_in_schema=False)
 async def get_billing_status(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -9293,7 +9264,7 @@ async def get_billing_status(
     }
 
 
-@app.post("/api/billing/checkout")
+@app.post("/api/billing/checkout", include_in_schema=False)
 async def create_checkout_session(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -9460,7 +9431,7 @@ async def create_checkout_session(
     }
 
 
-@app.get("/api/billing/mock/checkout/{session_id}", response_class=HTMLResponse)
+@app.get("/api/billing/mock/checkout/{session_id}", response_class=HTMLResponse, include_in_schema=False)
 async def render_mock_checkout_page(session_id: str):
     """테스트 결제 화면 (BILLING_TEST_MODE=true 전용)"""
     session = _get_mock_checkout_session_or_raise(session_id)
@@ -9570,7 +9541,7 @@ async def render_mock_checkout_page(session_id: str):
     return HTMLResponse(content=html, status_code=200)
 
 
-@app.get("/api/billing/mock/complete/{session_id}")
+@app.get("/api/billing/mock/complete/{session_id}", include_in_schema=False)
 async def complete_mock_checkout(session_id: str, result: str = "success"):
     """테스트 결제 완료 처리"""
     session = _get_mock_checkout_session_or_raise(session_id)
@@ -9627,7 +9598,7 @@ async def complete_mock_checkout(session_id: str, result: str = "success"):
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
-@app.get("/api/billing/portone/checkout/{session_id}", response_class=HTMLResponse)
+@app.get("/api/billing/portone/checkout/{session_id}", response_class=HTMLResponse, include_in_schema=False)
 async def render_portone_checkout_page(request: Request, session_id: str):
     """PortOne 실결제 호출 화면"""
     session = _get_portone_checkout_session_or_raise(session_id)
@@ -10006,7 +9977,7 @@ async def render_portone_checkout_page(request: Request, session_id: str):
     return HTMLResponse(content=html, status_code=200)
 
 
-@app.get("/api/billing/portone/complete/{session_id}")
+@app.get("/api/billing/portone/complete/{session_id}", include_in_schema=False)
 async def complete_portone_checkout(
     request: Request,
     session_id: str,
@@ -10177,7 +10148,7 @@ async def complete_portone_checkout(
         portone_checkout_sessions.pop(session_id, None)
 
 
-@app.post("/api/billing/portal")
+@app.post("/api/billing/portal", include_in_schema=False)
 async def create_portal_session(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -10222,7 +10193,7 @@ async def create_portal_session(
     }
 
 
-@app.post("/api/billing/cancel")
+@app.post("/api/billing/cancel", include_in_schema=False)
 async def cancel_billing_subscription(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -10385,7 +10356,7 @@ async def cancel_billing_subscription(
     }
 
 
-@app.post("/api/billing/refund")
+@app.post("/api/billing/refund", include_in_schema=False)
 async def request_billing_refund(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -10580,7 +10551,7 @@ async def request_billing_refund(
     }
 
 
-@app.post("/api/billing/portone/webhook")
+@app.post("/api/billing/portone/webhook", include_in_schema=False)
 async def portone_billing_webhook(request: Request):
     """PortOne webhook 수신 및 결제 상태 반영"""
     _ensure_user_usage_scope_ready()
@@ -10642,7 +10613,7 @@ async def portone_billing_webhook(request: Request):
     )
 
 
-@app.post("/api/billing/webhook")
+@app.post("/api/billing/webhook", include_in_schema=False)
 async def stripe_billing_webhook(request: Request):
     """Stripe webhook 수신 및 구독 상태 반영"""
     _ensure_user_usage_scope_ready()
@@ -11696,19 +11667,6 @@ async def summarize_text(
 
 @app.get("/health")
 async def health_check():
-    try:
-        billing_provider = _get_billing_provider_or_raise()
-        billing_enabled = _is_billing_enabled()
-        billing_checkout_mode = _get_checkout_mode(billing_provider)
-        stripe_billing = _is_stripe_billing_enabled()
-        portone_checkout_flow = _get_portone_checkout_flow() if billing_provider == "portone" else "payment"
-    except Exception:
-        billing_provider = BILLING_PROVIDER
-        billing_enabled = False
-        billing_checkout_mode = "disabled"
-        stripe_billing = False
-        portone_checkout_flow = _normalize_portone_checkout_flow(PORTONE_CHECKOUT_FLOW)
-
     return {
         "status": "healthy",
         "church_type": "다락방 전도운동",
@@ -11723,14 +11681,6 @@ async def health_check():
         "apis": {
             "gemini": bool(GEMINI_API_KEY),
             "openai_whisper": bool(OPENAI_API_KEY),
-            "billing_provider": billing_provider,
-            "billing_enabled": billing_enabled,
-            "billing_checkout_mode": billing_checkout_mode,
-            "portone_checkout_flow": portone_checkout_flow,
-            "portone_webhook_configured": bool(PORTONE_WEBHOOK_SECRET),
-            "apple_iap_product_id": APPLE_IAP_PRODUCT_ID_PRO,
-            "apple_iap_receipt_secret_configured": bool(APPLE_IAP_SHARED_SECRET),
-            "billing_test_mode": BILLING_TEST_MODE,
-            "stripe_billing": stripe_billing,
+            "monetization_enabled": MONETIZATION_ENABLED,
         }
     }

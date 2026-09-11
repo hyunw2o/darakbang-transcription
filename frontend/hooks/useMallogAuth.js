@@ -81,10 +81,6 @@ const mapUsageSnapshot = (usage) => {
         ? null
         : Number(usage.remaining_seconds) || 0,
     usage_percent: Number(usage.usage_percent) || 0,
-    trial_active: Boolean(usage.trial_active),
-    trial_ends_at: usage.trial_ends_at || null,
-    trial_days_remaining: Number(usage.trial_days_remaining) || 0,
-    trial_source: usage.trial_source || '',
   }
 }
 

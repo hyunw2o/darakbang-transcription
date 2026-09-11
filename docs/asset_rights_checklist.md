@@ -38,12 +38,11 @@ Relevant files:
 - `ours-homepage/pages/fonts/GeistMonoVF.woff`
 - `generate_copyright_pdf.py`
 
-## 4. Social login and payment branding
+## 4. Social login branding
 
 - [ ] Google button styling and wording follow current Google branding guidance.
 - [ ] Kakao login button styling and wording follow Kakao design guidance.
-- [ ] KakaoPay / payment brand usage is approved for the configured channel.
-- [ ] No unofficial logos are used in a way that suggests affiliation beyond supported login/payment integration.
+- [ ] No unofficial logos are used in a way that suggests affiliation beyond supported login integration.
 
 ## 5. Audio, transcript, and demo content
 

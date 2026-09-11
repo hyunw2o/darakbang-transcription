@@ -1,13 +1,13 @@
 export const KO_MALLOG_LANDING_CONTENT = {
   hero: {
-    badge: '✦ 첫 가입 30일 Pro 체험 · 무료 10시간 제공',
+    badge: '로그인 사용자 무료 이용 · 결제 정보 불필요',
     titleLead: '녹음만 올리세요.',
     titleAccent: '구조화 문서가 나옵니다.',
     description:
       '설교, 통화, 회의 음성을 업로드하면 AI가 듣고 정리하고 바로 쓰는 문서로 바꿉니다. TXT, DOCX, 기록본 저장, 설교용 주보 초안까지 한 흐름으로 이어집니다.',
     primaryCtaLabel: '무료로 시작하기',
-    secondaryCtaLabel: '요금제 보기',
-    trustLine: '첫 가입 30일 Pro 체험 · 신용카드 불필요 · 자동 결제 전환 없음',
+    secondaryCtaLabel: '무료 이용 안내',
+    trustLine: '구독 없음 · 인앱결제 없음 · 로그인 후 제한 없이 변환',
   },
   features: {
     eyebrow: '핵심 기능',
@@ -62,7 +62,7 @@ export const KO_MALLOG_LANDING_CONTENT = {
       {
         step: '01',
         title: '파일 업로드',
-        body: '브라우저에서 길이를 먼저 확인하고 무료 사용량 초과 여부까지 바로 안내합니다.',
+        body: '브라우저에서 길이와 형식을 먼저 확인한 뒤 안정적인 업로드를 시작합니다.',
       },
       {
         step: '02',
@@ -180,15 +180,16 @@ export const KO_MALLOG_LANDING_CONTENT = {
     },
   },
   comparison: {
-    title: '요금제 비교',
-    description: '첫 가입자에게 제공되는 30일 Pro 체험과 무료/유료 전환 기준을 한 번에 확인할 수 있습니다.',
-    columns: { feature: '항목', free: 'Free', pro: 'Pro' },
+    eyebrow: '무료 이용',
+    title: '결제 없이 필요한 기능을 그대로 사용합니다',
+    description: '비로그인 체험으로 먼저 확인하고, 로그인하면 결제나 구독 없이 전체 변환 기능을 사용할 수 있습니다.',
+    columns: { feature: '항목', guest: '비로그인', signedIn: '로그인' },
     rows: [
-      { feature: '신규 가입 혜택', free: '30일 Pro 체험 제공', pro: '체험 종료 후 선택 가능' },
-      { feature: '월 사용량', free: '월 10시간', pro: '무제한' },
-      { feature: '결제', free: '무료', pro: '월 8,800원 (VAT 포함)' },
-      { feature: '출력 포맷', free: 'TXT / DOCX / 클립보드', pro: 'TXT / DOCX / 클립보드' },
-      { feature: '추천 용도', free: '개인 테스트 / 가벼운 사용', pro: '반복 업무 / 팀 운영' },
+      { feature: '이용 범위', guest: '짧은 파일 체험', signedIn: '전체 변환 기능' },
+      { feature: '사용량', guest: '남용 방지용 체험 한도', signedIn: '제한 없음' },
+      { feature: '결제', guest: '없음', signedIn: '없음' },
+      { feature: '출력 포맷', guest: '현재 화면에서 확인', signedIn: 'TXT / DOCX / 클립보드' },
+      { feature: '기록 관리', guest: '저장하지 않음', signedIn: '히스토리와 기록본 저장' },
     ],
   },
   faq: {
@@ -211,29 +212,29 @@ export const KO_MALLOG_LANDING_CONTENT = {
         answer: '설교형 기록에서는 본문, 핵심 메시지, 적용 포인트와 함께 주보용 요약 초안을 이어서 생성할 수 있습니다.',
       },
       {
-        question: '첫 가입 30일 Pro 체험은 어떻게 적용되나요?',
-        answer: '신규 가입 계정에는 결제 정보 입력 없이 30일 동안 Pro 권한이 제공됩니다. 체험 종료 후 자동 결제되지 않으며, Free 월 10시간 또는 Pro 구독 중 직접 선택할 수 있습니다.',
+        question: '결제나 구독이 필요한가요?',
+        answer: '아닙니다. mallog24는 유료 요금제와 인앱결제를 운영하지 않으며, 로그인 사용자는 전체 변환 기능을 무료로 이용할 수 있습니다.',
       },
     ],
   },
   ctaBanner: {
-    title: '첫 가입 30일 Pro 체험으로 먼저 충분히 검증하세요',
-    body: '신규 가입자는 결제 없이 Pro 권한을 30일 동안 사용할 수 있고, 체험 종료 후 Free 월 10시간 또는 Pro 구독을 직접 선택할 수 있습니다.',
+    title: '결제 없이 바로 기록을 시작하세요',
+    body: '비로그인 체험으로 흐름을 확인하거나 로그인한 뒤 제한 없이 변환하고 기록을 저장할 수 있습니다.',
     primaryLabel: '지금 무료로 시작',
-    secondaryLabel: '요금제 자세히 보기',
+    secondaryLabel: '무료 이용 안내',
   },
 }
 
 export const EN_MALLOG_LANDING_CONTENT = {
   hero: {
-    badge: '✦ 30-day Pro trial for new signups · Free 10 hours included',
+    badge: 'Free for signed-in users · No payment details required',
     titleLead: 'Upload audio once.',
     titleAccent: 'Structured documents come out ready to use.',
     description:
       'For sermons, calls, and meetings, mallog24 turns spoken content into structured output you can ship immediately. TXT, DOCX, saved records, and bulletin-ready sermon notes stay in one flow.',
     primaryCtaLabel: 'Start Free',
-    secondaryCtaLabel: 'View Pricing',
-    trustLine: '30-day Pro trial for new signups · No credit card required · No automatic paid conversion',
+    secondaryCtaLabel: 'Free Access Details',
+    trustLine: 'No subscription · No in-app purchase · Unlimited use after sign-in',
   },
   features: {
     eyebrow: 'Core capabilities',
@@ -288,7 +289,7 @@ export const EN_MALLOG_LANDING_CONTENT = {
       {
         step: '01',
         title: 'Upload audio',
-        body: 'The browser estimates duration first and warns immediately when the file exceeds the remaining free quota.',
+        body: 'The browser validates duration and format before starting a reliable upload.',
       },
       {
         step: '02',
@@ -406,15 +407,16 @@ export const EN_MALLOG_LANDING_CONTENT = {
     },
   },
   comparison: {
-    title: 'Plan comparison',
-    description: 'Compare the 30-day welcome Pro trial, the free tier, and the paid Pro plan before signup.',
-    columns: { feature: 'Feature', free: 'Free', pro: 'Pro' },
+    eyebrow: 'Free Access',
+    title: 'Use the full workflow without payment',
+    description: 'Try a short file as a guest, then sign in to use the full transcription workflow without a subscription.',
+    columns: { feature: 'Feature', guest: 'Guest', signedIn: 'Signed in' },
     rows: [
-      { feature: 'New signup benefit', free: '30-day Pro trial included', pro: 'Optional after the trial' },
-      { feature: 'Monthly usage', free: '10 hours / month', pro: 'Unlimited' },
-      { feature: 'Billing', free: 'Free', pro: 'KRW 8,800 / month (VAT included)' },
-      { feature: 'Exports', free: 'TXT / DOCX / Clipboard', pro: 'TXT / DOCX / Clipboard' },
-      { feature: 'Best fit', free: 'Evaluation / light use', pro: 'Recurring work / team use' },
+      { feature: 'Access', guest: 'Short-file trial', signedIn: 'Full transcription workflow' },
+      { feature: 'Usage', guest: 'Abuse-prevention trial limit', signedIn: 'Unlimited' },
+      { feature: 'Billing', guest: 'None', signedIn: 'None' },
+      { feature: 'Exports', guest: 'View on current screen', signedIn: 'TXT / DOCX / Clipboard' },
+      { feature: 'Records', guest: 'Not saved', signedIn: 'History and saved records' },
     ],
   },
   faq: {
@@ -437,15 +439,15 @@ export const EN_MALLOG_LANDING_CONTENT = {
         answer: 'Sermon-type output can extend from scripture and core message into application points and bulletin-ready sermon note drafts.',
       },
       {
-        question: 'How does the 30-day Pro trial for new signups work?',
-        answer: 'New accounts receive Pro access for 30 days without entering payment information. The trial does not convert into a paid subscription automatically; after it ends, users can choose the free 10-hour monthly tier or subscribe to Pro.',
+        question: 'Do I need a payment or subscription?',
+        answer: 'No. mallog24 does not offer a paid plan or in-app purchases. Signed-in users can use the full transcription workflow for free.',
       },
     ],
   },
   ctaBanner: {
-    title: 'Start with a 30-day Pro trial for new signups',
-    body: 'New users can try Pro access for 30 days without payment information, then choose the free 10-hour monthly tier or a Pro subscription after the trial.',
+    title: 'Start creating records without payment',
+    body: 'Try the workflow as a guest or sign in to transcribe and save records without usage limits.',
     primaryLabel: 'Start Free Now',
-    secondaryLabel: 'See Pricing Details',
+    secondaryLabel: 'Free Access Details',
   },
 }
