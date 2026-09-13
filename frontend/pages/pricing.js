@@ -29,9 +29,9 @@ export default function FreeAccessPage(props) {
       </section>
 
       <section className="mt-8 border-t border-black/[0.08] pt-8 dark:border-white/10">
-        <h2 className="text-2xl font-semibold text-nm-text-primary">비로그인 체험</h2>
+        <h2 className="text-2xl font-semibold text-nm-text-primary">로그인 후 무료 이용</h2>
         <p className="mallog-keep mt-3 max-w-3xl text-sm leading-7 text-nm-text-secondary">
-          로그인 전에는 기능 확인을 위한 짧은 체험 한도가 적용되고 결과가 계정에 저장되지 않습니다. 로그인 후에는 결제 정보 없이 전체 기능을 계속 사용할 수 있습니다.
+          녹음, 파일 업로드, 변환 및 기록 관리는 로그인 후 이용할 수 있습니다. 별도의 결제 정보나 구독은 필요하지 않습니다. 이용 안내와 개인정보처리방침은 로그인 없이 확인할 수 있습니다.
         </p>
         <Link href="/#auth-card" className="nm-btn-primary mt-6 inline-flex min-h-[48px] items-center justify-center px-6 py-3 text-sm font-semibold">
           무료로 시작하기

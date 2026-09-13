@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import '../styles/globals.css'
+import '../styles/workspace.css'
 
 const THEME_KEY = 'mallog24-ui-theme'
 const THEME_MODE_KEY = 'mallog24-ui-theme-mode'
@@ -18,6 +19,7 @@ export default function App({ Component, pageProps }) {
   const [darkMode, setDarkMode] = useState(false)
   const [uiThemeMode, setUiThemeMode] = useState('auto')
   const [uiTheme, setUiTheme] = useState('aurora')
+  const [themeReady, setThemeReady] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('darkMode')
@@ -38,25 +40,28 @@ export default function App({ Component, pageProps }) {
     } else {
       setUiTheme(initialDarkMode ? 'noir' : 'aurora')
     }
+    setThemeReady(true)
   }, [])
 
   useEffect(() => {
+    if (!themeReady) return
     if (darkMode) {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')
     }
     localStorage.setItem('darkMode', JSON.stringify(darkMode))
-  }, [darkMode])
+  }, [darkMode, themeReady])
 
   useEffect(() => {
+    if (!themeReady) return
     if (uiThemeMode === 'auto') {
       setUiTheme(darkMode ? 'noir' : 'aurora')
     }
-  }, [darkMode, uiThemeMode])
+  }, [darkMode, uiThemeMode, themeReady])
 
   useEffect(() => {
-    if (uiThemeMode !== 'auto') return undefined
+    if (!themeReady || uiThemeMode !== 'auto') return undefined
 
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const syncWithSystem = (isDark) => setDarkMode(isDark)
@@ -73,13 +78,14 @@ export default function App({ Component, pageProps }) {
 
     media.addListener(handleChange)
     return () => media.removeListener(handleChange)
-  }, [uiThemeMode])
+  }, [uiThemeMode, themeReady])
 
   useEffect(() => {
+    if (!themeReady) return
     document.documentElement.setAttribute('data-ui-theme', uiTheme)
     localStorage.setItem(THEME_KEY, uiTheme)
     localStorage.setItem(THEME_MODE_KEY, uiThemeMode)
-  }, [uiTheme, uiThemeMode])
+  }, [uiTheme, uiThemeMode, themeReady])
 
   return (
     <>

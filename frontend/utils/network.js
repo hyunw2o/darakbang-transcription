@@ -22,19 +22,46 @@ export const safeReadJson = async (response) => {
   }
 }
 
-export const apiFetch = (url, options = {}) => {
-  const { headers = {}, credentials = 'include', ...rest } = options
-  return fetch(url, {
+const unauthorizedListeners = new Set()
+
+export const subscribeUnauthorized = (listener) => {
+  unauthorizedListeners.add(listener)
+  return () => unauthorizedListeners.delete(listener)
+}
+
+export const abortError = () => new DOMException('Access is no longer enabled.', 'AbortError')
+
+export const apiFetch = async (url, options = {}) => {
+  const { headers = {}, credentials = 'include', protectedRequest = false, ...rest } = options
+  if (rest.signal?.aborted) throw abortError()
+  const response = await fetch(url, {
     credentials,
     headers,
     ...rest,
   })
+  if (rest.signal?.aborted) throw abortError()
+  if (protectedRequest && response.status === 401) {
+    unauthorizedListeners.forEach((listener) => listener(url))
+  }
+  return response
 }
 
 const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 
-const sleep = (milliseconds) => new Promise((resolve) => {
-  window.setTimeout(resolve, milliseconds)
+const sleep = (milliseconds, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) {
+    reject(abortError())
+    return
+  }
+  const onAbort = () => {
+    clearTimeout(timer)
+    reject(abortError())
+  }
+  const timer = setTimeout(() => {
+    signal?.removeEventListener('abort', onAbort)
+    resolve()
+  }, milliseconds)
+  signal?.addEventListener('abort', onAbort, { once: true })
 })
 
 const isNetworkFetchError = (error) => {
@@ -65,15 +92,16 @@ export const apiFetchWithNetworkRetry = async (
   let lastError = null
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const options = optionsFactory(attempt)
     try {
-      const response = await apiFetch(url, optionsFactory(attempt))
+      const response = await apiFetch(url, options)
       if (!RETRYABLE_HTTP_STATUSES.has(response.status) || attempt >= attempts) {
         return response
       }
 
       onRetry?.({ attempt: attempt + 1, maxAttempts: attempts, status: response.status })
       await response.body?.cancel?.().catch(() => {})
-      await sleep(resolveRetryDelay(response, attempt, baseDelayMs))
+      await sleep(resolveRetryDelay(response, attempt, baseDelayMs), options.signal)
     } catch (error) {
       lastError = error
       if (!isNetworkFetchError(error) || attempt >= attempts) {
@@ -81,7 +109,7 @@ export const apiFetchWithNetworkRetry = async (
       }
 
       onRetry?.({ attempt: attempt + 1, maxAttempts: attempts, error })
-      await sleep(resolveRetryDelay(null, attempt, baseDelayMs))
+      await sleep(resolveRetryDelay(null, attempt, baseDelayMs), options.signal)
     }
   }
 

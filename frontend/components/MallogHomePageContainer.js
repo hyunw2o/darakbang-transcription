@@ -102,6 +102,8 @@ export default function MallogHomePageContainer({
     apiUrl: API_URL,
     locale,
     authToken: auth.authToken,
+    authSessionRevision: auth.authSessionRevision,
+    accessEnabled: Boolean(auth.authToken && auth.authUser && !auth.authInitializing && auth.authMode !== 'reset_password' && !isAuthPage),
     getAuthHeaders: auth.getAuthHeaders,
     fetchUsage: auth.fetchUsage,
     setError,
@@ -113,6 +115,8 @@ export default function MallogHomePageContainer({
     apiUrl: API_URL,
     locale,
     authToken: auth.authToken,
+    authSessionRevision: auth.authSessionRevision,
+    accessEnabled: Boolean(auth.authToken && auth.authUser && !auth.authInitializing && auth.authMode !== 'reset_password' && !isAuthPage),
     getAuthHeaders: auth.getAuthHeaders,
     setError,
     setNotice,
@@ -214,10 +218,6 @@ export default function MallogHomePageContainer({
     fileDurationSeconds,
     recordingState,
     recordingSeconds,
-    guestUsage,
-    guestTranscribeHint,
-    guestTranscribeStart,
-    isGuestMode,
     fileInputRef,
     usageState,
     resolveContentStyle,
@@ -252,7 +252,7 @@ export default function MallogHomePageContainer({
     handleSubmit: handleSubmitInternal,
   } = transcription
 
-  const effectiveUsage = authToken ? usage : guestUsage
+  const effectiveUsage = usage
 
   const {
     isFreeTier,
@@ -458,6 +458,8 @@ export default function MallogHomePageContainer({
       authLoading={authLoading}
       socialLoading={socialLoading}
       authToken={authToken}
+      authInitializing={auth.authInitializing}
+      accessEnabled={Boolean(auth.authToken && auth.authUser && !auth.authInitializing && auth.authMode !== 'reset_password' && !isAuthPage)}
       authUser={authUser}
       usage={effectiveUsage}
       sessionRemainingLabel={sessionRemainingLabel}
@@ -524,9 +526,6 @@ export default function MallogHomePageContainer({
       activeRecordingDeviceLabel={transcription.activeRecordingDeviceLabel}
       recordingInputState={transcription.recordingInputState}
       fileInputRef={fileInputRef}
-      isGuestMode={isGuestMode}
-      guestTranscribeHint={guestTranscribeHint}
-      guestTranscribeStart={guestTranscribeStart}
       isFreeTier={isFreeTier}
       monthlyLimitSeconds={monthlyLimitSeconds}
       remainingQuotaSeconds={remainingQuotaSeconds}

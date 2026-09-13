@@ -32,6 +32,18 @@ uvicorn main:app --reload
 - http://localhost:8000/docs - Swagger UI
 - http://localhost:8000/api/terms - 다락방 용어 확인
 
+## Login-required access
+
+Transcription, results and operational APIs require a verified bearer token or
+the existing HttpOnly session cookie. Signed-in accounts remain free and
+unlimited; guest headers cannot authorize requests or bypass cookie CSRF checks.
+The legacy `/api/guest/usage` endpoint returns `401 authentication_required`.
+See [the client contract and local checks](../docs/login_required.md).
+
+```bash
+python scripts/check_login_required.py --self-test
+```
+
 ## API 키 / DB
 
 ### Gemini API 키

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { apiFetch, safeReadJson } from '../utils/network'
+import useProtectedAccess from './useProtectedAccess'
 
 const EMPTY_GLOSSARY_FORM = {
   term: '',
@@ -31,14 +31,6 @@ const GLOSSARY_MESSAGES = {
   },
 }
 
-const readResponseData = async (response, fallbackMessage) => {
-  const data = await safeReadJson(response)
-  if (!response.ok) {
-    throw new Error(data?.detail || fallbackMessage)
-  }
-  return data || {}
-}
-
 const parseListInput = (value) => (
   String(value || '')
     .split(/[\n,;]+/u)
@@ -50,11 +42,19 @@ export default function useMallogGlossary({
   apiUrl,
   locale = 'ko',
   authToken,
+  accessEnabled = false,
+  authSessionRevision = 0,
   getAuthHeaders,
   setError,
   setNotice,
 }) {
   const messages = GLOSSARY_MESSAGES[locale] || GLOSSARY_MESSAGES.ko
+  const access = useProtectedAccess({ apiUrl, authToken, accessEnabled, authSessionRevision })
+  const readResponseData = useCallback(async (response, fallbackMessage) => {
+    const data = await access.readJson(response)
+    if (!response.ok) throw new Error(data?.detail || fallbackMessage)
+    return data || {}
+  }, [access])
   const [glossaryTerms, setGlossaryTerms] = useState([])
   const [glossaryLoaded, setGlossaryLoaded] = useState(false)
   const [glossaryLoading, setGlossaryLoading] = useState(false)
@@ -62,48 +62,60 @@ export default function useMallogGlossary({
   const [glossaryForm, setGlossaryForm] = useState(EMPTY_GLOSSARY_FORM)
 
   const handleGlossaryFieldChange = useCallback((field, value) => {
+    if (!access.isCurrent()) return
     setGlossaryForm((prev) => ({ ...prev, [field]: value }))
-  }, [])
+  }, [access])
 
   const fetchGlossary = useCallback(async ({ silent = false } = {}) => {
-    if (!authToken) {
-      setGlossaryTerms([])
-      setGlossaryLoaded(false)
+    if (!access.isCurrent()) {
       return
     }
 
     setGlossaryLoading(true)
     try {
-      const response = await apiFetch(`${apiUrl}/api/glossary`, {
+      const response = await access.request(`${apiUrl}/api/glossary`, {
         headers: getAuthHeaders(),
       })
       const data = await readResponseData(response, messages.loadFailed)
       setGlossaryTerms(Array.isArray(data?.terms) ? data.terms : [])
       setGlossaryLoaded(true)
     } catch (error) {
+      if (!access.isCurrent()) return
       setGlossaryLoaded(true)
       if (!silent) {
         setError(error?.message || messages.loadFailed)
       }
     } finally {
+      if (!access.isCurrent()) return
       setGlossaryLoading(false)
     }
-  }, [apiUrl, authToken, getAuthHeaders, messages.loadFailed, setError])
+  }, [access, apiUrl, authToken, getAuthHeaders, messages.loadFailed, setError, readResponseData])
 
   useEffect(() => {
-    if (!authToken) {
+    const reset = () => {
       setGlossaryTerms([])
       setGlossaryLoaded(false)
+      setGlossaryLoading(false)
+      setGlossaryActionId('')
       setGlossaryForm(EMPTY_GLOSSARY_FORM)
-      return
     }
-    if (!glossaryLoaded && !glossaryLoading) {
+    reset()
+    const signal = access.controller.signal
+    signal.addEventListener('abort', reset, { once: true })
+    return () => {
+      signal.removeEventListener('abort', reset)
+      reset()
+    }
+  }, [access])
+
+  useEffect(() => {
+    if (access.isCurrent() && !glossaryLoaded && !glossaryLoading) {
       fetchGlossary({ silent: true })
     }
-  }, [authToken, fetchGlossary, glossaryLoaded, glossaryLoading])
+  }, [access, fetchGlossary, glossaryLoaded, glossaryLoading])
 
   const handleCreateGlossaryTerm = useCallback(async () => {
-    if (!authToken) return
+    if (!access.isCurrent()) return
     const term = glossaryForm.term.trim()
     if (!term) {
       setError(messages.termRequired)
@@ -112,7 +124,7 @@ export default function useMallogGlossary({
 
     setGlossaryActionId('__create__')
     try {
-      const response = await apiFetch(`${apiUrl}/api/glossary`, {
+      const response = await access.request(`${apiUrl}/api/glossary`, {
         method: 'POST',
         headers: {
           ...getAuthHeaders(),
@@ -142,18 +154,20 @@ export default function useMallogGlossary({
       setGlossaryForm(EMPTY_GLOSSARY_FORM)
       setNotice(messages.saved)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.saveFailed)
     } finally {
+      if (!access.isCurrent()) return
       setGlossaryActionId('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, glossaryForm, messages.saveFailed, messages.saved, messages.termRequired, setError, setNotice])
+  }, [access, apiUrl, authToken, getAuthHeaders, glossaryForm, messages.saveFailed, messages.saved, messages.termRequired, setError, setNotice, readResponseData])
 
   const handleToggleGlossaryTerm = useCallback(async (termId, nextActive) => {
-    if (!authToken || !termId) return
+    if (!access.isCurrent() || !termId) return
     const actionId = String(termId)
     setGlossaryActionId(actionId)
     try {
-      const response = await apiFetch(`${apiUrl}/api/glossary/${encodeURIComponent(actionId)}`, {
+      const response = await access.request(`${apiUrl}/api/glossary/${encodeURIComponent(actionId)}`, {
         method: 'PUT',
         headers: {
           ...getAuthHeaders(),
@@ -168,18 +182,20 @@ export default function useMallogGlossary({
       )))
       setNotice(messages.updated)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.updateFailed)
     } finally {
+      if (!access.isCurrent()) return
       setGlossaryActionId('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, messages.updateFailed, messages.updated, setError, setNotice])
+  }, [access, apiUrl, authToken, getAuthHeaders, messages.updateFailed, messages.updated, setError, setNotice, readResponseData])
 
   const handleDeleteGlossaryTerm = useCallback(async (termId) => {
-    if (!authToken || !termId) return
+    if (!access.isCurrent() || !termId) return
     const actionId = String(termId)
     setGlossaryActionId(actionId)
     try {
-      const response = await apiFetch(`${apiUrl}/api/glossary/${encodeURIComponent(actionId)}`, {
+      const response = await access.request(`${apiUrl}/api/glossary/${encodeURIComponent(actionId)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       })
@@ -187,11 +203,13 @@ export default function useMallogGlossary({
       setGlossaryTerms((prev) => prev.filter((item) => String(item?.id) !== actionId))
       setNotice(messages.deleted)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.deleteFailed)
     } finally {
+      if (!access.isCurrent()) return
       setGlossaryActionId('')
     }
-  }, [apiUrl, authToken, getAuthHeaders, messages.deleteFailed, messages.deleted, setError, setNotice])
+  }, [access, apiUrl, authToken, getAuthHeaders, messages.deleteFailed, messages.deleted, setError, setNotice, readResponseData])
 
   return {
     glossaryTerms,

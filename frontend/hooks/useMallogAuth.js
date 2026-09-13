@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { apiFetch, safeReadJson } from '../utils/network'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { abortError, apiFetch, safeReadJson, subscribeUnauthorized } from '../utils/network'
 
 const AUTH_MESSAGES = {
   ko: {
@@ -99,12 +99,25 @@ export default function useMallogAuth({
   const [authPassword, setAuthPassword] = useState('')
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [authInitializing, setAuthInitializing] = useState(true)
+  const [authSessionRevision, setAuthSessionRevision] = useState(0)
   const [socialLoading, setSocialLoading] = useState('')
   const [authToken, setAuthToken] = useState('')
   const [authUser, setAuthUser] = useState(null)
   const [usage, setUsage] = useState(null)
   const [sessionExpiresAtMs, setSessionExpiresAtMs] = useState(0)
   const [sessionNowMs, setSessionNowMs] = useState(Date.now())
+  const callbacks = useRef({})
+  callbacks.current = { onResetState, setError, setNotice, messages, authMode }
+  const session = useRef({ token: '', user: null, expiresAt: 0 })
+  const requestController = useRef(null)
+
+  const beginAuthRequest = useCallback(() => {
+    requestController.current?.abort()
+    const controller = new AbortController()
+    requestController.current = controller
+    return controller
+  }, [])
 
   const parseJwtExpMs = useCallback((token) => {
     try {
@@ -151,93 +164,120 @@ export default function useMallogAuth({
     return data || {}
   }, [])
 
-  const getAuthHeaders = useCallback((token = authToken) => {
+  const getAuthHeaders = useCallback((token = session.current.token) => {
     const normalized = String(token || '').trim()
     if (!normalized || normalized === COOKIE_SESSION_TOKEN) return {}
     return { Authorization: `Bearer ${normalized}` }
-  }, [authToken])
+  }, [])
 
   const resetAuthState = useCallback(({ errorMessage = null, noticeMessage = null } = {}) => {
+    requestController.current?.abort()
+    session.current = { token: '', user: null, expiresAt: 0 }
+    setAuthSessionRevision((revision) => revision + 1)
     setAuthToken('')
     setAuthUser(null)
     setUsage(null)
     setSessionExpiresAtMs(0)
     setSessionNowMs(Date.now())
-    onResetState?.()
-    setError(errorMessage)
-    setNotice(noticeMessage)
-  }, [onResetState, setError, setNotice])
+    setAuthInitializing(false)
+    setAuthLoading(false)
+    setSocialLoading('')
+    setAuthPassword('')
+    setAuthPasswordConfirm('')
+    callbacks.current.onResetState?.()
+    callbacks.current.setError(errorMessage)
+    callbacks.current.setNotice(noticeMessage)
+  }, [])
 
   const applySessionData = useCallback((data, { noticeMessage = null } = {}) => {
-    setAuthToken(COOKIE_SESSION_TOKEN)
-    setAuthUser(data?.user || null)
-    setUsage(mapUsageSnapshot(data?.usage))
-    setSessionExpiresAtMs(normalizeExpiryMs(data?.session_expires_at))
-    setSessionNowMs(Date.now())
-    onResetState?.()
-    setError(null)
-    if (noticeMessage) {
-      setNotice(noticeMessage)
+    const expiresAt = normalizeExpiryMs(data?.session_expires_at)
+    if (!data?.user?.id || !expiresAt || expiresAt <= Date.now()) {
+      throw new Error(callbacks.current.messages.sessionExpired)
     }
-  }, [onResetState, setError, setNotice])
+    session.current = { token: COOKIE_SESSION_TOKEN, user: data.user, expiresAt }
+    setAuthSessionRevision((revision) => revision + 1)
+    setAuthToken(COOKIE_SESSION_TOKEN)
+    setAuthUser(data.user)
+    setUsage(mapUsageSnapshot(data?.usage))
+    setSessionExpiresAtMs(expiresAt)
+    setSessionNowMs(Date.now())
+    callbacks.current.onResetState?.()
+    callbacks.current.setError(null)
+    if (noticeMessage) {
+      callbacks.current.setNotice(noticeMessage)
+    }
+  }, [])
 
-  const fetchUsage = useCallback(async (token = authToken) => {
-    if (!token && !authToken) {
-      setUsage(null)
+  const fetchUsage = useCallback(async (token = session.current.token) => {
+    const activeSession = session.current
+    if (!activeSession.token || !activeSession.user || callbacks.current.authMode === 'reset_password') return null
+    if (activeSession.expiresAt <= Date.now()) {
+      resetAuthState({ errorMessage: callbacks.current.messages.sessionExpired })
       return null
     }
+    const signal = requestController.current?.signal
 
     try {
       const res = await apiFetch(`${apiUrl}/api/usage`, {
         headers: getAuthHeaders(token),
+        signal,
+        protectedRequest: true,
       })
       if (res.status === 401) {
-        if (authToken) {
-          resetAuthState({ errorMessage: messages.sessionExpired })
-        }
+        if (session.current === activeSession) resetAuthState({ errorMessage: callbacks.current.messages.sessionExpired })
         return null
       }
-      const data = await readResponseData(res, messages.usageFailed)
+      const data = await readResponseData(res, callbacks.current.messages.usageFailed)
+      if (signal?.aborted || session.current !== activeSession) return null
       const snapshot = mapUsageSnapshot(data)
       setUsage(snapshot)
       return snapshot
     } catch (error) {
+      if (signal?.aborted || session.current !== activeSession) return null
       console.error('Failed to fetch usage', error)
       return null
     }
-  }, [apiUrl, authToken, getAuthHeaders, messages.sessionExpired, messages.usageFailed, readResponseData, resetAuthState])
+  }, [apiUrl, getAuthHeaders, readResponseData, resetAuthState])
 
-  const fetchBootstrap = useCallback(async (token = authToken, { silentUnauthorized = false } = {}) => {
+  const fetchBootstrap = useCallback(async (token = session.current.token, { silentUnauthorized = false, controller = beginAuthRequest() } = {}) => {
+    setAuthInitializing(true)
     try {
       const res = await apiFetch(`${apiUrl}/api/auth/bootstrap`, {
         headers: getAuthHeaders(token),
+        signal: controller.signal,
       })
       if (res.status === 401) {
-        resetAuthState({ errorMessage: silentUnauthorized ? null : (authToken ? messages.sessionExpired : null) })
+        resetAuthState({ errorMessage: silentUnauthorized ? null : callbacks.current.messages.sessionExpired })
         return null
       }
-      const data = await readResponseData(res, messages.sessionExpired)
+      const data = await readResponseData(res, callbacks.current.messages.sessionExpired)
+      if (controller.signal.aborted) return null
       applySessionData(data)
       return data
     } catch (error) {
+      if (controller.signal.aborted) return null
       console.error('Failed to bootstrap auth state', error)
-      resetAuthState({ errorMessage: silentUnauthorized ? null : (error?.message || messages.sessionExpired) })
+      resetAuthState({ errorMessage: error?.message || callbacks.current.messages.sessionExpired })
       return null
+    } finally {
+      if (!controller.signal.aborted) setAuthInitializing(false)
     }
-  }, [apiUrl, applySessionData, authToken, getAuthHeaders, messages.sessionExpired, readResponseData, resetAuthState])
+  }, [apiUrl, applySessionData, beginAuthRequest, getAuthHeaders, readResponseData, resetAuthState])
 
-  const establishCookieSession = useCallback(async (token, { noticeMessage = messages.socialComplete } = {}) => {
+  const establishCookieSession = useCallback(async (token, { noticeMessage, controller } = {}) => {
     const formData = new FormData()
     formData.append('access_token', token)
 
     const response = await apiFetch(`${apiUrl}/api/auth/session`, {
       method: 'POST',
       body: formData,
+      signal: controller.signal,
     })
-    const data = await readResponseData(response, messages.socialSessionError)
+    const data = await readResponseData(response, callbacks.current.messages.socialSessionError)
+    if (controller.signal.aborted) throw abortError()
     applySessionData(data, { noticeMessage })
     return data
-  }, [apiUrl, applySessionData, messages.socialComplete, messages.socialSessionError, readResponseData])
+  }, [apiUrl, applySessionData, readResponseData])
 
   const warmUpBackend = useCallback(() => {
     const controller = new AbortController()
@@ -249,6 +289,9 @@ export default function useMallogAuth({
 
   useEffect(() => {
     let cancelled = false
+    const controller = beginAuthRequest()
+    const { messages } = callbacks.current
+    setAuthInitializing(true)
 
     const bootstrapAuth = async () => {
       warmUpBackend()
@@ -264,7 +307,7 @@ export default function useMallogAuth({
         queryParams.get('error')
 
       if (oauthError) {
-        setError(`${messages.socialFailedPrefix}${oauthError}`)
+        callbacks.current.setError(`${messages.socialFailedPrefix}${oauthError}`)
       }
 
       if (oauthAccessToken) {
@@ -273,42 +316,66 @@ export default function useMallogAuth({
         } else {
           try {
             const isPasswordRecovery = oauthType === 'recovery'
+            if (isPasswordRecovery) setAuthMode('reset_password')
             await establishCookieSession(oauthAccessToken, {
+              controller,
               noticeMessage: isPasswordRecovery ? messages.passwordRecoveryReady : messages.socialComplete,
             })
-            if (isPasswordRecovery) {
+            if (!controller.signal.aborted && isPasswordRecovery) {
               setAuthMode('reset_password')
               setAuthPassword('')
               setAuthPasswordConfirm('')
             }
           } catch (error) {
-            if (!cancelled) {
+            if (!cancelled && !controller.signal.aborted) {
               resetAuthState({ errorMessage: error?.message || messages.socialSessionError })
             }
           }
         }
       } else {
-        await fetchBootstrap('', { silentUnauthorized: true })
+        await fetchBootstrap('', { silentUnauthorized: true, controller })
       }
 
       if (!cancelled && (oauthAccessToken || oauthError)) {
         window.history.replaceState({}, document.title, window.location.pathname)
       }
+      if (!cancelled && !controller.signal.aborted) setAuthInitializing(false)
     }
 
     bootstrapAuth()
     return () => {
       cancelled = true
+      controller.abort()
     }
-  }, [establishCookieSession, fetchBootstrap, isJwtExpired, messages.passwordRecoveryReady, messages.sessionExpired, messages.socialComplete, messages.socialFailedPrefix, messages.socialSessionError, resetAuthState, setError, warmUpBackend])
+  }, [beginAuthRequest, establishCookieSession, fetchBootstrap, isJwtExpired, resetAuthState, warmUpBackend])
+
+  useEffect(() => subscribeUnauthorized((url) => {
+    if (String(url).startsWith(`${apiUrl}/`) && session.current.token) {
+      resetAuthState({ errorMessage: callbacks.current.messages.sessionExpired })
+    }
+  }), [apiUrl, resetAuthState])
+
+  useEffect(() => () => requestController.current?.abort(), [])
 
   useEffect(() => {
     if (!authToken || !sessionExpiresAtMs) return undefined
-    const intervalId = window.setInterval(() => {
-      setSessionNowMs(Date.now())
-    }, 1000)
-    return () => window.clearInterval(intervalId)
-  }, [authToken, sessionExpiresAtMs])
+    const checkExpiry = () => {
+      const now = Date.now()
+      setSessionNowMs(now)
+      if (session.current.token && now >= session.current.expiresAt) {
+        resetAuthState({ errorMessage: callbacks.current.messages.sessionExpired })
+      }
+    }
+    checkExpiry()
+    const intervalId = window.setInterval(checkExpiry, 1000)
+    window.addEventListener('focus', checkExpiry)
+    document.addEventListener('visibilitychange', checkExpiry)
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', checkExpiry)
+      document.removeEventListener('visibilitychange', checkExpiry)
+    }
+  }, [authToken, resetAuthState, sessionExpiresAtMs])
 
   const sessionRemainingLabel = useMemo(() => {
     const remainingSeconds = sessionExpiresAtMs
@@ -322,6 +389,8 @@ export default function useMallogAuth({
 
   const handleAuthSubmit = useCallback(async (event) => {
     event.preventDefault()
+    if (authInitializing || authLoading) return
+    const controller = beginAuthRequest()
     setError(null)
     setNotice(null)
     setAuthLoading(true)
@@ -337,8 +406,10 @@ export default function useMallogAuth({
         const response = await apiFetch(`${apiUrl}/api/auth/password-reset/request`, {
           method: 'POST',
           body: formData,
+          signal: controller.signal,
         })
         const data = await readResponseData(response, messages.authFailed)
+        if (controller.signal.aborted) return
         setNotice(data.message || messages.passwordResetRequested)
         setAuthMode('login')
         setAuthPassword('')
@@ -359,8 +430,11 @@ export default function useMallogAuth({
           method: 'POST',
           headers: getAuthHeaders(),
           body: formData,
+          signal: controller.signal,
+          protectedRequest: true,
         })
         const data = await readResponseData(response, messages.resetSessionExpired)
+        if (controller.signal.aborted) return
         applySessionData(data, { noticeMessage: data.message || messages.passwordResetDone })
         setAuthMode('login')
         setAuthPassword('')
@@ -379,8 +453,10 @@ export default function useMallogAuth({
       const response = await apiFetch(`${apiUrl}${endpoint}`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       })
       const data = await readResponseData(response, messages.authFailed)
+      if (controller.signal.aborted) return
 
       if (data.session_established) {
         applySessionData(data, {
@@ -396,13 +472,17 @@ export default function useMallogAuth({
         setAuthMode('login')
       }
     } catch (error) {
+      if (controller.signal.aborted) return
       setError(error?.message || messages.authError)
     } finally {
-      setAuthLoading(false)
+      if (!controller.signal.aborted) setAuthLoading(false)
     }
   }, [
     apiUrl,
     applySessionData,
+    authInitializing,
+    authLoading,
+    beginAuthRequest,
     authEmail,
     authMode,
     authName,
@@ -427,7 +507,8 @@ export default function useMallogAuth({
   ])
 
   const handleSocialLogin = useCallback(async (provider) => {
-    if (socialLoading) return
+    if (authInitializing || socialLoading) return
+    const controller = beginAuthRequest()
     setError(null)
     setNotice(null)
     setSocialLoading(provider)
@@ -435,28 +516,30 @@ export default function useMallogAuth({
     try {
       const redirectTo = `${window.location.origin}${messages.oauthRedirectPath || window.location.pathname}`
       const response = await apiFetch(
-        `${apiUrl}/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`
+        `${apiUrl}/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`,
+        { signal: controller.signal }
       )
       const data = await readResponseData(response, messages.socialUrlFailed)
+      if (controller.signal.aborted) return
       window.location.href = data.auth_url
     } catch (error) {
+      if (controller.signal.aborted) return
       setError(error?.message || messages.socialError)
       setSocialLoading('')
     }
-  }, [apiUrl, messages.oauthRedirectPath, messages.socialError, messages.socialUrlFailed, readResponseData, setError, setNotice, socialLoading])
+  }, [apiUrl, authInitializing, beginAuthRequest, messages.oauthRedirectPath, messages.socialError, messages.socialUrlFailed, readResponseData, setError, setNotice, socialLoading])
 
   const handleLogout = useCallback(async () => {
-    setAuthLoading(false)
-    setSocialLoading('')
+    const headers = getAuthHeaders()
+    resetAuthState({ noticeMessage: messages.loggedOut })
     try {
       await apiFetch(`${apiUrl}/api/auth/logout`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers,
       })
     } catch (error) {
       console.error('Failed to clear auth cookie', error)
     }
-    resetAuthState({ noticeMessage: messages.loggedOut })
   }, [apiUrl, getAuthHeaders, messages.loggedOut, resetAuthState])
 
   return {
@@ -471,7 +554,9 @@ export default function useMallogAuth({
     authPasswordConfirm,
     setAuthPasswordConfirm,
     authLoading,
+    authInitializing,
     socialLoading,
+    authSessionRevision,
     authToken,
     authUser,
     usage,
@@ -480,6 +565,7 @@ export default function useMallogAuth({
     getAuthHeaders,
     fetchUsage,
     fetchBootstrap,
+    resetAuthState,
     handleAuthSubmit,
     handleSocialLogin,
     handleLogout,

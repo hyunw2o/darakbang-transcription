@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import time
 import uuid
 import urllib.error
@@ -71,15 +72,18 @@ def request_json(url: str, *, method: str = "GET", body: bytes | None = None, he
         raise RuntimeError(f"HTTP {exc.code} from {url}: {payload}") from exc
 
 
-def build_request_headers(args: argparse.Namespace, guest_session_id: str) -> dict[str, str]:
-    headers = {"X-Guest-Session-Id": guest_session_id}
+def build_request_headers(args: argparse.Namespace) -> dict[str, str]:
+    token = str(args.bearer_token or "").strip()
+    if not token:
+        raise ValueError("--bearer-token or MALLOG24_AUTH_TOKEN is required; guest transcription is retired.")
+    headers = {"Authorization": f"Bearer {token}"}
     client_platform = str(getattr(args, "client_platform", "") or "").strip()
     if client_platform:
         headers["X-Mallog24-Client-Platform"] = client_platform
     return headers
 
 
-def submit_transcription(args: argparse.Namespace, guest_session_id: str) -> dict[str, Any]:
+def submit_transcription(args: argparse.Namespace) -> dict[str, Any]:
     body, boundary = build_multipart_body(
         {
             "language": args.language,
@@ -89,7 +93,7 @@ def submit_transcription(args: argparse.Namespace, guest_session_id: str) -> dic
         "file",
         args.audio_file,
     )
-    headers = build_request_headers(args, guest_session_id)
+    headers = build_request_headers(args)
     headers.update({
         "Content-Type": f"multipart/form-data; boundary={boundary}",
         "Content-Length": str(len(body)),
@@ -103,9 +107,9 @@ def submit_transcription(args: argparse.Namespace, guest_session_id: str) -> dic
     )
 
 
-def poll_until_done(args: argparse.Namespace, payload: dict[str, Any], guest_session_id: str) -> dict[str, Any]:
+def poll_until_done(args: argparse.Namespace, payload: dict[str, Any]) -> dict[str, Any]:
     status = str(payload.get("status") or "").lower()
-    if status in {"completed", "failed"}:
+    if status in {"completed", "failed", "error"}:
         return payload
 
     task_id = str(payload.get("task_id") or "").strip()
@@ -113,7 +117,7 @@ def poll_until_done(args: argparse.Namespace, payload: dict[str, Any], guest_ses
         return payload
 
     deadline = time.time() + args.poll_timeout
-    headers = build_request_headers(args, guest_session_id)
+    headers = build_request_headers(args)
     while time.time() < deadline:
         time.sleep(args.poll_interval)
         payload = request_json(
@@ -122,13 +126,13 @@ def poll_until_done(args: argparse.Namespace, payload: dict[str, Any], guest_ses
             timeout=args.timeout,
         )
         status = str(payload.get("status") or "").lower()
-        if status in {"completed", "failed"}:
+        if status in {"completed", "failed", "error"}:
             return payload
     raise RuntimeError(f"Timed out waiting for task {task_id}.")
 
 
 def validate_payload(payload: dict[str, Any], expected_terms: list[str]) -> None:
-    if payload.get("success") is False or str(payload.get("status") or "").lower() == "failed":
+    if payload.get("success") is False or str(payload.get("status") or "").lower() in {"failed", "error"}:
         raise RuntimeError(f"Transcription failed: {json.dumps(payload, ensure_ascii=False, sort_keys=True)}")
 
     corrected_text = str(payload.get("corrected_text") or "")
@@ -148,7 +152,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--transcription-type", default="sermon", help="Transcription type. Default: sermon")
     parser.add_argument("--correction-mode", default="normal", help="Correction mode. Default: normal")
     parser.add_argument("--expect-corrected-contains", action="append", default=[], help="Term that must appear in corrected_text. Can be repeated.")
-    parser.add_argument("--guest-session-id", help="Optional guest session id. Generated when omitted.")
+    parser.add_argument("--bearer-token", default=os.getenv("MALLOG24_AUTH_TOKEN", ""), help="Required login token. Defaults to MALLOG24_AUTH_TOKEN.")
     parser.add_argument("--client-platform", default="", help="Optional X-Mallog24-Client-Platform value, e.g. web/android/ios.")
     parser.add_argument("--timeout", type=int, default=60, help="HTTP timeout seconds.")
     parser.add_argument("--poll-interval", type=float, default=2.0, help="Status poll interval seconds.")
@@ -159,11 +163,23 @@ def parse_args() -> argparse.Namespace:
 
 def run_self_test() -> int:
     validate_payload({"status": "completed", "success": True, "corrected_text": "RVS and RUTC"}, ["RVS", "RUTC"])
-    dummy_args = argparse.Namespace(client_platform="android")
-    assert build_request_headers(dummy_args, "guest-self-test") == {
-        "X-Guest-Session-Id": "guest-self-test",
+    dummy_args = argparse.Namespace(client_platform="android", bearer_token="test-token")
+    assert build_request_headers(dummy_args) == {
+        "Authorization": "Bearer test-token",
         "X-Mallog24-Client-Platform": "android",
     }
+    try:
+        build_request_headers(argparse.Namespace(bearer_token=""))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected missing login token to fail.")
+    try:
+        validate_payload({"status": "error", "error": "Test failure"}, [])
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Expected ASR error status to fail.")
     try:
         validate_payload({"status": "completed", "success": True, "corrected_text": "RVH and NRDC"}, ["RVS"])
     except RuntimeError:
@@ -181,9 +197,10 @@ def main() -> int:
     if not Path(args.audio_file).is_file():
         raise SystemExit(f"Audio file not found: {args.audio_file}")
 
-    guest_session_id = args.guest_session_id or f"smoke-{uuid.uuid4().hex}"
-    payload = submit_transcription(args, guest_session_id)
-    payload = poll_until_done(args, payload, guest_session_id)
+    if not str(args.bearer_token or "").strip():
+        raise SystemExit("--bearer-token or MALLOG24_AUTH_TOKEN is required; guest transcription is retired.")
+    payload = submit_transcription(args)
+    payload = poll_until_done(args, payload)
     validate_payload(payload, args.expect_corrected_contains)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0

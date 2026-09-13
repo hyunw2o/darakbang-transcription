@@ -1,7 +1,7 @@
 import { SUPABASE_URL } from "../config";
 
 function parseAuthParamsFromUrl(url) {
-  if (!url) return { accessToken: "", oauthError: "", expiresInSeconds: 0 };
+  if (!url) return { accessToken: "", oauthError: "", expiresInSeconds: 0, isRecovery: false };
 
   const parts = url.split("#");
   const beforeHash = parts[0] || "";
@@ -21,7 +21,9 @@ function parseAuthParamsFromUrl(url) {
   const expiresInRaw = hashParams.get("expires_in") || queryParams.get("expires_in") || "";
   const expiresInSeconds = Math.max(0, parseInt(expiresInRaw, 10) || 0);
 
-  return { accessToken, oauthError, expiresInSeconds };
+  const type = hashParams.get("type") || queryParams.get("type") || "";
+  const isRecovery = type === "recovery" || /(?:\/|:)recover(?:y)?(?:[/?#]|$)/i.test(beforeHash);
+  return { accessToken, oauthError, expiresInSeconds, isRecovery };
 }
 
 function buildDirectOauthUrl(provider, redirectTo) {
@@ -48,14 +50,6 @@ function shouldShowOauthConfigHint(message) {
     normalized.includes("koe205") ||
     normalized.includes("koe206")
   );
-}
-
-function buildOauthFallbackUser() {
-  return {
-    id: "oauth_user",
-    email: "",
-    user_metadata: {},
-  };
 }
 
 function parseJwtExpMs(token) {
@@ -87,6 +81,5 @@ export {
   parseAuthParamsFromUrl,
   buildDirectOauthUrl,
   shouldShowOauthConfigHint,
-  buildOauthFallbackUser,
   parseJwtExpMs,
 };

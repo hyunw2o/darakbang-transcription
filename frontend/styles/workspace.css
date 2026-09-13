@@ -1,0 +1,174 @@
+.mallog-app {
+  --nm-bg: #f7f9f8;
+  --nm-surface: #ffffff;
+  --nm-surface-soft: #f3f6f5;
+  --nm-border: #dce3e0;
+  --nm-text-primary: #202a26;
+  --nm-text-secondary: #5b6963;
+  --nm-accent: #187458;
+  --nm-accent-soft: #e8f3ed;
+  --mallog24-logo-text: #202a26;
+  background: var(--nm-bg);
+  color: var(--nm-text-primary);
+  letter-spacing: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+html.dark .mallog-app {
+  --nm-bg: #141817;
+  --nm-surface: #1b211e;
+  --nm-surface-soft: #242c28;
+  --nm-border: #354139;
+  --nm-text-primary: #edf2ee;
+  --nm-text-secondary: #aebbb2;
+  --nm-accent: #8ad6b2;
+  --nm-accent-soft: #263f32;
+  --mallog24-logo-text: #edf2ee;
+}
+
+.mallog-app *, .mallog-app *::before, .mallog-app *::after { letter-spacing: 0; }
+.mallog-app button, .mallog-app input, .mallog-app select, .mallog-app textarea { font: inherit; }
+.mallog-app button, .mallog-app a { -webkit-tap-highlight-color: transparent; }
+.mallog-app button { cursor: pointer; }
+.mallog-app button:disabled { cursor: not-allowed; opacity: .5; }
+.mallog-app :focus-visible { outline: 2px solid var(--nm-accent); outline-offset: 3px; }
+.mallog-app [hidden] { display: none !important; }
+.mallog-app svg { flex-shrink: 0; }
+.mallog-topbar { position: sticky; top: 0; z-index: 50; background: var(--nm-surface); border-bottom: 1px solid var(--nm-border); }
+.mallog-topbar-inner { max-width: 1360px; min-height: 68px; margin: auto; padding: 10px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.mallog-brand { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.mallog-brand img { border-radius: 6px; width: 30px; height: 30px; }
+.mallog-main { width: 100%; max-width: 1360px; margin: auto; padding: 0 32px; }
+.mallog-main-auth { padding-top: 40px; }
+.mallog-auth { width: 100%; max-width: 400px; margin: 0 auto 48px; scroll-margin-top: 90px; }
+.mallog-auth-heading { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; margin-bottom: 24px; }
+.mallog-auth-logo { border-radius: 8px; width: 52px; height: 52px; }
+.mallog-auth-heading h1 { font-size: 26px; font-weight: 650; line-height: 1.4; margin: 0; }
+.mallog-free-label { display: inline-flex; align-items: center; gap: 5px; color: var(--nm-accent); font-size: 12px; font-weight: 600; }
+.mallog-auth-modes { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--nm-border); margin-bottom: 24px; }
+.mallog-auth-modes button { color: var(--nm-text-secondary); padding: 10px 6px; border-bottom: 2px solid transparent; font-weight: 600; }
+.mallog-auth-modes button[aria-pressed='true'] { color: var(--nm-accent); border-color: var(--nm-accent); }
+.mallog-auth-form { display: flex; flex-direction: column; gap: 17px; }
+.mallog-auth-field { display: flex; flex-direction: column; gap: 7px; }
+.mallog-auth-form label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; font-weight: 550; }
+.mallog-auth-form input { display: block; background: var(--nm-surface); color: var(--nm-text-primary); width: 100%; height: 46px; border: 1px solid var(--nm-border); border-radius: 6px; padding: 10px 12px; font-size: 16px; min-width: 0; }
+.mallog-password-field { display: flex; position: relative; min-width: 0; }
+.mallog-password-field input { padding-right: 48px; }
+.mallog-password-field button { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 44px; display: flex; justify-content: center; align-items: center; color: var(--nm-text-secondary); border-radius: 5px; }
+.mallog-password-field button:hover { color: var(--nm-text-primary); }
+.mallog-field-note { font-size: 12px; color: var(--nm-text-secondary); font-weight: 400; }
+.mallog-primary-action { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border-radius: 6px; background: #176347; color: white; padding: 10px 20px; font-weight: 600 !important; border: 1px solid transparent; width: 100%; text-align: center; transition: background .15s; }
+.mallog-primary-action:hover { background: #104e37; }
+.mallog-primary-action:disabled { background: var(--nm-surface-soft); color: var(--nm-text-secondary); border-color: var(--nm-border); opacity: 1 !important; }
+.mallog-auth-links { display: flex; justify-content: center; margin-top: 14px; font-size: 12px; color: var(--nm-text-secondary); }
+.mallog-auth a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mallog-auth-divider { display: flex; align-items: center; gap: 12px; color: var(--nm-text-secondary); font-size: 12px; margin: 20px 0; }
+.mallog-auth-divider::before, .mallog-auth-divider::after { content: ''; flex: 1; border-top: 1px solid var(--nm-border); }
+.mallog-social-buttons { display: grid; gap: 8px; }
+.mallog-social-buttons button { border-radius: 6px; height: 44px; padding: 8px 12px; }
+.mallog-auth-legal { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 24px; font-size: 11px; color: var(--nm-text-secondary); }
+.mallog-auth-note { color: var(--nm-text-secondary); font-size: 13px; margin-bottom: 20px; }
+.mallog-auth-loading { min-height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; color: var(--nm-text-secondary); }
+.mallog-feedback { border-left: 3px solid var(--nm-accent); padding: 12px 14px; background: var(--nm-accent-soft); color: var(--nm-text-primary); font-size: 13px; margin: 16px 0; border-radius: 0 6px 6px 0; }
+.mallog-feedback-error { border-color: #c04444; color: #ac3030; background: #fff0ee; }
+html.dark .mallog-feedback-error { color: #ffb2b2; background: #402523; }
+.mallog-workspace { display: grid; grid-template-columns: 212px minmax(0, 1fr); min-height: calc(100vh - 230px); }
+.mallog-workspace-nav { padding: 30px 20px 30px 0; border-right: 1px solid var(--nm-border); align-self: start; position: sticky; top: 68px; }
+.mallog-workspace-label { font-size: 11px; font-weight: 600; color: var(--nm-text-secondary); margin: 0 12px 16px; }
+.mallog-workspace-nav nav { display: grid; gap: 6px; }
+.mallog-nav-short { display: none; }
+.mallog-workspace-nav nav button { display: flex; align-items: center; gap: 11px; text-align: left; padding: 12px; width: 100%; min-height: 46px; font-size: 13px; color: var(--nm-text-secondary); border-radius: 6px; }
+.mallog-workspace-nav nav button:hover { background: var(--nm-surface-soft); }
+.mallog-workspace-nav nav button[aria-current='page'] { background: var(--nm-accent-soft); color: var(--nm-accent); font-weight: 600; }
+.mallog-status-dot { width: 6px; height: 6px; flex-shrink: 0; background: #dc6c3e; border-radius: 50%; margin-left: auto; }
+.mallog-account { margin: 32px 8px 0; padding-top: 20px; border-top: 1px solid var(--nm-border); font-size: 12px; }
+.mallog-account-name { font-weight: 600; margin-top: 12px; }
+.mallog-account-email { font-size: 11px; color: var(--nm-text-secondary); overflow-wrap: anywhere; word-break: normal; margin-top: 3px; }
+.mallog-account-usage { display: flex; flex-direction: column; gap: 4px; color: var(--nm-text-secondary); margin-top: 18px; }
+.mallog-account-usage strong { color: var(--nm-text-primary); font-size: 13px; font-weight: 550; }
+.mallog-signout { display: inline-flex; align-items: center; gap: 9px; font-size: 12px !important; color: var(--nm-text-secondary); margin-top: 20px; min-height: 40px; }
+.mallog-workspace-content { padding: 32px 0 48px 36px; min-width: 0; }
+.mallog-workspace-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 26px; }
+.mallog-workspace-heading h1 { font-size: 24px; font-weight: 650; line-height: 1.4; }
+.mallog-workspace-meta { font-size: 12px; color: var(--nm-text-secondary); }
+.mallog-audio-inputs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-top: 1px solid var(--nm-border); border-bottom: 1px solid var(--nm-border); background: var(--nm-surface); }
+.mallog-upload-zone { min-height: 258px; padding: 28px 20px; display: flex; justify-content: center; align-items: center; border: none !important; background: transparent !important; border-radius: 0 !important; min-width: 0; box-shadow: none !important; }
+.mallog-upload-zone:hover { background: var(--nm-surface-soft) !important; }
+.mallog-upload-zone p { overflow-wrap: anywhere; word-break: normal; }
+.mallog-change-file { display: inline-block; font-size: 12px; color: var(--nm-accent); margin-top: 6px; }
+.mallog-recorder { border-left: 1px solid var(--nm-border); padding: 26px 22px; min-width: 0; }
+.mallog-recorder > div:first-child { flex-direction: column; align-items: flex-start; gap: 16px; }
+.mallog-recorder button { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; }
+.mallog-recorder .recording-waveform { max-width: 100%; }
+.mallog-conversion-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 24px; }
+.mallog-conversion-options > div { min-width: 0; }
+.mallog-field-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--nm-text-secondary); }
+.mallog-app .nm-input { background: var(--nm-surface); border: 1px solid var(--nm-border); padding: 10px 12px; min-height: 44px; border-radius: 6px; line-height: 1.5; color: var(--nm-text-primary); box-shadow: none; }
+.mallog-app select.nm-input { padding-right: 28px; }
+.mallog-app .nm-raised { background: transparent; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+.mallog-workspace-panel > .nm-raised { padding: 0; }
+.mallog-app .nm-flat { background: var(--nm-surface-soft); border-color: var(--nm-border); box-shadow: none; }
+.mallog-app .nm-concave { background: var(--nm-surface); border: 1px solid var(--nm-border); box-shadow: none; border-radius: 6px; }
+.mallog-app .nm-btn, .mallog-app .action-btn { background: var(--nm-surface); color: var(--nm-text-primary); border: 1px solid var(--nm-border); border-radius: 6px; box-shadow: none; min-height: 38px; }
+.mallog-app .nm-btn-primary { background: #176347; color: white; box-shadow: none; border-radius: 6px; }
+.mallog-app .nm-btn-primary:hover { background: #104e37; }
+.mallog-app .mallog-processing-card { border-radius: 0; background: transparent; box-shadow: none; border-left: 0; border-right: 0; }
+.mallog-app .animate-nm-card-in { animation: none; }
+.mallog-app .text-sm { line-height: 1.6; }
+.mallog-app .break-words { word-break: keep-all; overflow-wrap: anywhere; }
+.mallog-workspace-content textarea { min-width: 0; }
+.mallog-transcribe-action { max-width: 100%; }
+.mallog-term-switch { width: 42px; height: 26px; margin: 7px 6px; padding: 3px; border-radius: 20px; background: var(--nm-border); flex-shrink: 0; }
+.mallog-term-switch span { display: block; background: white; width: 20px; height: 20px; border-radius: 50%; transition: transform .15s; }
+.mallog-term-switch[aria-checked='true'] { background: #187458; }
+.mallog-term-switch[aria-checked='true'] span { transform: translateX(16px); }
+.mallog-footer { border-top: 1px solid var(--nm-border); padding: 24px 0 28px; color: var(--nm-text-secondary); }
+.mallog-footer p > span { min-width: 0; max-width: 100%; }
+.mallog-footer p > span > span:last-child { min-width: 0; }
+
+@media (max-width: 1000px) {
+  .mallog-topbar-inner { padding-left: 24px; padding-right: 24px; }
+  .mallog-main { padding-left: 24px; padding-right: 24px; }
+  .mallog-workspace { grid-template-columns: 180px minmax(0, 1fr); }
+  .mallog-workspace-content { padding-left: 24px; }
+  .mallog-audio-inputs { grid-template-columns: minmax(0, 1fr); }
+  .mallog-upload-zone { min-height: 212px; }
+  .mallog-recorder { border-left: 0; border-top: 1px solid var(--nm-border); }
+  .mallog-recorder > div:first-child { flex-direction: row; align-items: center; flex-wrap: wrap; }
+}
+
+@media (max-width: 700px) {
+  .mallog-topbar-inner { min-height: 60px; padding: 10px 16px; }
+  .mallog-main { padding: 0 16px; }
+  .mallog-main-auth { padding-top: 28px; }
+  .mallog-auth { margin-bottom: 36px; }
+  .mallog-auth-heading h1 { font-size: 24px; }
+  .mallog-workspace { display: block; }
+  .mallog-workspace-nav { position: static; padding: 16px 0 0; border-right: 0; }
+  .mallog-workspace-label { display: none; }
+  .mallog-workspace-nav nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .mallog-nav-full { display: none; }
+  .mallog-nav-short { display: inline; overflow-wrap: normal; }
+  .mallog-workspace-nav nav button { padding: 10px 4px; min-height: 76px; flex-direction: column; gap: 5px; text-align: center; justify-content: flex-start; font-size: 11px; line-height: 1.5; position: relative; }
+  .mallog-workspace-nav nav button .mallog-status-dot { position: absolute; top: 7px; right: 8px; }
+  .mallog-account { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 0; padding: 10px 0; border-top: 0; border-bottom: 1px solid var(--nm-border); }
+  .mallog-account .mallog-free-label, .mallog-account-name, .mallog-account-usage { display: none; }
+  .mallog-account-email { margin: 0; min-width: 0; flex: 1; }
+  .mallog-signout { margin: 0; min-height: 36px; flex-shrink: 0; }
+  .mallog-workspace-content { padding: 24px 0 32px; }
+  .mallog-workspace-heading { gap: 10px; margin-bottom: 20px; }
+  .mallog-workspace-heading h1 { font-size: 22px; }
+  .mallog-workspace-meta { font-size: 11px; }
+  .mallog-recorder { padding: 20px 14px; }
+  .mallog-upload-zone { padding: 24px 14px; }
+  .mallog-conversion-options { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .mallog-app select.nm-input { font-size: 14px; }
+  .mallog-app .nm-input { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mallog-app *, .mallog-app *::before, .mallog-app *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

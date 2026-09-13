@@ -1,536 +1,370 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Platform } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Linking, Platform } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as ExpoLinking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  AUTH_REQUEST_TIMEOUT_MS,
-  AUTH_SESSION_EXPIRES_AT_KEY,
-  AUTH_TOKEN_KEY,
-  OURS_URL,
-  SITE_URL,
-} from "../config";
-import {
-  buildDirectOauthUrl,
-  buildOauthFallbackUser,
-  parseAuthParamsFromUrl,
-  parseJwtExpMs,
-  shouldShowOauthConfigHint,
-} from "../utils/auth";
-import {
-  getFriendlyAuthError,
-  isNetworkFetchError,
-  isTimeoutErrorMessage,
-  requestApi,
-  requestApiWithTimeoutRetry,
-} from "../utils/network";
+import { AUTH_REQUEST_TIMEOUT_MS, AUTH_SESSION_EXPIRES_AT_KEY, AUTH_TOKEN_KEY, OURS_URL, SITE_URL } from "../config";
+import { buildDirectOauthUrl, parseAuthParamsFromUrl, parseJwtExpMs, shouldShowOauthConfigHint } from "../utils/auth";
+import { getFriendlyAuthError, isNetworkFetchError, isTimeoutErrorMessage, requestApi, requestApiWithTimeoutRetry } from "../utils/network";
+import { createSessionScope, sessionEndedError } from "../utils/session";
 import { formatSecondsToHourMinuteSecond } from "../utils/format";
 
 WebBrowser.maybeCompleteAuthSession?.();
 
-function formatAppleFullName(fullName) {
-  if (!fullName) return "";
-  return [
-    fullName.givenName,
-    fullName.middleName,
-    fullName.familyName,
-  ].filter(Boolean).join(" ").trim();
-}
-
-function useLatestRef(value) {
-  const ref = useRef(value);
-  useEffect(() => {
-    ref.current = value;
-  }, [value]);
-  return ref;
-}
-
-export default function useMobileAuth({
-  copy,
-  language,
-  clearMessages,
-  setNotice,
-  setError,
-  onSessionReady,
-  onSessionCleared,
-}) {
-  const [bootLoading, setBootLoading] = useState(true);
+export default function useMobileAuth({ copy, language, clearMessages, setNotice, setError }) {
+  const [status, setStatus] = useState("restoring");
+  const [session, setSession] = useState(null);
+  const [sessionKey, setSessionKey] = useState(0);
   const [authMode, setAuthMode] = useState("login");
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authPasswordConfirm, setAuthPasswordConfirm] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState("");
-  const [authToken, setAuthToken] = useState("");
-  const [authUser, setAuthUser] = useState(null);
-  const [sessionExpiresAtMs, setSessionExpiresAtMs] = useState(0);
   const [sessionNowMs, setSessionNowMs] = useState(Date.now());
   const [usage, setUsage] = useState(null);
   const [usageLoading, setUsageLoading] = useState(false);
+  const [usageLoaded, setUsageLoaded] = useState(false);
+  const latest = useRef({});
+  latest.current = { copy, language, clearMessages, setNotice, setError };
+  const scopeRef = useRef(null);
+  const recoveryRef = useRef(null);
+  const attemptRef = useRef(0);
+  const busyRef = useRef(false);
+  const mountedRef = useRef(true);
+  const storageQueue = useRef(Promise.resolve());
+  const callbackRef = useRef("");
 
-  const copyRef = useLatestRef(copy);
-  const setNoticeRef = useLatestRef(setNotice);
-  const setErrorRef = useLatestRef(setError);
-  const onSessionReadyRef = useLatestRef(onSessionReady);
-  const onSessionClearedRef = useLatestRef(onSessionCleared);
-
-  const isLoggedIn = !!authToken && !!authUser;
-  const sessionRemainingSeconds = sessionExpiresAtMs
-    ? Math.max(0, Math.floor((sessionExpiresAtMs - sessionNowMs) / 1000))
-    : 0;
-  const sessionRemainingLabel = useMemo(() => {
-    if (!sessionExpiresAtMs) return copy.sessionChecking;
-    if (sessionRemainingSeconds <= 0) return copy.sessionExpired;
-    return formatSecondsToHourMinuteSecond(sessionRemainingSeconds);
-  }, [copy.sessionChecking, copy.sessionExpired, sessionExpiresAtMs, sessionRemainingSeconds]);
-
-  useEffect(() => {
-    if (!isLoggedIn || !sessionExpiresAtMs) return undefined;
-    const intervalId = setInterval(() => {
-      setSessionNowMs(Date.now());
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, [isLoggedIn, sessionExpiresAtMs]);
-
-  const warmUpBackend = useCallback(() => {
-    requestApi("/health", { timeoutMs: 15000 }).catch(() => {});
+  // Serialize storage writes: an older login must never overwrite a later logout.
+  const persist = useCallback((operation) => {
+    const next = storageQueue.current.catch(() => {}).then(operation);
+    storageQueue.current = next;
+    return next;
   }, []);
+  const isCurrent = useCallback((attempt) => mountedRef.current && attemptRef.current === attempt, []);
 
-  const fetchUsage = useCallback(async (token = authToken, { quiet = false } = {}) => {
-    if (!token) {
-      setUsage(null);
-      return null;
-    }
-    setUsageLoading(true);
-    try {
-      const data = await requestApi("/api/usage", { token });
-      const normalized = {
-        plan_tier: String(data?.plan_tier || "free"),
-        access_source: String(data?.access_source || ""),
-        used_audio_seconds: Math.max(0, Number(data?.used_audio_seconds) || 0),
-        monthly_limit_seconds:
-          data?.monthly_limit_seconds === null || data?.monthly_limit_seconds === undefined
-            ? null
-            : Math.max(0, Number(data?.monthly_limit_seconds) || 0),
-        remaining_seconds:
-          data?.remaining_seconds === null || data?.remaining_seconds === undefined
-            ? null
-            : Math.max(0, Number(data?.remaining_seconds) || 0),
-        usage_percent: Math.max(0, Math.min(100, Number(data?.usage_percent) || 0)),
-      };
-      setUsage(normalized);
-      return normalized;
-    } catch (error) {
-      if (!quiet) {
-        setError(error.message || copy.errors.usageReadFailed);
-      }
-      return null;
-    } finally {
-      setUsageLoading(false);
-    }
-  }, [authToken, copy.errors.usageReadFailed, setError]);
-
-  const clearAuthState = useCallback(async (message = "") => {
-    setAuthToken("");
-    setAuthUser(null);
-    setSessionExpiresAtMs(0);
-    setSessionNowMs(Date.now());
+  const clearAuthState = useCallback((message = "") => {
+    attemptRef.current += 1;
+    scopeRef.current?.invalidate();
+    scopeRef.current = null;
+    recoveryRef.current = null;
+    busyRef.current = false;
+    setSession(null);
+    setStatus("signedOut");
+    setSessionKey((key) => key + 1);
+    setAuthMode("login");
+    setAuthPassword("");
+    setAuthPasswordConfirm("");
+    setAuthLoading(false);
+    setSocialLoading("");
     setUsage(null);
-    await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
-    await onSessionClearedRef.current?.();
-    if (message) {
-      setNoticeRef.current?.(message);
-    }
-  }, [onSessionClearedRef, setNoticeRef]);
+    setUsageLoaded(false);
+    setUsageLoading(false);
+    latest.current.clearMessages();
+    if (message) latest.current.setNotice(message);
+    return persist(() => AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY])).catch(() => {
+      latest.current.setError(latest.current.copy.errors.sessionStorageFailed);
+    });
+  }, [persist]);
 
-  const hydrateWithToken = useCallback(async (
-    token,
-    {
-      successMessage = "",
-      userHint = null,
-      verifyUser = true,
-      loadWorkspace = false,
-      sessionHintSeconds = 0,
-      sessionHintExpiresAtMs = 0,
-    } = {}
-  ) => {
-    try {
-      const shouldVerifyUser = verifyUser || !userHint;
-      const userData = shouldVerifyUser
-        ? (await requestApiWithTimeoutRetry("/api/auth/me", { token, timeoutMs: AUTH_REQUEST_TIMEOUT_MS }))?.user || null
-        : (userHint || null);
+  const expireSession = useCallback(() => {
+    clearAuthState(latest.current.copy.sessionExpiredNotice);
+  }, [clearAuthState]);
 
-      setAuthToken(token);
-      setAuthUser(userData);
-      await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
-
-      const normalizedHintExpiresAtMs = Math.max(0, Number(sessionHintExpiresAtMs) || 0);
-      const normalizedHintSeconds = Math.max(0, Number(sessionHintSeconds) || 0);
-      const tokenExpMs = parseJwtExpMs(token);
-      const resolvedSessionExpiresAtMs = normalizedHintExpiresAtMs || tokenExpMs || (
-        normalizedHintSeconds > 0 ? Date.now() + (normalizedHintSeconds * 1000) : 0
-      );
-      if (resolvedSessionExpiresAtMs > 0) {
-        setSessionExpiresAtMs(resolvedSessionExpiresAtMs);
-        setSessionNowMs(Date.now());
-        await AsyncStorage.setItem(
-          AUTH_SESSION_EXPIRES_AT_KEY,
-          String(Math.floor(resolvedSessionExpiresAtMs))
-        );
-      }
-
-      if (loadWorkspace) {
-        await onSessionReadyRef.current?.(token);
-      }
-
-      if (successMessage) setNoticeRef.current?.(successMessage);
-      setErrorRef.current?.("");
-    } catch (error) {
-      await clearAuthState("");
-      throw error;
-    }
-  }, [clearAuthState, onSessionReadyRef, setErrorRef, setNoticeRef]);
+  const hydrateWithToken = useCallback(async (token, attempt, hintSeconds = 0, hintExpiresAt = 0) => {
+    if (!isCurrent(attempt)) throw sessionEndedError();
+    const hints = [parseJwtExpMs(token), Number(hintExpiresAt), hintSeconds > 0 ? Date.now() + hintSeconds * 1000 : 0].filter((n) => n > 0);
+    const expiresAt = hints.length ? Math.min(...hints) : 0;
+    if (!expiresAt || expiresAt <= Date.now()) throw new Error(latest.current.copy.sessionExpiredNotice);
+    const data = await requestApiWithTimeoutRetry("/api/auth/me", { token, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+    if (!isCurrent(attempt)) throw sessionEndedError();
+    if (!data?.user?.id) throw new Error(latest.current.copy.errors.socialSessionFailed);
+    if (expiresAt <= Date.now()) throw new Error(latest.current.copy.sessionExpiredNotice);
+    await persist(() => AsyncStorage.multiSet([
+      [AUTH_TOKEN_KEY, token], [AUTH_SESSION_EXPIRES_AT_KEY, String(expiresAt)],
+    ]));
+    if (!isCurrent(attempt)) throw sessionEndedError();
+    const scope = createSessionScope({ token, expiresAt, onExpired: expireSession });
+    scopeRef.current = scope;
+    setSession({ token, user: data.user, expiresAt, scope });
+    setSessionNowMs(Date.now());
+    setSessionKey((key) => key + 1);
+    setStatus("authenticated");
+    setAuthPassword("");
+    latest.current.setError("");
+  }, [expireSession, isCurrent, persist]);
 
   const handleDeepLink = useCallback(async (url) => {
-    const activeCopy = copyRef.current;
-    const { accessToken, oauthError, expiresInSeconds } = parseAuthParamsFromUrl(url);
-
-    if (oauthError) {
-      setErrorRef.current?.(`${activeCopy.errors.socialFailedPrefix}: ${oauthError}`);
-      setSocialLoading("");
-      return;
+    const params = parseAuthParamsFromUrl(url);
+    if (!params.accessToken && !params.oauthError && !params.isRecovery) return false;
+    // Linking and openAuthSessionAsync may deliver the same callback twice.
+    if (callbackRef.current === url) return true;
+    callbackRef.current = url;
+    const cleared = clearAuthState();
+    const attempt = attemptRef.current;
+    await cleared;
+    if (!isCurrent(attempt)) return true;
+    if (params.isRecovery) {
+      recoveryRef.current = params.accessToken ? {
+        token: params.accessToken,
+        expiresAt: parseJwtExpMs(params.accessToken) || (params.expiresInSeconds > 0 ? Date.now() + params.expiresInSeconds * 1000 : 0),
+      } : null;
+      setAuthMode(params.accessToken ? "recovery" : "resetRequest");
+      setStatus("recovery");
+      if (params.oauthError) latest.current.setError(params.oauthError);
+      else latest.current.setNotice(params.accessToken ? latest.current.copy.recoveryReady : latest.current.copy.recoveryRequestHint);
+      return true;
     }
-
-    if (!accessToken) return;
-
+    if (params.oauthError) {
+      latest.current.setError(params.oauthError);
+      return true;
+    }
+    setStatus("verifying");
     try {
-      const userHint = buildOauthFallbackUser();
-      await hydrateWithToken(accessToken, {
-        successMessage: activeCopy.notices.socialLoginDone,
-        userHint,
-        verifyUser: false,
-        loadWorkspace: true,
-        sessionHintSeconds: expiresInSeconds,
-      });
+      await hydrateWithToken(params.accessToken, attempt, params.expiresInSeconds);
+      if (isCurrent(attempt)) latest.current.setNotice(latest.current.copy.notices.socialLoginDone);
     } catch (error) {
-      setErrorRef.current?.(error.message || activeCopy.errors.socialSessionFailed);
-    } finally {
-      setSocialLoading("");
+      if (isCurrent(attempt)) {
+        await clearAuthState();
+        latest.current.setError(error.message || latest.current.copy.errors.socialSessionFailed);
+      }
     }
-  }, [copyRef, hydrateWithToken, setErrorRef]);
+    return true;
+  }, [clearAuthState, hydrateWithToken, isCurrent]);
 
   useEffect(() => {
-    let active = true;
-    warmUpBackend();
-
-    const urlListener = Linking.addEventListener("url", ({ url }) => {
-      handleDeepLink(url);
-    });
-
+    mountedRef.current = true;
+    const attempt = attemptRef.current;
+    const listener = Linking.addEventListener("url", ({ url }) => { handleDeepLink(url).catch(() => {}); });
     (async () => {
       try {
         const initialUrl = await Linking.getInitialURL();
-        const initialAuth = parseAuthParamsFromUrl(initialUrl || "");
-        let consumedOauthToken = false;
-
-        if (initialUrl) {
-          await handleDeepLink(initialUrl);
-          consumedOauthToken = !!initialAuth.accessToken;
+        if (!isCurrent(attempt)) return;
+        if (initialUrl && await handleDeepLink(initialUrl)) return;
+        const entries = await AsyncStorage.multiGet([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
+        if (!isCurrent(attempt)) return;
+        const token = entries[0][1];
+        if (token) await hydrateWithToken(token, attempt, 0, Number(entries[1][1]));
+        else setStatus("signedOut");
+      } catch (error) {
+        if (isCurrent(attempt)) {
+          await clearAuthState();
+          latest.current.setError(error.message || latest.current.copy.errors.socialSessionFailed);
         }
-
-        if (!consumedOauthToken) {
-          const savedToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-          const savedSessionExpiresAt = await AsyncStorage.getItem(AUTH_SESSION_EXPIRES_AT_KEY);
-          const parsedSavedSessionExpiresAt = Math.max(
-            0,
-            parseInt(String(savedSessionExpiresAt || ""), 10) || 0
-          );
-          if (parsedSavedSessionExpiresAt > 0) {
-            setSessionExpiresAtMs(parsedSavedSessionExpiresAt);
-            setSessionNowMs(Date.now());
-          }
-          if (savedToken) {
-            await hydrateWithToken(savedToken, {
-              verifyUser: true,
-              loadWorkspace: true,
-              sessionHintExpiresAtMs: parsedSavedSessionExpiresAt,
-            });
-          }
-        }
-      } catch {
-        await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
-      } finally {
-        if (active) setBootLoading(false);
       }
     })();
-
     return () => {
-      active = false;
-      urlListener?.remove?.();
+      mountedRef.current = false;
+      attemptRef.current += 1;
+      scopeRef.current?.invalidate();
+      listener.remove();
     };
-  }, [handleDeepLink, hydrateWithToken, warmUpBackend]);
+  }, [clearAuthState, handleDeepLink, hydrateWithToken, isCurrent]);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const check = () => {
+      if (session.scope.isActive()) setSessionNowMs(Date.now());
+    };
+    const timer = setInterval(check, 1000);
+    const foreground = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !session.scope.isActive()) return;
+      check();
+      session.scope.request(requestApi, "/api/auth/me").catch(() => {});
+    });
+    return () => { clearInterval(timer); foreground.remove(); };
+  }, [session]);
+
+  const fetchUsage = useCallback(async (token = scopeRef.current?.token, { quiet = false } = {}) => {
+    const scope = scopeRef.current;
+    if (!scope?.isActive() || token !== scope.token) return null;
+    setUsageLoading(true);
+    try {
+      const data = await scope.request(requestApi, "/api/usage");
+      setUsage(data);
+      return data;
+    } catch (error) {
+      if (scope.isActive() && !quiet) latest.current.setError(error.message || latest.current.copy.errors.usageReadFailed);
+      return null;
+    } finally {
+      if (scope.isActive()) { setUsageLoaded(true); setUsageLoading(false); }
+    }
+  }, []);
 
   const handleAuthSubmit = useCallback(async () => {
+    if (busyRef.current || !["login", "signup"].includes(authMode)) return;
     clearMessages();
-
-    if (!authEmail.trim() || !authPassword) {
-      setError(copy.errors.authInputRequired);
-      return;
-    }
-
-    if (authMode === "signup" && authPassword.length < 8) {
-      setError(copy.errors.passwordMin);
-      return;
-    }
-
+    if (!authEmail.trim() || !authPassword) { setError(copy.errors.authInputRequired); return; }
+    if (authMode === "signup" && authPassword.length < 8) { setError(copy.errors.passwordMin); return; }
+    busyRef.current = true;
+    const attempt = ++attemptRef.current;
     setAuthLoading(true);
-
     try {
       const body = new FormData();
       body.append("email", authEmail.trim());
       body.append("password", authPassword);
-      if (authMode === "signup" && authName.trim()) {
-        body.append("full_name", authName.trim());
-      }
-
-      const endpoint = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-      const data = await requestApiWithTimeoutRetry(endpoint, {
-        method: "POST",
-        body,
-        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
-      });
-
+      if (authMode === "signup" && authName.trim()) body.append("full_name", authName.trim());
+      const data = await requestApiWithTimeoutRetry(authMode === "signup" ? "/api/auth/signup" : "/api/auth/login", { method: "POST", body, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      if (!isCurrent(attempt)) return;
       if (data?.access_token) {
-        await onSessionClearedRef.current?.();
-        await hydrateWithToken(data.access_token, {
-          successMessage: authMode === "signup" ? copy.notices.authDoneSignup : copy.notices.authDoneLogin,
-          userHint: data?.user || null,
-          verifyUser: false,
-          loadWorkspace: true,
-          sessionHintSeconds: Number(data?.expires_in) || 0,
-        });
+        setStatus("verifying");
+        await hydrateWithToken(data.access_token, attempt, Number(data.expires_in) || 0);
+        if (isCurrent(attempt)) setNotice(authMode === "signup" ? copy.notices.authDoneSignup : copy.notices.authDoneLogin);
       } else {
         setNotice(data?.message || copy.notices.signupDone);
       }
-
-      setAuthPassword("");
-      if (authMode === "signup") setAuthMode("login");
+      if (isCurrent(attempt)) { setAuthPassword(""); setAuthMode("login"); }
     } catch (error) {
-      setError(getFriendlyAuthError(error.message, copy));
+      if (isCurrent(attempt)) {
+        await clearAuthState();
+        setError(getFriendlyAuthError(error.message, copy));
+      }
     } finally {
-      setAuthLoading(false);
+      if (isCurrent(attempt)) { busyRef.current = false; setAuthLoading(false); }
     }
-  }, [authEmail, authMode, authName, authPassword, clearMessages, copy, hydrateWithToken, onSessionClearedRef, setError, setNotice]);
+  }, [authEmail, authMode, authName, authPassword, clearAuthState, clearMessages, copy, hydrateWithToken, isCurrent, setError, setNotice]);
 
   const handlePasswordResetRequest = useCallback(async () => {
+    if (busyRef.current) return;
     clearMessages();
-    const email = authEmail.trim();
-    if (!email) {
-      setError(copy.errors.recoveryEmailRequired);
-      return;
-    }
-
+    if (!authEmail.trim()) { setError(copy.errors.recoveryEmailRequired); return; }
+    const attempt = ++attemptRef.current;
+    busyRef.current = true;
     setAuthLoading(true);
     try {
       const body = new FormData();
-      body.append("email", email);
-      body.append("redirect_to", language === "en" ? `${SITE_URL}/en/recover` : `${SITE_URL}/recover`);
-      const data = await requestApiWithTimeoutRetry("/api/auth/password-reset/request", {
-        method: "POST",
-        body,
-        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
-      });
-      setNotice(data?.message || copy.notices.passwordResetRequested);
+      body.append("email", authEmail.trim());
+      body.append("redirect_to", language === "en" ? SITE_URL + "/en/recover" : SITE_URL + "/recover");
+      await requestApiWithTimeoutRetry("/api/auth/password-reset/request", { method: "POST", body, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      if (isCurrent(attempt)) setNotice(copy.notices.passwordResetRequested);
     } catch (error) {
-      setError(error?.message || copy.errors.passwordResetFailed);
+      if (isCurrent(attempt)) setError(error.message || copy.errors.passwordResetFailed);
     } finally {
-      setAuthLoading(false);
+      if (isCurrent(attempt)) { busyRef.current = false; setAuthLoading(false); }
     }
-  }, [authEmail, clearMessages, copy.errors.passwordResetFailed, copy.errors.recoveryEmailRequired, copy.notices.passwordResetRequested, language, setError, setNotice]);
+  }, [authEmail, clearMessages, copy, isCurrent, language, setError, setNotice]);
 
-  const handleSocialLogin = useCallback(async (provider) => {
-    if (socialLoading) return;
-
+  const handlePasswordRecovery = useCallback(async () => {
+    if (busyRef.current) return;
     clearMessages();
-    setSocialLoading(provider);
-
-    try {
-      if (provider === "apple" && Platform.OS === "ios") {
-        const available = await AppleAuthentication.isAvailableAsync();
-        if (!available) throw new Error("Sign in with Apple is not available on this device.");
-
-        const credential = await AppleAuthentication.signInAsync({
-          requestedScopes: [
-            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-            AppleAuthentication.AppleAuthenticationScope.EMAIL,
-          ],
-        });
-
-        if (!credential?.identityToken) {
-          throw new Error("Apple identity token was not returned.");
-        }
-
-        const data = await requestApiWithTimeoutRetry("/api/auth/apple", {
-          method: "POST",
-          body: JSON.stringify({
-            identity_token: credential.identityToken,
-            authorization_code: credential.authorizationCode || "",
-            user_identifier: credential.user || "",
-            email: credential.email || "",
-            full_name: formatAppleFullName(credential.fullName),
-          }),
-          timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
-        });
-
-        const token = data?.access_token || "";
-        if (!token) throw new Error(copy.errors.socialSessionFailed);
-
-        await onSessionClearedRef.current?.();
-        await hydrateWithToken(token, {
-          successMessage: copy.notices.socialLoginDone,
-          userHint: data?.user || null,
-          verifyUser: false,
-          loadWorkspace: true,
-          sessionHintSeconds: data?.expires_in || 0,
-        });
-        setSocialLoading("");
-        return;
-      }
-
-      const redirectTo = ExpoLinking.createURL("auth-callback");
-      const path = `/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`;
-      const directOauthUrl = buildDirectOauthUrl(provider, redirectTo);
-      let oauthUrl = "";
-      try {
-        const data = await requestApiWithTimeoutRetry(path, { timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
-        oauthUrl = data?.auth_url || "";
-      } catch (oauthUrlError) {
-        if (
-          directOauthUrl &&
-          (isTimeoutErrorMessage(oauthUrlError?.message || "") || isNetworkFetchError(oauthUrlError))
-        ) {
-          oauthUrl = directOauthUrl;
-        } else {
-          throw oauthUrlError;
-        }
-      }
-      if (!oauthUrl) throw new Error(copy.errors.oauthUrlCreate);
-
-      const authResult = await WebBrowser.openAuthSessionAsync(oauthUrl, redirectTo, {
-        preferEphemeralSession: false,
-      });
-      if (authResult?.type === "success" && authResult?.url) {
-        await handleDeepLink(authResult.url);
-      } else if (authResult?.type === "cancel" || authResult?.type === "dismiss") {
-        setSocialLoading("");
-      } else {
-        throw new Error(copy.errors.openLoginUrl);
-      }
-      setSocialLoading("");
-    } catch (error) {
-      if (provider === "apple" && error?.code === "ERR_REQUEST_CANCELED") {
-        setSocialLoading("");
-        return;
-      }
-      const rawMessage = error?.message || copy.errors.socialStartFailed;
-      const withHint = shouldShowOauthConfigHint(rawMessage)
-        ? `${rawMessage}\n(Config check required: backend OAUTH_REDIRECT_ALLOW_SCHEMES / Supabase Redirect URL)`
-        : rawMessage;
-      setError(withHint);
-      setSocialLoading("");
-    }
-  }, [
-    clearMessages,
-    copy.errors.oauthUrlCreate,
-    copy.errors.openLoginUrl,
-    copy.errors.socialSessionFailed,
-    copy.errors.socialStartFailed,
-    copy.notices.socialLoginDone,
-    handleDeepLink,
-    hydrateWithToken,
-    onSessionClearedRef,
-    setError,
-    socialLoading,
-  ]);
-
-  const handleLogout = useCallback(async () => {
-    clearMessages();
-    await clearAuthState(copy.notices.loggedOut);
-  }, [clearAuthState, clearMessages, copy.notices.loggedOut]);
-
-  const openExternalUrl = useCallback(async (url, fallbackMessage) => {
-    if (!url) throw new Error(fallbackMessage || copy.errors.openExternalFailed);
-    const supported = await Linking.canOpenURL(url);
-    if (!supported) throw new Error(fallbackMessage || copy.errors.openExternalFailed);
-    await Linking.openURL(url);
-  }, [copy.errors.openExternalFailed]);
-
-  const handleOpenOurs = useCallback(async () => {
-    try {
-      await openExternalUrl(OURS_URL, copy.errors.openExternalFailed);
-    } catch (error) {
-      setError(error.message || copy.errors.openExternalFailed);
-    }
-  }, [copy.errors.openExternalFailed, openExternalUrl, setError]);
-
-  const handleDeleteAccount = useCallback(async () => {
-    clearMessages();
-    if (!isLoggedIn) {
-      setError(copy.errors.authRequired);
+    const recovery = recoveryRef.current;
+    if (!recovery?.token || !recovery.expiresAt || recovery.expiresAt <= Date.now()) {
+      recoveryRef.current = null;
+      setAuthMode("resetRequest");
+      setError(copy.sessionExpiredNotice);
       return;
     }
-
+    if (authPassword.length < 8) { setError(copy.errors.passwordMin); return; }
+    if (authPassword !== authPasswordConfirm) { setError(copy.passwordMismatch); return; }
+    const attempt = ++attemptRef.current;
+    busyRef.current = true;
     setAuthLoading(true);
     try {
-      const data = await requestApi("/api/auth/account", {
-        method: "DELETE",
-        token: authToken,
-        timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
-      });
-      await clearAuthState(data?.message || copy.notices.accountDeleted);
+      const body = new FormData();
+      body.append("new_password", authPassword);
+      await requestApi("/api/auth/password-reset/confirm", { method: "POST", token: recovery.token, body, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      // Recovery credentials never become a workspace session, even if the API returns a token.
+      if (isCurrent(attempt)) await clearAuthState(copy.recoveryComplete);
     } catch (error) {
-      setError(error.message || copy.errors.accountDeleteFailed);
+      if (isCurrent(attempt)) setError(error.message || copy.errors.passwordResetFailed);
     } finally {
-      setAuthLoading(false);
+      if (isCurrent(attempt)) { busyRef.current = false; setAuthLoading(false); }
     }
-  }, [
-    authToken,
-    clearAuthState,
-    clearMessages,
-    copy.errors.accountDeleteFailed,
-    copy.errors.authRequired,
-    copy.notices.accountDeleted,
-    isLoggedIn,
-    setError,
-  ]);
+  }, [authPassword, authPasswordConfirm, clearAuthState, clearMessages, copy, isCurrent, setError]);
+
+  const changeAuthMode = useCallback((mode) => {
+    if (busyRef.current) return;
+    recoveryRef.current = null;
+    setAuthPassword("");
+    setAuthPasswordConfirm("");
+    setAuthMode(mode);
+    setStatus("signedOut");
+    clearMessages();
+  }, [clearMessages]);
+
+  const handleSocialLogin = useCallback(async (provider) => {
+    if (busyRef.current || !["login", "signup"].includes(authMode)) return;
+    clearMessages();
+    const attempt = ++attemptRef.current;
+    busyRef.current = true;
+    setSocialLoading(provider);
+    callbackRef.current = "";
+    try {
+      if (provider === "apple" && Platform.OS === "ios") {
+        if (!(await AppleAuthentication.isAvailableAsync())) throw new Error(copy.errors.socialStartFailed);
+        if (!isCurrent(attempt)) return;
+        const credential = await AppleAuthentication.signInAsync({ requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL] });
+        if (!isCurrent(attempt)) return;
+        if (!credential?.identityToken) throw new Error(copy.errors.socialSessionFailed);
+        const fullName = credential.fullName || {};
+        const data = await requestApiWithTimeoutRetry("/api/auth/apple", {
+          method: "POST", timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+          body: JSON.stringify({ identity_token: credential.identityToken, authorization_code: credential.authorizationCode || "", user_identifier: credential.user || "", email: credential.email || "", full_name: [fullName.givenName, fullName.middleName, fullName.familyName].filter(Boolean).join(" ") }),
+        });
+        if (!isCurrent(attempt)) return;
+        setStatus("verifying");
+        await hydrateWithToken(data?.access_token, attempt, Number(data?.expires_in) || 0);
+        if (isCurrent(attempt)) setNotice(copy.notices.socialLoginDone);
+        return;
+      }
+      const redirectTo = ExpoLinking.createURL("auth-callback");
+      let oauthUrl = "";
+      try {
+        const data = await requestApiWithTimeoutRetry("/api/auth/oauth-url?provider=" + encodeURIComponent(provider) + "&redirect_to=" + encodeURIComponent(redirectTo), { timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+        oauthUrl = data?.auth_url || "";
+      } catch (error) {
+        const fallback = buildDirectOauthUrl(provider, redirectTo);
+        if (fallback && (isTimeoutErrorMessage(error.message) || isNetworkFetchError(error))) oauthUrl = fallback;
+        else throw error;
+      }
+      if (!isCurrent(attempt)) return;
+      if (!oauthUrl) throw new Error(copy.errors.oauthUrlCreate);
+      const result = await WebBrowser.openAuthSessionAsync(oauthUrl, redirectTo, { preferEphemeralSession: false });
+      if (isCurrent(attempt) && result?.type === "success" && result.url) await handleDeepLink(result.url);
+    } catch (error) {
+      if (isCurrent(attempt) && error?.code !== "ERR_REQUEST_CANCELED") {
+        await clearAuthState();
+        const message = error.message || copy.errors.socialStartFailed;
+        setError(shouldShowOauthConfigHint(message) ? message + "\n(Config check: OAuth redirect allowlist)" : message);
+      }
+    } finally {
+      if (isCurrent(attempt)) { busyRef.current = false; setSocialLoading(""); }
+    }
+  }, [authMode, clearAuthState, clearMessages, copy, handleDeepLink, hydrateWithToken, isCurrent, setError, setNotice]);
+
+  const handleDeleteAccount = useCallback(async () => {
+    const scope = scopeRef.current;
+    if (!scope?.isActive() || busyRef.current) return;
+    busyRef.current = true;
+    setAuthLoading(true);
+    try {
+      await scope.request(requestApi, "/api/auth/account", { method: "DELETE", timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      await clearAuthState(latest.current.copy.notices.accountDeleted);
+    } catch (error) {
+      if (scope.isActive()) latest.current.setError(error.message || latest.current.copy.errors.accountDeleteFailed);
+    } finally {
+      if (scope.isActive()) { busyRef.current = false; setAuthLoading(false); }
+    }
+  }, [clearAuthState]);
+
+  const handleOpenOurs = useCallback(async () => {
+    try { await Linking.openURL(OURS_URL); }
+    catch (error) { setError(error.message || copy.errors.openExternalFailed); }
+  }, [copy.errors.openExternalFailed, setError]);
 
   return {
-    bootLoading,
-    authMode,
-    setAuthMode,
-    authName,
-    setAuthName,
-    authEmail,
-    setAuthEmail,
-    authPassword,
-    setAuthPassword,
-    authLoading,
-    socialLoading,
-    authToken,
-    authUser,
-    isLoggedIn,
-    sessionExpiresAtMs,
-    sessionRemainingLabel,
-    usage,
-    usageLoading,
-    fetchUsage,
-    handleAuthSubmit,
-    handlePasswordResetRequest,
-    handleSocialLogin,
-    handleLogout,
-    handleOpenOurs,
-    handleDeleteAccount,
-    clearAuthState,
+    status, sessionKey, sessionScope: session?.scope || null,
+    bootLoading: status === "restoring" || status === "verifying",
+    authMode, setAuthMode: changeAuthMode, authName, setAuthName, authEmail, setAuthEmail,
+    authPassword, setAuthPassword, authPasswordConfirm, setAuthPasswordConfirm, authLoading, socialLoading,
+    authToken: session?.token || "", authUser: session?.user || null,
+    isLoggedIn: status === "authenticated" && Boolean(session),
+    sessionExpiresAtMs: session?.expiresAt || 0,
+    sessionRemainingLabel: session ? formatSecondsToHourMinuteSecond(Math.max(0, Math.floor((session.expiresAt - sessionNowMs) / 1000))) : copy.sessionChecking,
+    usage, usageLoading, usageLoaded, fetchUsage, handleAuthSubmit, handlePasswordResetRequest,
+    handlePasswordRecovery, handleSocialLogin, handleDeleteAccount, handleOpenOurs, clearAuthState,
+    handleLogout: () => clearAuthState(copy.notices.loggedOut),
   };
 }

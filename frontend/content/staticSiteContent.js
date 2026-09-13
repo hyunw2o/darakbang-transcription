@@ -177,7 +177,7 @@ export const LEGAL_PAGES = {
           body: [
             'mallog24는 웹, Android, iOS에서 유료 요금제, 정기 구독 및 인앱결제를 운영하지 않습니다.',
             '로그인 사용자는 서비스의 전체 변환 기능을 무료로 이용할 수 있습니다.',
-            '비로그인 체험에는 시스템 남용 방지를 위한 파일 길이와 누적 사용량 제한이 적용될 수 있습니다.',
+            '녹음, 파일 업로드, 음성 변환 및 기록 관리는 로그인한 사용자에게 제공됩니다. 이용 안내, 계정 복구 및 법적 고지는 로그인 없이 확인할 수 있습니다.',
             '운영 비용과 시스템 용량에 따라 무료 제공 범위가 변경되는 경우 시행 전에 서비스 화면을 통해 안내합니다.',
           ],
         },
@@ -394,7 +394,7 @@ export const LEGAL_PAGES = {
           body: [
             'mallog24 does not offer paid plans, recurring subscriptions, or in-app purchases on web, Android, or iOS.',
             'Signed-in users can use the full transcription workflow for free.',
-            'Guest access may have file-length and cumulative limits to prevent system abuse.',
+            'Recording, file uploads, transcription, and record management require sign-in. Guides, account recovery, and legal notices remain publicly accessible.',
             'If operating costs or capacity require a material change to free access, notice will be provided in the service before it takes effect.',
           ],
         },

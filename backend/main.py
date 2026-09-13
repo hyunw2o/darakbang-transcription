@@ -181,7 +181,8 @@ DEBATE_CONTEXT_HINTS = (
 )
 # 결제 기능 종료 이후 로그인 계정은 사용량을 기록만 하고 변환을 제한하지 않는다.
 MONETIZATION_ENABLED = False
-GUEST_TRANSCRIPTION_ENABLED = os.getenv("GUEST_TRANSCRIPTION_ENABLED", "true").strip().lower() == "true"
+# Retained for historical guest jobs; new API requests always require login.
+GUEST_TRANSCRIPTION_ENABLED = False
 GUEST_MONTHLY_LIMIT_SECONDS = max(60, int(os.getenv("GUEST_MONTHLY_LIMIT_SECONDS", "1800")))
 GUEST_MAX_AUDIO_SECONDS = max(60, int(os.getenv("GUEST_MAX_AUDIO_SECONDS", "600")))
 GUEST_INLINE_MAX_AUDIO_SECONDS = max(
@@ -323,31 +324,73 @@ FORCE_GC_AFTER_TRANSCRIPTION = (os.getenv("FORCE_GC_AFTER_TRANSCRIPTION", "true"
 
 app = FastAPI(title="말로그24 API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOW_ORIGINS if not CORS_ALLOW_ORIGIN_REGEX else [],
-    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "X-Guest-Session-Id",
-        "X-Mallog24-Upload-Id",
-    ],
+LOGIN_REQUIRED_API_PATHS = (
+    "/api/transcribe",
+    "/api/status",
+    "/api/history",
+    "/api/usage",
+    "/api/glossary",
+    "/api/records",
+    "/api/corrections",
+    "/api/summarize",
+    "/api/auth/me",
+    "/api/auth/bootstrap",
+    "/api/auth/account",
 )
+
+
+def _requires_login(path: str) -> bool:
+    return any(path == root or path.startswith(f"{root}/") for root in LOGIN_REQUIRED_API_PATHS)
+
+
+def _has_trusted_cookie_origin(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    if origin is None:
+        try:
+            referer = urllib.parse.urlsplit(request.headers.get("referer") or "")
+        except ValueError:
+            return False
+        origin = f"{referer.scheme}://{referer.netloc}" if referer.scheme and referer.netloc else ""
+    if not origin or origin == "null":
+        return False
+    return (
+        origin == f"{request.url.scheme}://{request.url.netloc}"
+        or (
+            bool(re.fullmatch(CORS_ALLOW_ORIGIN_REGEX, origin))
+            if CORS_ALLOW_ORIGIN_REGEX else origin in CORS_ALLOW_ORIGINS
+        )
+    )
 
 
 @app.middleware("http")
 async def attach_auth_cookie_to_authorization(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    requires_login = _requires_login(request.url.path)
+    uses_session_auth = requires_login or request.url.path.rstrip("/") in {
+        "/api/auth/session", "/api/auth/logout", "/api/auth/password-reset/confirm",
+    }
+    if not uses_session_auth:
+        return await call_next(request)
+
+    authorization = request.headers.get("authorization")
     cookie_token = (request.cookies.get(AUTH_COOKIE_NAME) or "").strip()
-    has_authorization = bool(request.headers.get("authorization"))
-    has_guest_session = bool((request.headers.get("x-guest-session-id") or "").strip())
-    guest_capable_path = request.url.path == "/api/transcribe" or request.url.path.startswith("/api/status/")
-    if cookie_token and not has_authorization and not (has_guest_session and guest_capable_path):
-        headers = list(request.scope.get("headers") or [])
-        headers.append((b"authorization", f"Bearer {cookie_token}".encode("utf-8")))
-        request.scope["headers"] = headers
+    try:
+        if cookie_token and authorization is not None:
+            _extract_bearer_token(authorization)
+        if cookie_token and authorization is None:
+            if request.method not in {"GET", "HEAD"} and not _has_trusted_cookie_origin(request):
+                raise HTTPException(status_code=403, detail="Cookie-authenticated requests require a trusted Origin or Referer.")
+            authorization = f"Bearer {cookie_token}"
+            headers = list(request.scope.get("headers") or [])
+            headers.append((b"authorization", authorization.encode("utf-8")))
+            request.scope["headers"] = headers
+        # Authenticate before multipart parsing, schema checks, storage or ASR work.
+        if requires_login:
+            await _get_current_user(authorization)
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
     return await call_next(request)
 
 # Gemini 설정
@@ -1008,22 +1051,12 @@ async def _resolve_transcription_owner(
     guest_session_id: str | None,
     request: Request | None,
 ) -> dict:
-    if authorization:
-        user = await _get_current_user(authorization)
-        return {
-            "owner_id": user["id"],
-            "user": user,
-            "is_guest": False,
-            "usage_snapshot": None,
-        }
-
-    guest_id = _normalize_guest_session_id(guest_session_id)
-    owner_id = _guest_owner_id(guest_id)
+    user = await _get_current_user(authorization)
     return {
-        "owner_id": owner_id,
-        "user": None,
-        "is_guest": True,
-        "usage_snapshot": _build_guest_usage_snapshot(owner_id),
+        "owner_id": user["id"],
+        "user": user,
+        "is_guest": False,
+        "usage_snapshot": None,
     }
 
 
@@ -1467,6 +1500,23 @@ async def security_middleware(request: Request, call_next):
     response = await call_next(request)
     _apply_security_headers(response, request.url.scheme)
     return response
+
+
+# Keep CORS outside the authentication boundary so browsers can read 401/403s.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOW_ORIGINS if not CORS_ALLOW_ORIGIN_REGEX else [],
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Guest-Session-Id",
+        "X-Mallog24-Client-Platform",
+        "X-Mallog24-Upload-Id",
+    ],
+)
 
 
 def _is_allowed_redirect_host(hostname: str | None) -> bool:
@@ -8498,7 +8548,7 @@ async def get_task_status(
     if task_id in task_status:
         status = task_status[task_id]
         owner_id = task_owner.get(task_id)
-        if owner_id is not None and owner_id != user_id:
+        if owner_id != user_id:
             return {"task_id": task_id, "status": "not_found"}
         if status == "processing" or status == "queued":
             updated_ts = float(task_updated_at.get(task_id) or 0)
@@ -8794,15 +8844,16 @@ async def get_usage(
 
 @app.get("/api/guest/usage")
 async def get_guest_usage(x_guest_session_id: str | None = Header(default=None)):
-    """비로그인 체험 사용량 조회"""
-    if not GUEST_TRANSCRIPTION_ENABLED:
-        raise HTTPException(status_code=404, detail="Not Found")
-    guest_id = _normalize_guest_session_id(x_guest_session_id)
-    owner_id = _guest_owner_id(guest_id)
-    return {
-        "success": True,
-        **_build_guest_usage_snapshot(owner_id),
-    }
+    """Legacy clients must sign in and switch to /api/usage."""
+    return JSONResponse(
+        status_code=401,
+        content={
+            "detail": "로그인이 필요합니다. 비로그인 체험은 종료되었습니다. 로그인 후 무료로 이용해 주세요.",
+            "code": "authentication_required",
+            "login_required": True,
+            "guest_transcription_enabled": False,
+        },
+    )
 
 
 async def _read_optional_json_payload(request: Request) -> dict:

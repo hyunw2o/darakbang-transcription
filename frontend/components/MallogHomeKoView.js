@@ -2,14 +2,14 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import HeaderMenuControls from './HeaderMenuControls'
-import MallogLandingSections from './MallogLandingSections'
+import MallogAuthPanel from './MallogAuthPanel'
+import MallogWorkspaceNav from './MallogWorkspaceNav'
+import { AudioLines, Check, Upload, Mic, Square, X } from 'lucide-react'
 import Mallog24Logo from './Mallog24Logo'
 import MicrophoneInputControl from './MicrophoneInputControl'
 import RecordingWaveform from './RecordingWaveform'
-import SocialProviderButton from './SocialProviderButton'
 import StepIndicator from './StepIndicator'
 import UserGlossaryPanel from './UserGlossaryPanel'
-import { KO_MALLOG_LANDING_CONTENT } from '../content/mallogLandingContent'
 import { formatSecondsCompact, formatSecondsToHourMinute } from '../utils/format'
 import {
   getTranscriptionProgressText,
@@ -164,9 +164,6 @@ export default function MallogHomeKoView(props) {
     activeRecordingDeviceLabel,
     recordingInputState,
     fileInputRef,
-    isGuestMode,
-    guestTranscribeHint,
-    guestTranscribeStart,
     isFreeTier,
     monthlyLimitSeconds,
     remainingQuotaSeconds,
@@ -213,31 +210,25 @@ export default function MallogHomeKoView(props) {
     handleSubmit,
   } = props
 
-  const [isScrolled, setIsScrolled] = useState(false)
-
+  const [activeTab, setActiveTab] = useState('convert')
+  const accessEnabled = Boolean(props.accessEnabled)
+  const selectTab = (tab) => {
+    setActiveTab(tab)
+    if (tab === 'history') setShowHistory(true)
+    if (tab === 'records') setShowRecords(true)
+  }
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 8)
-    handleScroll()
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+    if (!accessEnabled) setActiveTab('convert')
+  }, [accessEnabled])
 
-  const navItems = authToken
-    ? [
-        { label: '무료 이용', href: SERVICE_INFO_URL },
-        { label: '사용 가이드', href: '/guides' },
-        { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
-        { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
-        { label: '회사 소개', href: OURS_URL, external: true },
-      ]
-    : [
-        { label: '기능', href: '#features' },
-        { label: '결과 예시', href: '#preview' },
-        { label: '무료 이용', href: '#access' },
-        { label: '사용 가이드', href: '/guides' },
-        { label: 'Android 다운로드', href: APP_DOWNLOAD_URL, external: true },
-        { label: IOS_APP_STORE_URL ? 'iOS 다운로드' : 'iOS 심사 중', href: IOS_APP_STORE_URL || '#app-download', external: Boolean(IOS_APP_STORE_URL) },
-      ]
+  const navItems = [
+    { label: '사용 가이드', href: '/guides' },
+    { label: '무료 이용 안내', href: SERVICE_INFO_URL },
+    { label: 'Android', href: APP_DOWNLOAD_URL, external: true },
+    { label: 'iOS', href: IOS_APP_STORE_URL, external: true },
+  ].filter(item => item.href)
+  const tabTitles = {"convert":"새 변환","history":"변환 기록","records":"저장 기록","glossary":"사용자 용어집"}
+
   const footerBusinessRows = [
     [`상호: ${BUSINESS_NAME}`, `대표: ${REPRESENTATIVE_NAME}`, `사업자등록번호: ${BUSINESS_REG_NUMBER}`, `통신판매신고번호: ${ECOMMERCE_REG_NUMBER}`],
     [`사업장주소: ${BUSINESS_ADDRESS}`, LANDLINE_PHONE ? `대표자 전화번호: ${LANDLINE_PHONE}` : '', `비즈니스 문의 이메일: ${SUPPORT_EMAIL}`],
@@ -250,24 +241,9 @@ export default function MallogHomeKoView(props) {
     currentStep <= 1 ? 'uploading' : currentStep === 2 ? 'queued' : 'correcting_text'
   )
   const processingStatusText = getTranscriptionProgressText(normalizedProcessingProgress, 'ko')
-  const isAuthPage = authPageMode === 'recover'
-  const isRecoverMode = authMode === 'recover'
-  const isResetPasswordMode = authMode === 'reset_password'
-  const isRecoveryOnlyView = isAuthPage || isResetPasswordMode
-  const shouldShowAuthForm = !authToken || isResetPasswordMode
-  const authCardTitle = isResetPasswordMode
-    ? '새 비밀번호를 설정하세요.'
-    : isRecoverMode
-      ? '아이디/비밀번호 찾기'
-      : '로그인 후 바로 파일 업로드를 시작하세요.'
-  const authCardSubcopy = isResetPasswordMode
-    ? '메일 링크 인증이 완료되었습니다. 새 비밀번호를 저장하면 다시 로그인할 수 있습니다.'
-    : isRecoverMode
-      ? '아이디는 가입에 사용한 이메일입니다. 이메일을 입력하면 재설정 안내를 보내드립니다. 가입 이메일을 기억하지 못하면 ours113814@gmail.com으로 문의해 주세요.'
-      : '이메일 또는 Apple/Google/Kakao로 1분 안에 시작할 수 있습니다.'
 
   return (
-    <div className="min-h-screen pb-12">
+    <div className="mallog-app min-h-screen">
       <Head>
         <title>mallog24 - AI Speech to Text</title>
         <meta
@@ -295,26 +271,12 @@ export default function MallogHomeKoView(props) {
         <meta name="twitter:image" content={OG_IMAGE_URL} />
       </Head>
 
-      <header
-        className={`sticky top-0 z-50 border-b transition-all duration-200 ${
-          isScrolled || authToken
-            ? darkMode
-              ? 'border-white/10 bg-[rgba(17,17,16,0.84)] backdrop-blur-xl'
-              : 'border-black/[0.08] bg-[rgba(249,248,246,0.88)] backdrop-blur-xl'
-            : 'border-transparent bg-transparent'
-        }`}
-      >
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <a
-              href={OURS_URL}
-              className="text-sm font-semibold text-[#6B6860] transition hover:text-[#1A1916] dark:text-white/60 dark:hover:text-white whitespace-nowrap"
-            >
-              OURS
-            </a>
-            <span className="text-black/20 dark:text-white/20">/</span>
-            <Mallog24Logo className="h-[18px] w-auto shrink-0" />
-          </div>
+      <header className="mallog-topbar">
+        <div className="mallog-topbar-inner">
+          <Link href={homeHref} className="mallog-brand" aria-label="mallog24">
+            <img src="/mallog24-app-icon.png" width="30" height="30" alt="" />
+            <Mallog24Logo className="h-6 w-auto" />
+          </Link>
           <HeaderMenuControls
             darkMode={darkMode}
             setDarkMode={setDarkMode}
@@ -328,232 +290,20 @@ export default function MallogHomeKoView(props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
-        {!authToken && !isRecoveryOnlyView && (
-          <MallogLandingSections
-            locale="kr"
-            content={KO_MALLOG_LANDING_CONTENT}
-            serviceInfoUrl={SERVICE_INFO_URL}
-            oursUrl={OURS_URL}
-            stats={landingStats}
-            appDownloadUrl={APP_DOWNLOAD_URL}
-            iosAppDownloadUrl={IOS_APP_STORE_URL}
-            darkMode={darkMode}
-          />
-        )}
-
-        {/* 인증 카드 */}
-        <div id="auth-card" className={`nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in scroll-mt-20 ${shouldShowAuthForm ? 'max-w-2xl mx-auto' : ''} ${isRecoveryOnlyView ? 'mt-8 sm:mt-14' : ''}`}>
-          {shouldShowAuthForm ? (
-            <>
-              <div className="mb-4">
-                <p className="text-base font-bold text-nm-text-primary">{authCardTitle}</p>
-                <p className="mt-1 text-xs text-nm-text-secondary">{authCardSubcopy}</p>
-                {!isRecoverMode && !isResetPasswordMode && (
-                  <div className="nm-segment-group mt-3">
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('login')}
-                    className={`nm-segment-item ${authMode === 'login' ? 'active' : ''}`}
-                  >
-                    로그인
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('signup')}
-                    className={`nm-segment-item ${authMode === 'signup' ? 'active' : ''}`}
-                  >
-                    회원가입
-                  </button>
-                  </div>
-                )}
+      <main className={accessEnabled ? 'mallog-main' : 'mallog-main mallog-main-auth'}>
+        {!accessEnabled ? (
+          <MallogAuthPanel {...props} />
+        ) : (
+          <div className="mallog-workspace">
+            <MallogWorkspaceNav locale="ko" activeTab={activeTab} onChange={selectTab} authUser={authUser} usage={usage} handleLogout={handleLogout} busy={loading || recordingState !== 'idle'} />
+            <div className="mallog-workspace-content">
+              <div className="mallog-workspace-heading">
+                <h1>{tabTitles[activeTab]}</h1>
+                <span className="mallog-workspace-meta">{loading ? '변환 진행 중' : '로그인 전용 · 무료'}</span>
               </div>
-
-              <form onSubmit={handleAuthSubmit} className="space-y-3">
-                {authMode === 'signup' && !isResetPasswordMode && (
-                  <input
-                    type="text"
-                    value={authName}
-                    onChange={(e) => setAuthName(e.target.value)}
-                    placeholder="이름"
-                    className="w-full nm-input"
-                  />
-                )}
-                {!isResetPasswordMode && (
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    placeholder="이메일"
-                    required
-                    className="w-full nm-input"
-                  />
-                )}
-                {!isRecoverMode && (
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    placeholder={isResetPasswordMode ? '새 비밀번호 (8자 이상)' : '비밀번호 (8자 이상)'}
-                    required
-                    minLength={8}
-                    className="w-full nm-input"
-                  />
-                )}
-                {isResetPasswordMode && (
-                  <input
-                    type="password"
-                    value={authPasswordConfirm}
-                    onChange={(e) => setAuthPasswordConfirm(e.target.value)}
-                    placeholder="새 비밀번호 확인"
-                    required
-                    minLength={8}
-                    className="w-full nm-input"
-                  />
-                )}
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full nm-btn-primary py-2.5 text-sm font-semibold"
-                >
-                  {authLoading
-                    ? '처리 중...'
-                    : isRecoverMode
-                      ? '재설정 메일 보내기'
-                      : isResetPasswordMode
-                        ? '새 비밀번호 저장'
-                        : authMode === 'signup'
-                          ? '회원가입하기'
-                          : '로그인하기'}
-                </button>
-              </form>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs font-semibold text-nm-text-secondary">
-                {authMode === 'login' && (
-                  <Link href={recoveryHref || '/recover'} className="text-nm-accent">
-                    아이디/비밀번호 찾기
-                  </Link>
-                )}
-                {(isRecoverMode || isResetPasswordMode) && (
-                  isRecoveryOnlyView ? (
-                    <Link href={homeHref || '/'} className="text-nm-accent">
-                      로그인으로 돌아가기
-                    </Link>
-                  ) : (
-                    <button type="button" onClick={() => setAuthMode('login')} className="text-nm-accent">
-                    로그인으로 돌아가기
-                    </button>
-                  )
-                )}
-              </div>
-              {!isRecoverMode && !isResetPasswordMode && (
-                <div className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  {socialProviders.map((provider) => (
-                    <SocialProviderButton
-                      key={provider.key}
-                      onClick={() => handleSocialLogin(provider.key)}
-                      disabled={authLoading || Boolean(socialLoading)}
-                      provider={provider.key}
-                      label={provider.label}
-                      loadingLabel={socialLoading === provider.key ? '이동 중...' : ''}
-                    />
-                  ))}
-                </div>
-                </div>
-              )}
-              {error && (
-                <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-red-500 animate-slide-up">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
-              )}
-              {notice && (
-                <div className="mt-4 nm-concave p-3.5 border-l-[3px] border-l-blue-500 animate-slide-up">
-                  <p className="text-sm text-nm-accent">{notice}</p>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <p className="text-xs text-nm-text-secondary">로그인 사용자</p>
-                <p className="text-sm font-semibold text-nm-text-primary">
-                  {authUser?.email || '인증된 사용자'}
-                </p>
-                <p className="text-[11px] text-nm-text-secondary mt-1">
-                  세션 남은 시간: {sessionRemainingLabel}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="nm-btn inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-nm-text-primary"
-              >
-                로그아웃
-              </button>
-              {isRecoveryOnlyView && (
-                <Link
-                  href={homeHref || '/'}
-                  className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
-                >
-                  mallog24 시작하기
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-
-        {!isRecoveryOnlyView && (authToken || isGuestMode) && (
-          <>
-            {usage && (
-              <div className="nm-raised p-4 sm:p-5 mb-5 animate-nm-card-in">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-nm-text-secondary">
-                      {isGuestMode ? '비로그인 체험 사용량' : '이번 달 사용량'}
-                    </p>
-                    <p className="text-sm font-semibold text-nm-text-primary">
-                      {isFreeTier
-                        ? `${formatSecondsToHourMinute(usage.used_audio_seconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
-                        : `${formatSecondsToHourMinute(usage.used_audio_seconds)} / 무제한`}
-                    </p>
-                    {isFreeTier && (
-                      <p className="text-[11px] text-nm-text-secondary mt-1">
-                        남은 시간: {formatSecondsToHourMinute(remainingQuotaSeconds)}
-                      </p>
-                    )}
-                  </div>
-                  {isGuestMode ? (
-                    <a
-                      href="#auth-card"
-                      className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold"
-                    >
-                      로그인하고 무료로 계속 사용하기
-                    </a>
-                  ) : (
-                    <span className="nm-btn-primary inline-flex items-center justify-center px-4 py-2 text-xs font-semibold">
-                      무료 이용 중
-                    </span>
-                  )}
-                </div>
-                {isFreeTier && (
-                  <div className="mt-3 h-2 rounded-full nm-concave overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-nm-accent transition-all duration-500"
-                      style={{ width: `${Math.min(100, usage.usage_percent || 0)}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="nm-flat p-4 mb-5 animate-nm-card-in">
-              <p className="text-xs sm:text-sm text-nm-accent font-medium leading-relaxed">
-                mallog24는 공식적으로 배포된 음성 파일의 사용을 권장합니다.
-                <span className="block mt-1">
-                  비정상적이거나 권한 없는 방식으로 사용하다가 외부에 적발되는 경우, 그에 따른 법적 책임은 사용자에게 있습니다.
-                </span>
-              </p>
-            </div>
+              {activeTab !== 'convert' && error && <p role="alert" className="mallog-feedback mallog-feedback-error">{error}</p>}
+              {activeTab !== 'convert' && notice && <p role="status" className="mallog-feedback">{notice}</p>}
+              <section hidden={activeTab !== 'glossary'} aria-label={tabTitles.glossary} className="mallog-workspace-panel">
             <UserGlossaryPanel
               labels={glossaryLabels}
               authToken={authToken}
@@ -567,19 +317,21 @@ export default function MallogHomeKoView(props) {
               handleDeleteGlossaryTerm={handleDeleteGlossaryTerm}
               fetchGlossary={fetchGlossary}
             />
-            {/* 업로드 카드 */}
-            <div className="nm-raised p-5 sm:p-6 mb-5 animate-nm-card-in">
+              </section>
+              <section hidden={activeTab !== 'convert'} aria-label={tabTitles.convert} className="mallog-workspace-panel">
+            <div className="mallog-upload-section">
               <form onSubmit={handleSubmit}>
+                <div className="mallog-audio-inputs">
 
                 {/* 드래그 앤 드롭 영역 */}
                 <div
                   role="button"
                   tabIndex={uploadBlockedByQuota ? -1 : 0}
                   aria-label="오디오 파일 업로드"
-                  className={`relative p-8 sm:p-10 text-center cursor-pointer transition-all duration-300
+                  className={`mallog-upload-zone relative text-center cursor-pointer transition-colors
                 ${uploadBlockedByQuota ? 'opacity-60 cursor-not-allowed nm-concave' :
                       dragOver ? 'nm-concave ring-2 ring-nm-accent scale-[1.01]' :
-                        file ? 'nm-raised' :
+                        file ? 'mallog-file-selected' :
                           'nm-concave'}`}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
@@ -598,49 +350,32 @@ export default function MallogHomeKoView(props) {
                   {file ? (
                     <div className="space-y-2">
                       <div className="w-11 h-11 mx-auto rounded-full bg-green-500/20 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
+                        <Check size={22} aria-hidden="true" />
                       </div>
                       <p className="text-sm font-medium text-nm-text-primary">{file.name}</p>
                       <p className="text-xs text-nm-text-secondary">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
                       {fileDurationSeconds > 0 && (
                         <p className="text-xs text-nm-text-secondary">길이: {formatSecondsToHourMinute(fileDurationSeconds)}</p>
                       )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setFile(null)
-                          setFileDurationSeconds(0)
-                        }}
-                        className="text-xs text-red-500 hover:text-red-600 font-medium mt-1"
-                      >
-                        파일 변경
-                      </button>
+                      <span className="mallog-change-file">다른 파일 선택</span>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <div className="w-11 h-11 mx-auto rounded-full nm-flat flex items-center justify-center">
-                        <svg className="w-5 h-5 text-nm-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
+                        <Upload size={23} aria-hidden="true" />
                       </div>
-                      <p className="text-sm text-nm-text-secondary">
-                        파일을 끌어다 놓거나 <span className="text-nm-accent font-medium">클릭</span>하여 선택
-                      </p>
+                      <p className="text-base font-semibold text-nm-text-primary">오디오 파일</p>
                       <p className="text-xs text-nm-text-secondary">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
+                      <span className="mallog-change-file">파일 선택</span>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-3 nm-flat p-3.5">
+                <div className="mallog-recorder">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-nm-text-primary">마이크로 바로 녹음</p>
-                      <p className="text-[11px] text-nm-text-secondary mt-1">
-                        기기 마이크 권한을 허용하면 녹음 후 같은 변환 흐름으로 처리됩니다.
-                      </p>
+
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {recordingState === 'recording' || recordingState === 'stopping' ? (
@@ -651,6 +386,7 @@ export default function MallogHomeKoView(props) {
                             disabled={recordingState === 'stopping'}
                             className="nm-btn-primary px-4 py-2 text-xs font-semibold disabled:opacity-50"
                           >
+                            <Square size={15} aria-hidden="true" />
                             {recordingState === 'stopping' ? '저장 중...' : '녹음 중지'}
                           </button>
                           <button
@@ -659,7 +395,7 @@ export default function MallogHomeKoView(props) {
                             disabled={recordingState === 'stopping'}
                             className="nm-btn px-4 py-2 text-xs font-semibold disabled:opacity-50"
                           >
-                            취소
+                            <X size={15} aria-hidden="true" />취소
                           </button>
                         </>
                       ) : (
@@ -669,6 +405,7 @@ export default function MallogHomeKoView(props) {
                           disabled={loading || uploadBlockedByQuota || recordingState === 'requesting'}
                           className="nm-btn px-4 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
+                          <Mic size={16} aria-hidden="true" className="text-red-500" />
                           {recordingState === 'requesting' ? '권한 확인 중...' : '녹음 시작'}
                         </button>
                       )}
@@ -695,9 +432,10 @@ export default function MallogHomeKoView(props) {
                 </div>
 
                 {/* 설정 */}
-                <div className="mt-4 flex gap-3">
+                </div>
+                <div className="mallog-conversion-options">
                   <div className="flex-1 relative">
-                    <label htmlFor={LANGUAGE_SELECT_ID} className="absolute -top-2 left-3 px-1 bg-nm-bg text-[10px] font-medium text-nm-text-secondary z-10">언어</label>
+                    <label htmlFor={LANGUAGE_SELECT_ID} className="mallog-field-label">언어</label>
                     <select
                       id={LANGUAGE_SELECT_ID}
                       value={language}
@@ -710,7 +448,7 @@ export default function MallogHomeKoView(props) {
                     </select>
                   </div>
                   <div className="flex-1 relative">
-                    <label htmlFor={TYPE_SELECT_ID} className="absolute -top-2 left-3 px-1 bg-nm-bg text-[10px] font-medium text-nm-text-secondary z-10">유형</label>
+                    <label htmlFor={TYPE_SELECT_ID} className="mallog-field-label">유형</label>
                     <select
                       id={TYPE_SELECT_ID}
                       value={transcriptionType}
@@ -724,35 +462,13 @@ export default function MallogHomeKoView(props) {
                     </select>
                   </div>
                 </div>
-                <p className="mt-3 text-[11px] text-nm-text-secondary">
-                  {transcriptionTypeHints[transcriptionType]}
-                </p>
-                {isGuestMode && (
-                  <p className="mt-2 text-[11px] text-nm-accent font-medium">
-                    {guestTranscribeHint}
-                  </p>
-                )}
-                {fileExceedsRemainingQuota && (
-                  <p className="mt-2 text-[12px] text-red-600 font-medium">
-                    {isGuestMode ? guestTranscribeHint : '남은 허용 시간을 초과하는 파일입니다.'}
-                  </p>
-                )}
-
-                {/* 변환 버튼 */}
                 <button
                   type="submit"
                   disabled={loading || !file || uploadBlockedByQuota || fileExceedsRemainingQuota}
-                  className="w-full nm-btn-primary mt-5 py-3.5 font-semibold text-sm"
+                  className="mallog-primary-action mallog-transcribe-action mt-5"
                 >
-                  {loading
-                    ? '변환 중...'
-                    : uploadBlockedByQuota
-                      ? '비로그인 체험 한도 소진'
-                      : fileExceedsRemainingQuota
-                        ? '남은 허용 시간 초과'
-                        : authToken
-                          ? '변환하기'
-                          : guestTranscribeStart}
+                  <AudioLines size={18} aria-hidden="true" />
+                  {loading ? '변환 중...' : '변환 시작'}
                 </button>
               </form>
 
@@ -1046,7 +762,8 @@ export default function MallogHomeKoView(props) {
             )}
 
             {/* 히스토리 */}
-            {authToken && (
+              </section>
+            {activeTab === 'history' && (
               <div className="mt-8">
                 <button
                   onClick={() => setShowHistory(!showHistory)}
@@ -1104,7 +821,7 @@ export default function MallogHomeKoView(props) {
                             <div className="p-4">
                               <button
                                 type="button"
-                                onClick={() => handleLoadHistory(item.task_id)}
+                                onClick={() => { setActiveTab('convert'); handleLoadHistory(item.task_id) }}
                                 className="w-full text-left hover:bg-nm-light/20 transition-colors group rounded-2xl"
                               >
                                 <div className="flex items-center justify-between">
@@ -1118,7 +835,7 @@ export default function MallogHomeKoView(props) {
                                       </span>
                                       {item.transcription_type && item.transcription_type !== 'sermon' && (
                                         <span className="nm-flat px-2 py-0.5 text-[11px] text-nm-text-secondary font-medium">
-                                          {item.transcription_type === 'phonecall' ? '통화' : '회의'}
+                                          {typeLabels[item.transcription_type] || item.transcription_type}
                                         </span>
                                       )}
                                       {item.characters > 0 && (
@@ -1205,7 +922,7 @@ export default function MallogHomeKoView(props) {
             )}
 
             {/* 저장된 기록본 */}
-            {authToken && (
+            {activeTab === 'records' && (
               <div className="mt-8">
                 <button
                   onClick={() => setShowRecords(!showRecords)}
@@ -1316,11 +1033,12 @@ export default function MallogHomeKoView(props) {
                 )}
               </div>
             )}
-          </>
+            </div>
+          </div>
         )}
 
         {/* 푸터 */}
-        <footer className="mt-12 text-center">
+        <footer className="mallog-footer text-center">
           <div className="mb-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px]">
             <a href={OURS_PRIVACY_URL} className="text-nm-text-secondary hover:text-nm-accent transition-colors">
               개인정보처리방침

@@ -1,3 +1,5 @@
+import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+
 const listText = (value) => {
   if (Array.isArray(value)) return value.filter(Boolean).join(', ')
   return String(value || '').trim()
@@ -29,9 +31,11 @@ export default function UserGlossaryPanel({
           type="button"
           onClick={() => fetchGlossary()}
           disabled={glossaryLoading}
-          className="nm-btn inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-nm-text-primary disabled:opacity-60"
+          title={labels.refresh}
+          aria-label={labels.refresh}
+          className="nm-btn inline-flex items-center justify-center w-10 h-10 text-nm-text-primary disabled:opacity-60"
         >
-          {glossaryLoading ? labels.loading : labels.refresh}
+          <RefreshCw size={17} className={glossaryLoading ? 'animate-spin' : ''} aria-hidden="true" />
         </button>
       </div>
 
@@ -41,6 +45,7 @@ export default function UserGlossaryPanel({
           value={glossaryForm.term}
           onChange={(event) => handleGlossaryFieldChange('term', event.target.value)}
           placeholder={labels.termPlaceholder}
+          aria-label={labels.termPlaceholder}
           className="nm-concave w-full px-4 py-3 text-sm text-nm-text-primary placeholder:text-nm-text-secondary bg-transparent outline-none"
         />
         <input
@@ -48,12 +53,14 @@ export default function UserGlossaryPanel({
           value={glossaryForm.meaning}
           onChange={(event) => handleGlossaryFieldChange('meaning', event.target.value)}
           placeholder={labels.meaningPlaceholder}
+          aria-label={labels.meaningPlaceholder}
           className="nm-concave w-full px-4 py-3 text-sm text-nm-text-primary placeholder:text-nm-text-secondary bg-transparent outline-none"
         />
         <textarea
           value={glossaryForm.aliases}
           onChange={(event) => handleGlossaryFieldChange('aliases', event.target.value)}
           placeholder={labels.aliasesPlaceholder}
+          aria-label={labels.aliasesPlaceholder}
           rows={2}
           className="nm-concave w-full px-4 py-3 text-sm text-nm-text-primary placeholder:text-nm-text-secondary bg-transparent outline-none resize-none"
         />
@@ -61,6 +68,7 @@ export default function UserGlossaryPanel({
           value={glossaryForm.contexts}
           onChange={(event) => handleGlossaryFieldChange('contexts', event.target.value)}
           placeholder={labels.contextsPlaceholder}
+          aria-label={labels.contextsPlaceholder}
           rows={2}
           className="nm-concave w-full px-4 py-3 text-sm text-nm-text-primary placeholder:text-nm-text-secondary bg-transparent outline-none resize-none"
         />
@@ -71,8 +79,9 @@ export default function UserGlossaryPanel({
           type="button"
           onClick={handleCreateGlossaryTerm}
           disabled={creating}
-          className="nm-btn-primary inline-flex items-center justify-center px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
+          className="nm-btn-primary inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
         >
+          <Plus size={16} aria-hidden="true" />
           {creating ? labels.saving : labels.add}
         </button>
       </div>
@@ -114,17 +123,23 @@ export default function UserGlossaryPanel({
                     type="button"
                     onClick={() => handleToggleGlossaryTerm(termId, !item?.is_active)}
                     disabled={busy}
-                    className="nm-btn inline-flex items-center justify-center px-3 py-2 text-xs font-semibold text-nm-text-primary disabled:opacity-60"
+                    role="switch"
+                    aria-checked={Boolean(item?.is_active)}
+                    aria-label={`${item?.term} ${labels.active}`}
+                    title={item?.is_active ? labels.disable : labels.enable}
+                    className="mallog-term-switch"
                   >
-                    {item?.is_active ? labels.disable : labels.enable}
+                    <span />
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDeleteGlossaryTerm(termId)}
                     disabled={busy}
-                    className="nm-btn inline-flex items-center justify-center px-3 py-2 text-xs font-semibold text-red-500 disabled:opacity-60"
+                    aria-label={`${labels.delete}: ${item?.term}`}
+                    title={labels.delete}
+                    className="nm-btn inline-flex items-center justify-center w-10 h-10 text-red-500 disabled:opacity-60"
                   >
-                    {busy ? labels.deleting : labels.delete}
+                    <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
               </div>

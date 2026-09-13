@@ -263,7 +263,7 @@ def main() -> int:
                 required=bool(args.require_saved_record_create_capture_smoke),
             ))
 
-    if args.audio_file:
+    if args.audio_file and args.auth_token:
         platforms = args.client_platform or ["web"]
         for platform in platforms:
             transcription_command = [
@@ -273,6 +273,8 @@ def main() -> int:
                 api_url,
                 "--audio-file",
                 args.audio_file,
+                "--bearer-token",
+                args.auth_token,
                 "--client-platform",
                 platform,
             ]
@@ -282,7 +284,7 @@ def main() -> int:
     else:
         checks.append(skipped_check(
             "transcription-smoke",
-            "--audio-file is required.",
+            "--audio-file and --auth-token or MALLOG24_AUTH_TOKEN are required.",
             required=bool(args.require_transcription_smoke),
         ))
 

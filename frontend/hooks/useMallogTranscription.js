@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAudioDurationSecondsInBrowser } from '../utils/audio'
 import { buildDocxBlob } from '../utils/docx'
 import { sanitizeFileName, triggerBlobDownload } from '../utils/format'
-import { apiFetch, apiFetchWithNetworkRetry, safeReadJson } from '../utils/network'
+import useProtectedAccess from './useProtectedAccess'
 import {
   EMPTY_TRANSCRIPTION_PROGRESS,
   normalizeTranscriptionProgress,
@@ -15,9 +15,6 @@ import {
   downsampleWaveform,
 } from '../utils/recordingSignal'
 
-const GUEST_MONTHLY_LIMIT_SECONDS = 1800
-const GUEST_MAX_AUDIO_SECONDS = 600
-const GUEST_SESSION_STORAGE_KEY = 'mallog24_guest_session_id'
 const RECORDING_DEVICE_STORAGE_KEY = 'mallog24_recording_device_id'
 const TRANSCRIBE_POLL_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const STATUS_POLL_INTERVAL_MS = 3000
@@ -56,7 +53,6 @@ function buildRecordingFilename(extension) {
 const TRANSCRIPTION_MESSAGES = {
   ko: {
     fileSizeExceeded: '파일 크기는 100MB 이하여야 합니다.',
-    quotaExceeded: '비로그인 체험의 남은 허용 시간을 초과하는 파일입니다.',
     browserDurationFallback: '브라우저에서 길이 확인에 실패해 업로드는 진행합니다. 서버에서 길이를 다시 검사합니다.',
     pollingSlow: '상태 확인 응답이 지연되고 있습니다. 잠시 후 다시 확인해 주세요.',
     pollingNetwork: '네트워크 오류로 상태 확인이 불안정합니다. 잠시 후 다시 확인해 주세요.',
@@ -65,8 +61,6 @@ const TRANSCRIPTION_MESSAGES = {
     taskNotFound: '작업 상태를 찾을 수 없습니다. 새로 변환을 다시 시도해 주세요.',
     taskIdLabel: '작업 ID',
     signinRequired: '파일 변환은 로그인 후 이용할 수 있습니다.',
-    guestTranscribeHint: '비로그인 체험은 파일 1개당 최대 10분, 총 30분까지 가능합니다.',
-    guestTranscribeStart: '비로그인 체험 변환하기',
     selectFile: '파일을 선택해주세요.',
     recordingUnsupported: '이 브라우저에서는 녹음 기능을 사용할 수 없습니다. 최신 Chrome, Edge, Safari를 사용하거나 파일 업로드를 이용해 주세요.',
     recordingPermissionDenied: '마이크 권한이 필요합니다. 브라우저 주소창과 운영체제의 개인정보 보호·마이크 설정에서 접근을 허용해 주세요.',
@@ -111,13 +105,11 @@ const TRANSCRIPTION_MESSAGES = {
     transcriptTitle: '녹취록',
     transcriptFilename: '녹취록',
     copyFailed: '클립보드 복사에 실패했습니다.',
-    usageLimitToast: '비로그인 체험 한도를 모두 사용했습니다. 로그인하면 무료로 계속 이용할 수 있습니다.',
     resolveStyleMeetingFallback: 'conversation',
     defaultLanguage: 'ko',
   },
   en: {
     fileSizeExceeded: 'File size must be 100MB or less.',
-    quotaExceeded: 'This file exceeds the remaining guest trial allowance.',
     browserDurationFallback: 'Could not read duration in browser. Upload continues and the server will validate duration.',
     pollingSlow: 'Status checks are delayed. Please try again shortly.',
     pollingNetwork: 'Network errors are interrupting status checks. Please try again shortly.',
@@ -126,8 +118,6 @@ const TRANSCRIPTION_MESSAGES = {
     taskNotFound: 'Task status was not found. Please try a new transcription.',
     taskIdLabel: 'Task ID',
     signinRequired: 'Sign in is required before transcription.',
-    guestTranscribeHint: 'Guest trial supports up to 10 minutes per file and 30 minutes total.',
-    guestTranscribeStart: 'Start Guest Trial',
     selectFile: 'Please select an audio file.',
     recordingUnsupported: 'Recording is not available in this browser. Please use the latest Chrome, Edge, Safari, or upload a file instead.',
     recordingPermissionDenied: 'Microphone permission is required. Allow access in both the browser and the operating system microphone privacy settings.',
@@ -172,7 +162,6 @@ const TRANSCRIPTION_MESSAGES = {
     transcriptTitle: 'Transcript',
     transcriptFilename: 'transcript',
     copyFailed: 'Failed to copy to clipboard.',
-    usageLimitToast: 'The guest trial allowance is used up. Sign in to keep using mallog24 for free.',
     resolveStyleMeetingFallback: 'conversation',
     defaultLanguage: 'en',
   },
@@ -182,6 +171,8 @@ export default function useMallogTranscription({
   apiUrl,
   locale = 'ko',
   authToken,
+  accessEnabled = false,
+  authSessionRevision = 0,
   getAuthHeaders,
   fetchUsage,
   setError,
@@ -190,6 +181,7 @@ export default function useMallogTranscription({
   recordTypeLabels,
 }) {
   const messages = TRANSCRIPTION_MESSAGES[locale] || TRANSCRIPTION_MESSAGES.ko
+  const access = useProtectedAccess({ apiUrl, authToken, accessEnabled, authSessionRevision })
   const [file, setFile] = useState(null)
   const [language, setLanguage] = useState(messages.defaultLanguage)
   const [transcriptionType, setTranscriptionType] = useState('conversation')
@@ -228,16 +220,6 @@ export default function useMallogTranscription({
   const [selectedRecordingDeviceId, setSelectedRecordingDeviceId] = useState('')
   const [activeRecordingDeviceLabel, setActiveRecordingDeviceLabel] = useState('')
   const [recordingInputState, setRecordingInputState] = useState('idle')
-  const [guestSessionId, setGuestSessionId] = useState('')
-  const [guestUsage, setGuestUsage] = useState({
-    plan_tier: 'guest',
-    used_audio_seconds: 0,
-    monthly_limit_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
-    remaining_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
-    usage_percent: 0,
-    max_audio_seconds: GUEST_MAX_AUDIO_SECONDS,
-  })
-
   const pollInterval = useRef(null)
   const fileInputRef = useRef(null)
   const pollStartTime = useRef(null)
@@ -274,6 +256,7 @@ export default function useMallogTranscription({
   }, [])
 
   const selectRecordingDevice = useCallback((deviceId) => {
+    if (!access.isCurrent()) return
     const normalizedId = String(deviceId || '')
     setSelectedRecordingDeviceId(normalizedId)
     if (typeof window === 'undefined') return
@@ -282,30 +265,35 @@ export default function useMallogTranscription({
     } else {
       window.localStorage.removeItem(RECORDING_DEVICE_STORAGE_KEY)
     }
-  }, [])
+  }, [access])
 
   const resumeRecordingAnalysis = useCallback(async () => {
+    if (!access.isCurrent()) return
     const audioContext = recordingAudioContextRef.current
     if (!audioContext?.resume) return false
 
     try {
       await audioContext.resume()
+      if (!access.isCurrent()) return false
       if (audioContext.state === 'running') {
         updateRecordingInputState('listening')
         return true
       }
     } catch {
+      if (!access.isCurrent()) return
       // The visible input state remains actionable for another user gesture.
     }
     updateRecordingInputState('analysis-blocked')
     return false
-  }, [updateRecordingInputState])
+  }, [access, updateRecordingInputState])
 
   const refreshRecordingDevices = useCallback(async () => {
+    if (!access.isCurrent()) return
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return []
 
     try {
       const devices = await navigator.mediaDevices.enumerateDevices()
+      if (!access.isCurrent()) return []
       const audioInputs = devices
         .filter((device) => device.kind === 'audioinput')
         .map((device, index) => ({
@@ -323,11 +311,13 @@ export default function useMallogTranscription({
       })
       return audioInputs
     } catch {
+      if (!access.isCurrent()) return
       return []
     }
-  }, [messages.recordingMicrophoneFallback])
+  }, [access, messages.recordingMicrophoneFallback])
 
   useEffect(() => {
+    if (!access.isCurrent()) return undefined
     if (typeof window !== 'undefined') {
       setSelectedRecordingDeviceId(window.localStorage.getItem(RECORDING_DEVICE_STORAGE_KEY) || '')
     }
@@ -337,15 +327,15 @@ export default function useMallogTranscription({
     if (!mediaDevices?.addEventListener) return undefined
     mediaDevices.addEventListener('devicechange', refreshRecordingDevices)
     return () => mediaDevices.removeEventListener('devicechange', refreshRecordingDevices)
-  }, [refreshRecordingDevices])
+  }, [access, refreshRecordingDevices])
 
   const readResponseData = useCallback(async (response, fallbackMessage) => {
-    const data = await safeReadJson(response)
+    const data = await access.readJson(response)
     if (!response.ok) {
       throw new Error(data?.detail || fallbackMessage)
     }
     return data || {}
-  }, [])
+  }, [access])
 
   const transcriptSourceText = useMemo(
     () => String(result?.corrected_text || result?.raw_text || ''),
@@ -367,60 +357,6 @@ export default function useMallogTranscription({
   useEffect(() => {
     setTranscriptEditText(transcriptSourceText)
   }, [result?.task_id, transcriptSourceText])
-
-  const ensureGuestSessionId = useCallback(() => {
-    if (typeof window === 'undefined') return ''
-    const existing = window.localStorage.getItem(GUEST_SESSION_STORAGE_KEY)
-    if (existing) return existing
-
-    const generated = window.crypto?.randomUUID
-      ? window.crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
-    const guestId = `guest-${generated}`
-    window.localStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestId)
-    return guestId
-  }, [])
-
-  useEffect(() => {
-    const resolvedGuestId = ensureGuestSessionId()
-    if (resolvedGuestId) {
-      setGuestSessionId(resolvedGuestId)
-    }
-  }, [ensureGuestSessionId])
-
-  const getTranscriptionHeaders = useCallback((token = authToken) => {
-    const headers = { ...getAuthHeaders(token) }
-    if (token) {
-      return headers
-    }
-    const resolvedGuestId = guestSessionId || ensureGuestSessionId()
-    if (resolvedGuestId) {
-      headers['X-Guest-Session-Id'] = resolvedGuestId
-    }
-    return headers
-  }, [authToken, ensureGuestSessionId, getAuthHeaders, guestSessionId])
-
-  const fetchGuestUsage = useCallback(async () => {
-    const resolvedGuestId = guestSessionId || ensureGuestSessionId()
-    if (!resolvedGuestId) return null
-    try {
-      const res = await apiFetch(`${apiUrl}/api/guest/usage`, {
-        headers: { 'X-Guest-Session-Id': resolvedGuestId },
-        credentials: 'omit',
-      })
-      const data = await readResponseData(res, messages.quotaExceeded)
-      setGuestUsage(data)
-      return data
-    } catch (error) {
-      console.error('Failed to fetch guest usage', error)
-      return null
-    }
-  }, [apiUrl, ensureGuestSessionId, guestSessionId, messages.quotaExceeded, readResponseData])
-
-  useEffect(() => {
-    if (authToken) return
-    fetchGuestUsage()
-  }, [authToken, fetchGuestUsage])
 
   const resolveContentStyle = useCallback((data) => {
     const explicit = String(data?.content_style || '').trim().toLowerCase()
@@ -513,6 +449,11 @@ export default function useMallogTranscription({
 
   const resetState = useCallback(() => {
     invalidatePollingSession()
+    fileDurationProbeRef.current += 1
+    resultEpochRef.current += 1
+    setDragOver(false)
+    setTrainingDataConsent(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
     clearPendingDeleteTask()
     clearPendingDeleteAll()
     setLoading(false)
@@ -526,12 +467,12 @@ export default function useMallogTranscription({
     setHistoryLoading(false)
     setHistoryDeletingTaskId('')
     setHistoryBulkDeleting(false)
-      setSavedRecords([])
-      setRecordsLoaded(false)
-      setRecordsLoading(false)
-      setSavedRecordEditDrafts({})
-      setSavedRecordSavingId('')
-      setRecordDrafts({})
+    setSavedRecords([])
+    setRecordsLoaded(false)
+    setRecordsLoading(false)
+    setSavedRecordEditDrafts({})
+    setSavedRecordSavingId('')
+    setRecordDrafts({})
     setRecordDraftSources({})
     setDraftLoadingCategory('')
     setSavingCategory('')
@@ -550,6 +491,7 @@ export default function useMallogTranscription({
   }, [clearPendingDeleteAll, clearPendingDeleteTask, stopPolling])
 
   const fetchHistory = useCallback(async (token = authToken) => {
+    if (!access.isCurrent()) return
     if (!token) {
       setHistory([])
       setHistoryLoaded(false)
@@ -558,7 +500,7 @@ export default function useMallogTranscription({
 
     setHistoryLoading(true)
     try {
-      const res = await apiFetch(`${apiUrl}/api/history`, {
+      const res = await access.request(`${apiUrl}/api/history`, {
         headers: getAuthHeaders(token),
       })
       const data = await readResponseData(
@@ -568,13 +510,16 @@ export default function useMallogTranscription({
       setHistory(Array.isArray(data) ? data : [])
       setHistoryLoaded(true)
     } catch (error) {
+      if (!access.isCurrent()) return
       console.error('Failed to fetch history', error)
     } finally {
+      if (!access.isCurrent()) return
       setHistoryLoading(false)
     }
-  }, [apiUrl, authToken, getAuthHeaders, locale, readResponseData])
+  }, [access, apiUrl, authToken, getAuthHeaders, locale, readResponseData])
 
   const fetchSavedRecords = useCallback(async (token = authToken) => {
+    if (!access.isCurrent()) return
     if (!token) {
       setSavedRecords([])
       setRecordsLoaded(false)
@@ -583,7 +528,7 @@ export default function useMallogTranscription({
 
     setRecordsLoading(true)
     try {
-      const res = await apiFetch(`${apiUrl}/api/records`, {
+      const res = await access.request(`${apiUrl}/api/records`, {
         headers: getAuthHeaders(token),
       })
       const data = await readResponseData(
@@ -593,61 +538,38 @@ export default function useMallogTranscription({
       setSavedRecords(Array.isArray(data) ? data : [])
       setRecordsLoaded(true)
     } catch (error) {
+      if (!access.isCurrent()) return
       console.error('Failed to fetch saved records', error)
     } finally {
+      if (!access.isCurrent()) return
       setRecordsLoading(false)
     }
-  }, [apiUrl, authToken, getAuthHeaders, locale, readResponseData])
+  }, [access, apiUrl, authToken, getAuthHeaders, locale, readResponseData])
 
   useEffect(() => {
-    if (!authToken || !showHistory || historyLoaded || historyLoading) return
+    if (!access.isCurrent() || !showHistory || historyLoaded || historyLoading) return
     fetchHistory(authToken)
-  }, [authToken, fetchHistory, historyLoaded, historyLoading, showHistory])
+  }, [access, authToken, fetchHistory, historyLoaded, historyLoading, showHistory])
 
   useEffect(() => {
-    if (!authToken || !showRecords || recordsLoaded || recordsLoading) return
+    if (!access.isCurrent() || !showRecords || recordsLoaded || recordsLoading) return
     fetchSavedRecords(authToken)
-  }, [authToken, fetchSavedRecords, recordsLoaded, recordsLoading, showRecords])
+  }, [access, authToken, fetchSavedRecords, recordsLoaded, recordsLoading, showRecords])
 
   const validateAndSetFile = useCallback(async (selectedFile, usage) => {
+    if (!access.isCurrent()) return
     if (selectedFile.size > 100 * 1024 * 1024) {
       setError(messages.fileSizeExceeded)
       return false
     }
-
-    const currentUsage = usage || null
-    const planTier = currentUsage?.plan_tier || (authToken ? 'free' : 'guest')
-    const isLimitedTier = planTier === 'guest'
-    const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds ?? (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : 0)
-    const maxAudioSeconds = Number(currentUsage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
-    const remainingQuotaSeconds = isLimitedTier
-      ? Math.max(0, currentUsage?.remaining_seconds ?? monthlyLimitSeconds)
-      : Number.MAX_SAFE_INTEGER
 
     const probeId = fileDurationProbeRef.current + 1
     fileDurationProbeRef.current = probeId
 
     try {
       const durationSeconds = await getAudioDurationSecondsInBrowser(selectedFile)
+      if (!access.isCurrent()) return false
       if (fileDurationProbeRef.current !== probeId) return false
-
-      if (planTier === 'guest' && maxAudioSeconds > 0 && durationSeconds > maxAudioSeconds) {
-        setFile(null)
-        setFileDurationSeconds(0)
-        setError(messages.guestTranscribeHint)
-        setNotice(null)
-        showToast(messages.guestTranscribeHint)
-        return false
-      }
-
-      if (isLimitedTier && durationSeconds > remainingQuotaSeconds) {
-        setFile(null)
-        setFileDurationSeconds(0)
-        setError(messages.quotaExceeded)
-        setNotice(null)
-        showToast(messages.quotaExceeded)
-        return false
-      }
 
       setFile(selectedFile)
       setFileDurationSeconds(durationSeconds)
@@ -656,6 +578,7 @@ export default function useMallogTranscription({
       resetResultWorkspace(true)
       return true
     } catch {
+      if (!access.isCurrent()) return
       if (fileDurationProbeRef.current !== probeId) return false
       setFile(selectedFile)
       setFileDurationSeconds(0)
@@ -664,7 +587,7 @@ export default function useMallogTranscription({
       resetResultWorkspace(true)
       return true
     }
-  }, [authToken, messages.browserDurationFallback, messages.fileSizeExceeded, messages.guestTranscribeHint, messages.quotaExceeded, resetResultWorkspace, setError, setNotice, showToast])
+  }, [access, authToken, messages.browserDurationFallback, messages.fileSizeExceeded, resetResultWorkspace, setError, setNotice, showToast])
 
   const clearRecordingTimer = useCallback(() => {
     if (recordingTimerRef.current) {
@@ -698,6 +621,7 @@ export default function useMallogTranscription({
   }, [])
 
   const startRecordingMeter = useCallback(async (stream, preparedAudioContext = null, preparedResume = null) => {
+    if (!access.isCurrent()) return
     if (!preparedAudioContext) stopRecordingMeter()
     if (typeof window === 'undefined') return
 
@@ -732,6 +656,7 @@ export default function useMallogTranscription({
           window.clearTimeout(recordingNoSignalTimerRef.current)
         }
         recordingNoSignalTimerRef.current = window.setTimeout(() => {
+          if (!access.isCurrent()) return
           if (recordingInputStateRef.current === 'listening') {
             updateRecordingInputState('no-signal')
           }
@@ -739,6 +664,7 @@ export default function useMallogTranscription({
       }
 
       audioContext.onstatechange = () => {
+        if (!access.isCurrent()) return
         if (audioContext.state === 'running') {
           if (recordingInputStateRef.current === 'analysis-blocked') {
             updateRecordingInputState('listening')
@@ -751,7 +677,9 @@ export default function useMallogTranscription({
 
       try {
         await (preparedResume || audioContext.resume?.())
+        if (!access.isCurrent()) return
       } catch {
+        if (!access.isCurrent()) return
         updateRecordingInputState('analysis-blocked')
       }
       if (audioContext.state === 'running') {
@@ -765,6 +693,7 @@ export default function useMallogTranscription({
       let lastPitchAt = 0
       let currentPitch = recordingSignalRef.current.pitch
       const updateMeter = (timestamp = 0) => {
+        if (!access.isCurrent()) return
         const activeAnalyser = recordingAnalyserRef.current
         const activeData = recordingLevelDataRef.current
         const activeByteData = recordingByteLevelDataRef.current
@@ -820,10 +749,11 @@ export default function useMallogTranscription({
 
       recordingMeterFrameRef.current = window.requestAnimationFrame(updateMeter)
     } catch {
+      if (!access.isCurrent()) return
       stopRecordingMeter()
       updateRecordingInputState('analysis-blocked')
     }
-  }, [stopRecordingMeter, updateRecordingInputState])
+  }, [access, stopRecordingMeter, updateRecordingInputState])
 
   const stopRecordingStream = useCallback(() => {
     stopRecordingMeter()
@@ -834,10 +764,7 @@ export default function useMallogTranscription({
   }, [stopRecordingMeter, updateRecordingInputState])
 
   const startRecording = useCallback(async (uploadBlockedByQuota) => {
-    if (uploadBlockedByQuota) {
-      showToast(messages.usageLimitToast)
-      return
-    }
+    if (!access.isCurrent()) return
     if (loading || recordingState === 'recording' || recordingState === 'requesting' || recordingState === 'stopping') return
 
     if (
@@ -864,7 +791,9 @@ export default function useMallogTranscription({
         preparedAudioContext = new AudioContextConstructor()
         recordingAudioContextRef.current = preparedAudioContext
         preparedAudioContextResume = preparedAudioContext.resume?.()
+        preparedAudioContextResume?.catch(() => {})
       } catch {
+        if (!access.isCurrent()) return
         preparedAudioContext = null
         preparedAudioContextResume = null
       }
@@ -885,6 +814,7 @@ export default function useMallogTranscription({
             : baseAudioConstraints,
         })
       } catch (deviceError) {
+        if (!access.isCurrent()) return
         const canRetryDefault = selectedRecordingDeviceId && [
           'AbortError',
           'NotFoundError',
@@ -895,7 +825,12 @@ export default function useMallogTranscription({
 
         selectRecordingDevice('')
         stream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints })
-        setNotice(messages.recordingDeviceFallback)
+        if (access.isCurrent()) setNotice(messages.recordingDeviceFallback)
+      }
+
+      if (!access.isCurrent()) {
+        stream.getTracks?.().forEach((track) => track.stop())
+        return
       }
 
       const audioTrack = stream.getAudioTracks?.()[0]
@@ -912,27 +847,37 @@ export default function useMallogTranscription({
       mediaRecorderRef.current = recorder
       recordingChunksRef.current = []
       const availableDevices = await refreshRecordingDevices()
+      if (!access.isCurrent()) {
+        stream.getTracks?.().forEach((track) => track.stop())
+        return
+      }
       const activeDeviceId = audioTrack.getSettings?.().deviceId || ''
       const activeDevice = availableDevices.find((device) => device.deviceId === activeDeviceId)
       setActiveRecordingDeviceLabel(
         audioTrack.label || activeDevice?.label || messages.recordingMicrophoneFallback
       )
       updateRecordingInputState(audioTrack.muted ? 'muted' : 'listening')
-      audioTrack.addEventListener?.('mute', () => updateRecordingInputState('muted'))
-      audioTrack.addEventListener?.('unmute', () => updateRecordingInputState('listening'))
-      audioTrack.addEventListener?.('ended', () => updateRecordingInputState('ended'))
+      audioTrack.addEventListener?.('mute', () => access.isCurrent() && updateRecordingInputState('muted'))
+      audioTrack.addEventListener?.('unmute', () => access.isCurrent() && updateRecordingInputState('listening'))
+      audioTrack.addEventListener?.('ended', () => access.isCurrent() && updateRecordingInputState('ended'))
       await startRecordingMeter(stream, preparedAudioContext, preparedAudioContextResume)
+      if (!access.isCurrent()) {
+        stream.getTracks?.().forEach((track) => track.stop())
+        return
+      }
       fileDurationProbeRef.current += 1
       setFile(null)
       setFileDurationSeconds(0)
       resetResultWorkspace(true)
 
       recorder.ondataavailable = (event) => {
+        if (!access.isCurrent()) return
         if (event.data?.size > 0) {
           recordingChunksRef.current.push(event.data)
         }
       }
       recorder.onerror = () => {
+        if (!access.isCurrent()) return
         clearRecordingTimer()
         stopRecordingStream()
         setRecordingState('idle')
@@ -941,10 +886,12 @@ export default function useMallogTranscription({
       recorder.start(1000)
       recordingStartedAtRef.current = Date.now()
       recordingTimerRef.current = window.setInterval(() => {
+        if (!access.isCurrent()) return
         setRecordingSeconds(Math.max(1, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000)))
       }, 500)
       setRecordingState('recording')
     } catch (error) {
+      if (!access.isCurrent()) return
       clearRecordingTimer()
       stopRecordingStream()
       mediaRecorderRef.current = null
@@ -952,9 +899,10 @@ export default function useMallogTranscription({
       const denied = error?.name === 'NotAllowedError' || error?.name === 'SecurityError'
       setError(denied ? messages.recordingPermissionDenied : messages.recordingStartFailed)
     }
-  }, [clearRecordingTimer, loading, messages.recordingDeviceFallback, messages.recordingMicrophoneFallback, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, messages.usageLimitToast, recordingState, refreshRecordingDevices, resetResultWorkspace, selectRecordingDevice, selectedRecordingDeviceId, setError, setFileDurationSeconds, setNotice, showToast, startRecordingMeter, stopRecordingMeter, stopRecordingStream, updateRecordingInputState])
+  }, [access, clearRecordingTimer, loading, messages.recordingDeviceFallback, messages.recordingMicrophoneFallback, messages.recordingPermissionDenied, messages.recordingStartFailed, messages.recordingUnsupported, recordingState, refreshRecordingDevices, resetResultWorkspace, selectRecordingDevice, selectedRecordingDeviceId, setError, setFileDurationSeconds, setNotice, showToast, startRecordingMeter, stopRecordingMeter, stopRecordingStream, updateRecordingInputState])
 
   const stopRecording = useCallback(async (usage) => {
+    if (!access.isCurrent()) return
     const recorder = mediaRecorderRef.current
     if (!recorder || recorder.state === 'inactive') return
 
@@ -968,6 +916,7 @@ export default function useMallogTranscription({
       recorder.requestData?.()
       recorder.stop()
       await stopped
+      if (!access.isCurrent()) return
 
       stopRecordingStream()
       mediaRecorderRef.current = null
@@ -999,11 +948,13 @@ export default function useMallogTranscription({
         : Object.assign(blob, { name: filename, lastModified: Date.now() })
 
       const accepted = await validateAndSetFile(recordedFile, usage)
+      if (!access.isCurrent()) return
       setRecordingState('idle')
       if (accepted) {
         setNotice(messages.recordingReady)
       }
     } catch (error) {
+      if (!access.isCurrent()) return
       stopRecordingStream()
       mediaRecorderRef.current = null
       recordingChunksRef.current = []
@@ -1011,9 +962,10 @@ export default function useMallogTranscription({
       setRecordingState('idle')
       setError(messages.recordingStopFailed)
     }
-  }, [clearRecordingTimer, messages.recordingCanceled, messages.recordingEmpty, messages.recordingReady, messages.recordingStopFailed, setError, setNotice, stopRecordingStream, validateAndSetFile])
+  }, [access, clearRecordingTimer, messages.recordingCanceled, messages.recordingEmpty, messages.recordingReady, messages.recordingStopFailed, setError, setNotice, stopRecordingStream, validateAndSetFile])
 
   const cancelRecording = useCallback(async () => {
+    if (!access.isCurrent()) return
     const recorder = mediaRecorderRef.current
     discardRecordingRef.current = true
     if (recorder && recorder.state !== 'inactive') {
@@ -1029,56 +981,79 @@ export default function useMallogTranscription({
     setRecordingSeconds(0)
     setRecordingState('idle')
     setNotice(messages.recordingCanceled)
-  }, [clearRecordingTimer, messages.recordingCanceled, setNotice, stopRecording, stopRecordingStream])
+  }, [access, clearRecordingTimer, messages.recordingCanceled, setNotice, stopRecording, stopRecordingStream])
 
-  useEffect(() => () => {
-    clearRecordingTimer()
-    stopRecordingStream()
-    mediaRecorderRef.current = null
-    recordingChunksRef.current = []
-  }, [clearRecordingTimer, stopRecordingStream])
+  useEffect(() => {
+    const clearAccessState = () => {
+      resetState()
+      clearRecordingTimer()
+      const recorder = mediaRecorderRef.current
+      mediaRecorderRef.current = null
+      if (recorder) {
+        recorder.ondataavailable = null
+        recorder.onerror = null
+        if (recorder.state !== 'inactive') recorder.stop()
+      }
+      stopRecordingStream()
+      recordingChunksRef.current = []
+      discardRecordingRef.current = true
+      setRecordingState('idle')
+      setRecordingSeconds(0)
+      setRecordingDevices([])
+    }
+    clearAccessState()
+    const signal = access.controller.signal
+    signal.addEventListener('abort', clearAccessState, { once: true })
+    return () => {
+      signal.removeEventListener('abort', clearAccessState)
+      clearAccessState()
+    }
+  }, [access, clearRecordingTimer, resetState, stopRecordingStream])
 
   const handleFileChange = useCallback((event, usage) => {
+    if (!access.isCurrent()) return
     const selectedFile = event.target.files?.[0]
     if (selectedFile) {
       validateAndSetFile(selectedFile, usage)
     }
-  }, [validateAndSetFile])
+  }, [access, validateAndSetFile])
 
   const triggerFilePicker = useCallback((uploadBlockedByQuota) => {
-    if (uploadBlockedByQuota) {
-      showToast(messages.usageLimitToast)
-      return
-    }
+    if (!access.isCurrent()) return
     fileInputRef.current?.click()
-  }, [messages.usageLimitToast, showToast])
+  }, [access, showToast])
 
   const handleUploadZoneKeyDown = useCallback((event, uploadBlockedByQuota) => {
+    if (!access.isCurrent()) return
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       triggerFilePicker(uploadBlockedByQuota)
     }
-  }, [triggerFilePicker])
+  }, [access, triggerFilePicker])
 
   const handleDrop = useCallback((event, usage) => {
     event.preventDefault()
+    if (!access.isCurrent()) return
     setDragOver(false)
     const droppedFile = event.dataTransfer.files?.[0]
     if (droppedFile) {
       validateAndSetFile(droppedFile, usage)
     }
-  }, [validateAndSetFile])
+  }, [access, validateAndSetFile])
 
   const handleDragOver = useCallback((event) => {
     event.preventDefault()
+    if (!access.isCurrent()) return
     setDragOver(true)
-  }, [])
+  }, [access])
 
   const handleDragLeave = useCallback(() => {
+    if (!access.isCurrent()) return
     setDragOver(false)
-  }, [])
+  }, [access])
 
   const startPolling = useCallback((taskId, resultEpoch) => {
+    if (!access.isCurrent()) return
     stopPolling()
     const pollToken = pollTokenRef.current
     activeTaskIdRef.current = taskId
@@ -1088,10 +1063,10 @@ export default function useMallogTranscription({
     setProcessingProgress(normalizeTranscriptionProgress(null, 'queued'))
 
     pollInterval.current = window.setInterval(async () => {
-      if (pollInFlightRef.current) return
+      if (!access.isCurrent() || pollInFlightRef.current) return
       pollInFlightRef.current = true
       try {
-        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
+        if (!access.isCurrent() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
         const elapsed = Date.now() - pollStartTime.current
         if (elapsed > 3000) {
@@ -1114,9 +1089,8 @@ export default function useMallogTranscription({
           : null
         let res
         try {
-          res = await apiFetch(`${apiUrl}/api/status/${taskId}`, {
-            headers: getTranscriptionHeaders(),
-            credentials: authToken ? 'include' : 'omit',
+          res = await access.request(`${apiUrl}/api/status/${taskId}`, {
+            headers: getAuthHeaders(),
             signal: controller?.signal,
           })
         } finally {
@@ -1126,7 +1100,7 @@ export default function useMallogTranscription({
         }
 
         if (!res.ok) {
-          const data = await safeReadJson(res)
+          const data = await access.readJson(res)
           const detail = data?.detail || data?.message || ''
           if ([401, 403, 404].includes(res.status)) {
             failPolling(taskId, detail || messages.taskNotFound)
@@ -1147,7 +1121,7 @@ export default function useMallogTranscription({
           setNotice(null)
         }
         pollFailureCountRef.current = 0
-        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
+        if (!access.isCurrent() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
 
         setProcessingProgress(normalizeTranscriptionProgress(
           data.progress,
@@ -1160,17 +1134,13 @@ export default function useMallogTranscription({
           stopPolling()
           setCurrentStep(3)
           pollResultCommitTimerRef.current = window.setTimeout(() => {
-            if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
+            if (!access.isCurrent() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
             if (resultEpoch !== resultEpochRef.current) return
             setResult(data)
             setLoading(false)
             setCurrentStep(0)
-            if (authToken) {
-              fetchHistory()
-              fetchUsage()
-            } else {
-              fetchGuestUsage()
-            }
+            fetchHistory()
+            fetchUsage()
             activeTaskIdRef.current = ''
             pollResultCommitTimerRef.current = null
           }, 800)
@@ -1187,45 +1157,24 @@ export default function useMallogTranscription({
           failPolling(taskId, messages.taskNotFound)
         }
       } catch (error) {
-        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
+        if (!access.isCurrent()) return
+        if (!access.isCurrent() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return
         pollFailureCountRef.current += 1
         if (pollFailureCountRef.current === 3 || pollFailureCountRef.current % 10 === 0) {
           showToast(messages.pollingNetwork)
         }
         console.error('Polling error', error)
       } finally {
-        pollInFlightRef.current = false
+        if (access.isCurrent() && pollToken === pollTokenRef.current) pollInFlightRef.current = false
       }
     }, STATUS_POLL_INTERVAL_MS)
-  }, [apiUrl, authToken, failPolling, fetchGuestUsage, fetchHistory, fetchUsage, getTranscriptionHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
+  }, [access, apiUrl, authToken, failPolling, fetchHistory, fetchUsage, getAuthHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
 
   const handleSubmit = useCallback(async (event, usage) => {
     event.preventDefault()
+    if (!access.isCurrent()) return
     if (!file) {
       setError(messages.selectFile)
-      return
-    }
-
-    const planTier = usage?.plan_tier || (authToken ? 'free' : 'guest')
-    const isLimitedTier = planTier === 'guest'
-    const monthlyLimitSeconds = usage?.monthly_limit_seconds ?? (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : 0)
-    const maxAudioSeconds = Number(usage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
-    const remainingQuotaSeconds = isLimitedTier
-      ? Math.max(0, usage?.remaining_seconds ?? monthlyLimitSeconds)
-      : Number.MAX_SAFE_INTEGER
-    const fileExceedsRemainingQuota = isLimitedTier && fileDurationSeconds > 0 && fileDurationSeconds > remainingQuotaSeconds
-    const fileExceedsGuestMax = planTier === 'guest' && maxAudioSeconds > 0 && fileDurationSeconds > 0 && fileDurationSeconds > maxAudioSeconds
-    const uploadBlockedByQuota = isLimitedTier && remainingQuotaSeconds <= 0
-
-    if (fileExceedsGuestMax) {
-      setError(messages.guestTranscribeHint)
-      showToast(messages.guestTranscribeHint)
-      return
-    }
-
-    if (uploadBlockedByQuota || fileExceedsRemainingQuota) {
-      setError(messages.quotaExceeded)
-      showToast(messages.quotaExceeded)
       return
     }
 
@@ -1239,7 +1188,7 @@ export default function useMallogTranscription({
 
     try {
       const uploadRequestId = createUploadRequestId()
-      const response = await apiFetchWithNetworkRetry(
+      const response = await access.request(
         `${apiUrl}/api/transcribe`,
         () => {
           const formData = new FormData()
@@ -1252,26 +1201,24 @@ export default function useMallogTranscription({
           return {
             method: 'POST',
             headers: {
-              ...getTranscriptionHeaders(),
+              ...getAuthHeaders(),
               'X-Mallog24-Upload-Id': uploadRequestId,
             },
-            credentials: authToken ? 'include' : 'omit',
             body: formData,
           }
         },
         {
           maxAttempts: 4,
           onRetry: () => {
+            if (!access.isCurrent()) return
             setNotice(messages.uploadRetrying)
             setProcessingProgress(normalizeTranscriptionProgress(null, 'uploading'))
           },
         }
       )
       const data = await readResponseData(response, messages.transcribeFailed)
+      if (!access.isCurrent() || submitEpoch !== resultEpochRef.current) return
       setNotice(data?.duplicate_active_job ? messages.duplicateActiveJob : null)
-      if (!authToken && data?.quota) {
-        setGuestUsage(data.quota)
-      }
 
       if (data.status === 'queued' || data.status === 'processing') {
         setCurrentStep(2)
@@ -1288,21 +1235,19 @@ export default function useMallogTranscription({
         setLoading(false)
         setCurrentStep(0)
         setProcessingProgress(normalizeTranscriptionProgress(data.progress, 'completed'))
-        if (authToken) {
-          fetchUsage()
-        } else {
-          fetchGuestUsage()
-        }
+        fetchUsage()
       }
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.transcribeFailed)
       setLoading(false)
       setCurrentStep(0)
       setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
     }
-  }, [apiUrl, authToken, fetchGuestUsage, fetchUsage, file, fileDurationSeconds, getTranscriptionHeaders, invalidatePollingSession, language, messages.guestTranscribeHint, messages.quotaExceeded, messages.selectFile, messages.transcribeFailed, messages.uploadRetrying, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
+  }, [access, apiUrl, authToken, fetchUsage, file, fileDurationSeconds, getAuthHeaders, invalidatePollingSession, language, messages.selectFile, messages.transcribeFailed, messages.uploadRetrying, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
 
   const handleLoadHistory = useCallback(async (taskId) => {
+    if (!access.isCurrent()) return
     invalidatePollingSession()
     const loadEpoch = resetResultWorkspace(true)
     setLoading(true)
@@ -1311,7 +1256,7 @@ export default function useMallogTranscription({
     window.scrollTo({ top: 0, behavior: 'smooth' })
 
     try {
-      const res = await apiFetch(`${apiUrl}/api/status/${taskId}`, {
+      const res = await access.request(`${apiUrl}/api/status/${taskId}`, {
         headers: getAuthHeaders(),
       })
       const data = await readResponseData(res, messages.loadHistoryFailed)
@@ -1322,14 +1267,16 @@ export default function useMallogTranscription({
         setError(messages.loadHistoryFailed)
       }
     } catch {
+      if (!access.isCurrent()) return
       setError(messages.loadHistoryGeneric)
     } finally {
+      if (!access.isCurrent()) return
       setLoading(false)
     }
-  }, [apiUrl, getAuthHeaders, invalidatePollingSession, messages.loadHistoryFailed, messages.loadHistoryGeneric, readResponseData, resetResultWorkspace, setError, setNotice])
+  }, [access, apiUrl, getAuthHeaders, invalidatePollingSession, messages.loadHistoryFailed, messages.loadHistoryGeneric, readResponseData, resetResultWorkspace, setError, setNotice])
 
   const handleDeleteHistory = useCallback(async (taskId) => {
-    if (!authToken) {
+    if (!access.isCurrent()) {
       setError(messages.signinRequired)
       return
     }
@@ -1349,7 +1296,7 @@ export default function useMallogTranscription({
 
     try {
       await readResponseData(
-        await apiFetch(`${apiUrl}/api/history/${taskId}`, {
+        await access.request(`${apiUrl}/api/history/${taskId}`, {
           method: 'DELETE',
           headers: getAuthHeaders(authToken),
         }),
@@ -1368,14 +1315,16 @@ export default function useMallogTranscription({
       setNotice(messages.deleteHistorySuccess)
       showToast(messages.deleteHistorySuccess)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.deleteHistoryFailed)
     } finally {
+      if (!access.isCurrent()) return
       setHistoryDeletingTaskId('')
     }
-  }, [apiUrl, armPendingDeleteTask, authToken, clearPendingDeleteTask, getAuthHeaders, messages.deleteHistoryConfirmPrompt, messages.deleteHistoryFailed, messages.deleteHistorySuccess, messages.signinRequired, pendingDeleteTaskId, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
+  }, [access, apiUrl, armPendingDeleteTask, authToken, clearPendingDeleteTask, getAuthHeaders, messages.deleteHistoryConfirmPrompt, messages.deleteHistoryFailed, messages.deleteHistorySuccess, messages.signinRequired, pendingDeleteTaskId, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
 
   const handleDeleteAllHistory = useCallback(async () => {
-    if (!authToken) {
+    if (!access.isCurrent()) {
       setError(messages.signinRequired)
       return
     }
@@ -1395,7 +1344,7 @@ export default function useMallogTranscription({
 
     try {
       const data = await readResponseData(
-        await apiFetch(`${apiUrl}/api/history`, {
+        await access.request(`${apiUrl}/api/history`, {
           method: 'DELETE',
           headers: getAuthHeaders(authToken),
         }),
@@ -1424,31 +1373,36 @@ export default function useMallogTranscription({
       setNotice(successMessage)
       showToast(successMessage)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.deleteAllHistoryFailed)
     } finally {
+      if (!access.isCurrent()) return
       setHistoryBulkDeleting(false)
     }
-  }, [apiUrl, armPendingDeleteAll, authToken, clearPendingDeleteAll, getAuthHeaders, messages.deleteAllHistoryConfirmPrompt, messages.deleteAllHistoryFailed, messages.deleteAllHistoryPartial, messages.deleteAllHistorySuccess, messages.signinRequired, pendingDeleteAll, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
+  }, [access, apiUrl, armPendingDeleteAll, authToken, clearPendingDeleteAll, getAuthHeaders, messages.deleteAllHistoryConfirmPrompt, messages.deleteAllHistoryFailed, messages.deleteAllHistoryPartial, messages.deleteAllHistorySuccess, messages.signinRequired, pendingDeleteAll, readResponseData, resetResultWorkspace, result?.task_id, setError, setNotice, showToast])
 
   const exportAsTxt = useCallback(() => {
+    if (!access.isCurrent()) return
     if (!result) return
     const text = getActiveTranscriptText()
     if (!text) return
     const filename = `${sanitizeFileName(`${messages.transcriptFilename}_${new Date().toISOString().slice(0, 10)}`)}.txt`
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     triggerBlobDownload(blob, filename)
-  }, [getActiveTranscriptText, messages.transcriptFilename, result])
+  }, [access, getActiveTranscriptText, messages.transcriptFilename, result])
 
   const exportAsDocx = useCallback(() => {
+    if (!access.isCurrent()) return
     if (!result) return
     const text = getActiveTranscriptText()
     if (!text) return
     const filename = `${sanitizeFileName(`${messages.transcriptFilename}_${new Date().toISOString().slice(0, 10)}`)}.docx`
     const blob = buildDocxBlob(messages.transcriptTitle, text)
     triggerBlobDownload(blob, filename)
-  }, [getActiveTranscriptText, messages.transcriptFilename, messages.transcriptTitle, result])
+  }, [access, getActiveTranscriptText, messages.transcriptFilename, messages.transcriptTitle, result])
 
   const exportTextByLabel = useCallback((text, label, ext = 'txt') => {
+    if (!access.isCurrent()) return
     const safeText = String(text || '').trim()
     if (!safeText) return
     const filename = `${sanitizeFileName(`${label}_${new Date().toISOString().slice(0, 10)}`)}.${ext}`
@@ -1459,12 +1413,12 @@ export default function useMallogTranscription({
     }
     const blob = new Blob([safeText], { type: 'text/plain;charset=utf-8' })
     triggerBlobDownload(blob, filename)
-  }, [])
+  }, [access])
 
   const handleSummarize = useCallback(async () => {
     const sourceText = getActiveTranscriptText()
     if (!sourceText) return
-    if (!authToken) {
+    if (!access.isCurrent()) {
       setError(messages.summarizeLoginRequired)
       return
     }
@@ -1485,7 +1439,7 @@ export default function useMallogTranscription({
       formData.append('content_style', normalizedStyle)
       formData.append('language', result?.language || language || messages.defaultLanguage)
 
-      const response = await apiFetch(`${apiUrl}/api/summarize`, {
+      const response = await access.request(`${apiUrl}/api/summarize`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
@@ -1502,16 +1456,18 @@ export default function useMallogTranscription({
         }
       })
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.summarizeFailed)
     } finally {
+      if (!access.isCurrent()) return
       setLoading(false)
     }
-  }, [apiUrl, authToken, getActiveTranscriptText, getAuthHeaders, language, messages.defaultLanguage, messages.summarizeFailed, messages.summarizeLoginRequired, readResponseData, resolveContentStyle, result, setError, setNotice, transcriptionType])
+  }, [access, apiUrl, authToken, getActiveTranscriptText, getAuthHeaders, language, messages.defaultLanguage, messages.summarizeFailed, messages.summarizeLoginRequired, readResponseData, resolveContentStyle, result, setError, setNotice, transcriptionType])
 
   const handleGenerateRecordDraft = useCallback(async (category) => {
     const sourceText = getActiveTranscriptText()
     if (!sourceText) return
-    if (!authToken) {
+    if (!access.isCurrent()) {
       setError(messages.draftLoginRequired)
       return
     }
@@ -1527,7 +1483,7 @@ export default function useMallogTranscription({
       formData.append('category', category)
       formData.append('language', result?.language || language || messages.defaultLanguage)
 
-      const response = await apiFetch(`${apiUrl}/api/records/draft`, {
+      const response = await access.request(`${apiUrl}/api/records/draft`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
@@ -1548,22 +1504,26 @@ export default function useMallogTranscription({
       }))
       setNotice(`${data.category_label || messages.recordDefaultLabel} ${messages.draftCreatedSuffix}`)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.draftFailedGeneric)
     } finally {
+      if (!access.isCurrent()) return
       setDraftLoadingCategory('')
     }
-  }, [apiUrl, authToken, getActiveTranscriptText, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice, transcriptionType])
+  }, [access, apiUrl, authToken, getActiveTranscriptText, getAuthHeaders, language, messages.defaultLanguage, messages.draftCreatedSuffix, messages.draftFailed, messages.draftFailedGeneric, messages.draftLoginRequired, messages.recordDefaultLabel, readResponseData, result, setError, setNotice, transcriptionType])
 
   const handleRecordDraftChange = useCallback((category, value) => {
+    if (!access.isCurrent()) return
     setRecordDrafts((prev) => ({ ...prev, [category]: value }))
-  }, [])
+  }, [access])
 
   const handleResetTranscriptEdit = useCallback(() => {
+    if (!access.isCurrent()) return
     setTranscriptEditText(transcriptSourceText)
-  }, [transcriptSourceText])
+  }, [access, transcriptSourceText])
 
   const handleSaveTranscriptCorrection = useCallback(async () => {
-    if (trainingDataConsent && !authToken) {
+    if (!access.isCurrent()) {
       setError(messages.correctionLoginRequired)
       return
     }
@@ -1586,7 +1546,7 @@ export default function useMallogTranscription({
     try {
       let data = { stored: false }
       if (trainingDataConsent) {
-        const response = await apiFetch(`${apiUrl}/api/corrections`, {
+        const response = await access.request(`${apiUrl}/api/corrections`, {
           method: 'POST',
           headers: {
             ...getAuthHeaders(),
@@ -1627,14 +1587,16 @@ export default function useMallogTranscription({
           : messages.correctionAppliedNoTraining
       )
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.correctionSaveFailed)
     } finally {
+      if (!access.isCurrent()) return
       setTranscriptEditSaving(false)
     }
-  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, language, messages.correctionAppliedNoTraining, messages.correctionEmpty, messages.correctionLoginRequired, messages.correctionNoChanges, messages.correctionSaveFailed, messages.correctionSaveSuccess, messages.defaultLanguage, readResponseData, resolveContentStyle, result, setError, setNotice, trainingDataConsent, transcriptEditText, transcriptSourceText, transcriptionType])
+  }, [access, apiUrl, authToken, compactTranscriptText, getAuthHeaders, language, messages.correctionAppliedNoTraining, messages.correctionEmpty, messages.correctionLoginRequired, messages.correctionNoChanges, messages.correctionSaveFailed, messages.correctionSaveSuccess, messages.defaultLanguage, readResponseData, resolveContentStyle, result, setError, setNotice, trainingDataConsent, transcriptEditText, transcriptSourceText, transcriptionType])
 
   const handleSaveRecord = useCallback(async (category) => {
-    if (!authToken) {
+    if (!access.isCurrent()) {
       setError(messages.saveLoginRequired)
       return
     }
@@ -1671,7 +1633,7 @@ export default function useMallogTranscription({
         }))
       }
 
-      const response = await apiFetch(`${apiUrl}/api/records`, {
+      const response = await access.request(`${apiUrl}/api/records`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
@@ -1681,7 +1643,7 @@ export default function useMallogTranscription({
       const correctionSample = data?.correction_sample
       if (shouldCaptureCorrection && (!correctionSample || correctionSample.success === false)) {
         try {
-          await apiFetch(`${apiUrl}/api/corrections`, {
+          await access.request(`${apiUrl}/api/corrections`, {
             method: 'POST',
             headers: {
               ...getAuthHeaders(),
@@ -1705,39 +1667,46 @@ export default function useMallogTranscription({
             }),
           })
         } catch (correctionError) {
+          if (!access.isCurrent()) return
           console.warn('Correction sample save failed:', correctionError?.message || correctionError)
         }
       }
 
+      if (!access.isCurrent()) return
       setNotice(messages.saveSuccess)
       fetchSavedRecords()
       setShowRecords(true)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.saveFailed)
     } finally {
+      if (!access.isCurrent()) return
       setSavingCategory('')
     }
-  }, [apiUrl, authToken, fetchSavedRecords, getAuthHeaders, language, messages.defaultLanguage, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordDraftSources, recordTypeLabels, result, setError, setNotice, trainingDataConsent, transcriptionType])
+  }, [access, apiUrl, authToken, fetchSavedRecords, getAuthHeaders, language, messages.defaultLanguage, messages.saveEmpty, messages.saveFailed, messages.saveLoginRequired, messages.saveSuccess, readResponseData, recordDrafts, recordDraftSources, recordTypeLabels, result, setError, setNotice, trainingDataConsent, transcriptionType])
 
   const handleStartSavedRecordEdit = useCallback((record) => {
+    if (!access.isCurrent()) return
     const recordId = String(record?.id || '')
     if (!recordId) return
     setSavedRecordEditDrafts((prev) => ({
       ...prev,
       [recordId]: String(record?.content || ''),
     }))
-  }, [])
+  }, [access])
 
   const handleSavedRecordEditChange = useCallback((recordId, value) => {
+    if (!access.isCurrent()) return
     const normalizedRecordId = String(recordId || '')
     if (!normalizedRecordId) return
     setSavedRecordEditDrafts((prev) => ({
       ...prev,
       [normalizedRecordId]: value,
     }))
-  }, [])
+  }, [access])
 
   const handleCancelSavedRecordEdit = useCallback((recordId) => {
+    if (!access.isCurrent()) return
     const normalizedRecordId = String(recordId || '')
     if (!normalizedRecordId) return
     setSavedRecordEditDrafts((prev) => {
@@ -1745,10 +1714,10 @@ export default function useMallogTranscription({
       delete next[normalizedRecordId]
       return next
     })
-  }, [])
+  }, [access])
 
   const handleUpdateSavedRecord = useCallback(async (record) => {
-    if (!authToken) {
+    if (!access.isCurrent()) {
       setError(messages.saveLoginRequired)
       return
     }
@@ -1777,7 +1746,7 @@ export default function useMallogTranscription({
     setNotice(null)
 
     try {
-      const response = await apiFetch(`${apiUrl}/api/records/${encodeURIComponent(recordId)}`, {
+      const response = await access.request(`${apiUrl}/api/records/${encodeURIComponent(recordId)}`, {
         method: 'PUT',
         headers: {
           ...getAuthHeaders(),
@@ -1805,38 +1774,22 @@ export default function useMallogTranscription({
 
       setNotice(messages.recordUpdateSuccess)
     } catch (error) {
+      if (!access.isCurrent()) return
       setError(error?.message || messages.recordUpdateFailed)
     } finally {
-      setSavedRecordSavingId('')
+      if (!access.isCurrent()) return
+    setSavedRecordSavingId('')
     }
-  }, [apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, savedRecordEditDrafts, setError, setNotice, trainingDataConsent])
+  }, [access, apiUrl, authToken, compactTranscriptText, getAuthHeaders, handleCancelSavedRecordEdit, language, messages.correctionNoChanges, messages.defaultLanguage, messages.recordDefaultLabel, messages.recordUpdateFailed, messages.recordUpdateSuccess, messages.saveEmpty, messages.saveLoginRequired, readResponseData, recordTypeLabels, result?.language, savedRecordEditDrafts, setError, setNotice, trainingDataConsent])
 
-  const usageState = useMemo(() => {
-    return (usage) => {
-      const currentUsage = usage || null
-      const planTier = currentUsage?.plan_tier || (authToken ? 'free' : 'guest')
-      const isFreeTier = planTier === 'guest'
-      const monthlyLimitSeconds = currentUsage?.monthly_limit_seconds ?? (planTier === 'guest' ? GUEST_MONTHLY_LIMIT_SECONDS : 0)
-      const maxAudioSeconds = Number(currentUsage?.max_audio_seconds) || (planTier === 'guest' ? GUEST_MAX_AUDIO_SECONDS : 0)
-      const remainingQuotaSeconds = isFreeTier
-        ? Math.max(0, currentUsage?.remaining_seconds ?? monthlyLimitSeconds)
-        : Number.MAX_SAFE_INTEGER
-      const fileExceedsRemainingQuota = isFreeTier && fileDurationSeconds > 0 && (
-        fileDurationSeconds > remainingQuotaSeconds ||
-        (planTier === 'guest' && maxAudioSeconds > 0 && fileDurationSeconds > maxAudioSeconds)
-      )
-      const uploadBlockedByQuota = isFreeTier && remainingQuotaSeconds <= 0
-
-      return {
-        isFreeTier,
-        planTier,
-        monthlyLimitSeconds,
-        remainingQuotaSeconds,
-        fileExceedsRemainingQuota,
-        uploadBlockedByQuota,
-      }
-    }
-  }, [authToken, fileDurationSeconds])
+  const usageState = useMemo(() => (usage) => ({
+    isFreeTier: true,
+    planTier: usage?.plan_tier || 'free',
+    monthlyLimitSeconds: null,
+    remainingQuotaSeconds: Number.MAX_SAFE_INTEGER,
+    fileExceedsRemainingQuota: false,
+    uploadBlockedByQuota: !access.isCurrent(),
+  }), [access])
 
   return {
     file,
@@ -1887,10 +1840,6 @@ export default function useMallogTranscription({
     resumeRecordingAnalysis,
     activeRecordingDeviceLabel,
     recordingInputState,
-    guestUsage,
-    guestTranscribeHint: messages.guestTranscribeHint,
-    guestTranscribeStart: messages.guestTranscribeStart,
-    isGuestMode: !authToken,
     fileInputRef,
     usageState,
     resolveContentStyle,

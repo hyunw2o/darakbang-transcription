@@ -1,5 +1,10 @@
 import { Platform } from "react-native";
 import { API_FALLBACK_URLS, API_URL } from "../config";
+import { sessionEndedError } from "./session";
+
+function assertNotAborted(signal) {
+  if (signal?.aborted) throw sessionEndedError();
+}
 
 function parseResponseText(raw) {
   if (!raw) return {};
@@ -50,6 +55,7 @@ async function requestApi(
     bodyFactory = null,
     timeoutMs = 20000,
     headers: customHeaders = {},
+    signal,
   } = {}
 ) {
   const headers = { ...customHeaders };
@@ -66,9 +72,12 @@ async function requestApi(
   let lastError = null;
 
   for (let idx = 0; idx < baseCandidates.length; idx += 1) {
+    assertNotAborted(signal);
     const baseUrl = baseCandidates[idx];
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort);
 
     try {
       const response = await fetch(`${baseUrl}${path}`, {
@@ -79,6 +88,7 @@ async function requestApi(
       });
 
       const rawText = await response.text();
+      assertNotAborted(signal);
       const data = parseResponseText(rawText);
 
       if (!response.ok) {
@@ -89,6 +99,7 @@ async function requestApi(
 
       return data;
     } catch (error) {
+      assertNotAborted(signal);
       lastError = error;
       const isTimeout = error?.name === "AbortError" || isTimeoutErrorMessage(error?.message);
       const canFallback = idx < baseCandidates.length - 1 && (isTimeout || isNetworkFetchError(error));
@@ -100,6 +111,7 @@ async function requestApi(
       }
     } finally {
       clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", abort);
     }
   }
 
@@ -119,9 +131,11 @@ async function requestApiWithNetworkRetry(
   let lastError = null;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    assertNotAborted(options.signal);
     try {
       return await requestApi(path, options);
     } catch (error) {
+      assertNotAborted(options.signal);
       lastError = error;
       const retryable = (
         isTimeoutErrorMessage(error?.message || "") ||
@@ -146,6 +160,7 @@ async function requestApiWithTimeoutRetry(path, options = {}, retryDelayMs = 120
   try {
     return await requestApi(path, { ...options, timeoutMs: initialTimeoutMs });
   } catch (error) {
+    assertNotAborted(options.signal);
     const retryable = isTimeoutErrorMessage(error?.message || "") || isNetworkFetchError(error);
     if (!retryable) {
       throw error;

@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Clipboard,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import Feather from "@expo/vector-icons/Feather";
 import * as DocumentPicker from "expo-document-picker";
 import {
   RecordingPresets,
@@ -36,9 +40,6 @@ import {
   BUSINESS_NAME,
   BUSINESS_REG_NUMBER,
   ECOMMERCE_REG_NUMBER,
-  GUEST_MAX_AUDIO_SECONDS,
-  GUEST_MONTHLY_LIMIT_SECONDS,
-  GUEST_SESSION_KEY,
   LANDLINE_PHONE,
   MAX_UPLOAD_BYTES,
   MOBILE_THEME_OPTIONS,
@@ -58,7 +59,8 @@ import {
 import { getExtension, inferMimeFromAsset } from "./utils/file";
 import { formatDate, formatSecondsToHourMinute, formatSecondsToHourMinuteSecond, sanitizeFileName } from "./utils/format";
 import { buildDocxBase64 } from "./utils/docx";
-import { requestApi, requestApiWithNetworkRetry } from "./utils/network";
+import { requestApi as apiRequest, requestApiWithNetworkRetry as apiRequestWithNetworkRetry } from "./utils/network";
+import { sessionEndedError } from "./utils/session";
 import useMobileAuth from "./hooks/useMobileAuth";
 
 import { I18N, LEGAL_DOCUMENTS } from "./content";
@@ -72,11 +74,12 @@ const EMPTY_GLOSSARY_FORM = {
 };
 const TRANSCRIPTION_TYPE_CARD_ORDER = ["sermon", "prayer", "conversation", "phonecall"];
 const TRANSCRIPTION_TYPE_CARD_META = {
-  sermon: { icon: "S" },
-  prayer: { icon: "P" },
-  conversation: { icon: "M" },
-  phonecall: { icon: "C" },
+  sermon: { icon: "book-open" },
+  prayer: { icon: "sunrise" },
+  conversation: { icon: "users" },
+  phonecall: { icon: "phone" },
 };
+const WORKSPACE_TAB_ICONS = { transcribe: "mic", history: "clock", records: "folder", settings: "settings" };
 const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
   isMeteringEnabled: true,
@@ -295,6 +298,33 @@ function RecordingWaveform({ active, level, levels, label, theme }) {
 }
 
 function App() {
+  const [uiLanguage, setUiLanguage] = useState("ko");
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const clearMessages = useCallback(() => { setNotice(""); setError(""); }, []);
+  const copy = I18N[uiLanguage] || I18N.ko;
+  const auth = useMobileAuth({ copy, language: uiLanguage, clearMessages, setNotice, setError });
+  // Each login owns a fresh workspace, including its pending async operations.
+  return <MobileScreen key={auth.sessionKey} auth={auth} authNotice={notice} authError={error}
+    uiLanguage={uiLanguage} setUiLanguage={setUiLanguage} />;
+}
+
+function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }) {
+  const mountedRef = useRef(true);
+  const sessionScope = auth.sessionScope;
+  const canUseWorkspace = useCallback(() => mountedRef.current && Boolean(sessionScope?.isActive()), [sessionScope]);
+  const requestApi = useCallback(async (path, options) => {
+    if (!canUseWorkspace()) throw sessionEndedError();
+    const data = await sessionScope.request(apiRequest, path, options);
+    if (!canUseWorkspace()) throw sessionEndedError();
+    return data;
+  }, [canUseWorkspace, sessionScope]);
+  const requestApiWithNetworkRetry = useCallback(async (path, options, retryOptions) => {
+    if (!canUseWorkspace()) throw sessionEndedError();
+    const data = await sessionScope.request(apiRequestWithNetworkRetry, path, options, retryOptions);
+    if (!canUseWorkspace()) throw sessionEndedError();
+    return data;
+  }, [canUseWorkspace, sessionScope]);
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
   const audioRecorderState = useAudioRecorderState(audioRecorder, 100);
   const pollRef = useRef(null);
@@ -317,23 +347,11 @@ function App() {
   const [openSettingsMenu, setOpenSettingsMenu] = useState("");
 
   const [activeTab, setActiveTab] = useState("transcribe");
-  const [uiLanguage, setUiLanguage] = useState("ko");
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("ko");
   const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
   const [recordingStatus, setRecordingStatus] = useState("idle");
   const [recordingEnvelope, setRecordingEnvelope] = useState(createEmptyRecordingEnvelope);
-  const [guestModeStarted, setGuestModeStarted] = useState(false);
-  const [guestSessionId, setGuestSessionId] = useState("");
-  const [guestUsage, setGuestUsage] = useState({
-    plan_tier: "guest",
-    used_audio_seconds: 0,
-    monthly_limit_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
-    remaining_seconds: GUEST_MONTHLY_LIMIT_SECONDS,
-    usage_percent: 0,
-    max_audio_seconds: GUEST_MAX_AUDIO_SECONDS,
-  });
-
   const [submitting, setSubmitting] = useState(false);
   const [taskPhase, setTaskPhase] = useState("idle");
   const [taskStateText, setTaskStateText] = useState("");
@@ -421,37 +439,6 @@ function App() {
     setNotice("");
     setError("");
   }, []);
-  const ensureGuestSessionId = useCallback(async () => {
-    if (guestSessionId) return guestSessionId;
-    const existing = await AsyncStorage.getItem(GUEST_SESSION_KEY);
-    if (existing) {
-      setGuestSessionId(existing);
-      return existing;
-    }
-    const generated = `guest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-    await AsyncStorage.setItem(GUEST_SESSION_KEY, generated);
-    setGuestSessionId(generated);
-    return generated;
-  }, [guestSessionId]);
-  const getGuestHeaders = useCallback(async () => {
-    const resolvedGuestId = await ensureGuestSessionId();
-    return { "X-Guest-Session-Id": resolvedGuestId };
-  }, [ensureGuestSessionId]);
-  const fetchGuestUsage = useCallback(async ({ showNotice = false } = {}) => {
-    try {
-      const data = await requestApi("/api/guest/usage", {
-        headers: await getGuestHeaders(),
-      });
-      setGuestUsage(data);
-      if (showNotice) {
-        setNotice(copy.notices.guestUsageLoaded || copy.notices.usageLoaded);
-      }
-      return data;
-    } catch (e) {
-      setError(e.message || copy.errors.usageReadFailed);
-      return null;
-    }
-  }, [copy.errors.usageReadFailed, copy.notices.guestUsageLoaded, copy.notices.usageLoaded, getGuestHeaders]);
   const clearScrollUnlockTimer = useCallback(() => {
     if (scrollUnlockTimerRef.current) {
       clearTimeout(scrollUnlockTimerRef.current);
@@ -604,14 +591,7 @@ function App() {
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
-  const isPrivacyGateVisible = !privacyAccepted && !activeLegalDoc;
-  const authLandingBadges = useMemo(
-    () => [
-      copy.authLanding.badges.free,
-      copy.authLanding.badges.beta,
-    ],
-    [copy.authLanding.badges.beta, copy.authLanding.badges.free]
-  );
+  const isPrivacyGateVisible = auth.isLoggedIn && !privacyAccepted && !activeLegalDoc;
   const transcriptionTypeOptions = useMemo(
     () => TRANSCRIPTION_TYPE_CARD_ORDER.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
     [copy]
@@ -680,28 +660,6 @@ function App() {
     }
   }, [copy.errors.glossaryReadFailed]);
 
-  const resetAppWorkspace = useCallback(() => {
-    invalidatePollingSession();
-    setHistory([]);
-    setHistoryLoaded(false);
-    setHistoryDeletingTaskId("");
-    setHistoryBulkDeleting(false);
-    setRecords([]);
-    setRecordsLoaded(false);
-    setRecordEditDrafts({});
-    setRecordSavingId("");
-    setGlossaryTerms([]);
-    setGlossaryLoaded(false);
-    setGlossaryLoading(false);
-    setGlossaryActionId("");
-    setGlossaryForm(EMPTY_GLOSSARY_FORM);
-    resetResultWorkspace(true);
-    setPickedFile(null);
-    setTaskPhase("idle");
-    setTaskStateText("");
-    setGuestModeStarted(false);
-  }, []);
-
   const {
     bootLoading: authBootLoading,
     authMode,
@@ -712,6 +670,8 @@ function App() {
     setAuthEmail,
     authPassword,
     setAuthPassword,
+    authPasswordConfirm,
+    setAuthPasswordConfirm,
     authLoading,
     socialLoading,
     authToken,
@@ -720,57 +680,25 @@ function App() {
     sessionRemainingLabel,
     usage,
     usageLoading,
+    usageLoaded,
     fetchUsage,
     handleAuthSubmit,
     handlePasswordResetRequest,
+    handlePasswordRecovery,
     handleSocialLogin,
     handleLogout,
     handleOpenOurs,
     handleDeleteAccount,
-  } = useMobileAuth({
-    copy,
-    language: uiLanguage,
-    clearMessages,
-    setNotice,
-    setError,
-    onSessionReady: (token) => {
-      setGuestModeStarted(false);
-      fetchHistory(token);
-      fetchRecords(token);
-      fetchGlossary(token, { quiet: true });
-    },
-    onSessionCleared: resetAppWorkspace,
-  });
+  } = auth;
 
-  const bootLoading = uiBootLoading || authBootLoading;
-  const isGuestMode = !isLoggedIn && guestModeStarted;
-  const tabOptions = useMemo(
-    () => {
-      const visibleTabs = isLoggedIn ? APP_TABS : ["transcribe", "settings"];
-      return visibleTabs.map((key) => ({ key, label: copy.tabs[key] || key }));
-    },
-    [copy, isLoggedIn]
-  );
-  const effectiveUsage = isGuestMode ? guestUsage : usage;
-  const usagePlan = String(effectiveUsage?.plan_tier || (isGuestMode ? "guest" : "free"));
-  const displayUsagePlan = usagePlan;
-  const isUsageLimited = displayUsagePlan === "guest";
-  const usedAudioSeconds = Math.max(0, Number(effectiveUsage?.used_audio_seconds) || 0);
-  const monthlyLimitSeconds = isUsageLimited
-    ? Math.max(1, Number(effectiveUsage?.monthly_limit_seconds) || GUEST_MONTHLY_LIMIT_SECONDS)
-    : null;
-  const remainingAudioSeconds = isUsageLimited
-    ? Math.max(0, Number(effectiveUsage?.remaining_seconds ?? monthlyLimitSeconds - usedAudioSeconds))
-    : null;
-  const usagePercent = isUsageLimited
-    ? Math.max(0, Math.min(100, Number(effectiveUsage?.usage_percent) || 0))
-    : 0;
-  const planLabel = copy.planLabels?.[displayUsagePlan] || copy.planLabels?.free || displayUsagePlan;
+  const bootLoading = uiBootLoading;
+  const tabOptions = APP_TABS.map((key) => ({ key, label: copy.tabs[key] || key }));
+  const effectiveUsage = usage;
+  const usedAudioSeconds = Math.max(0, Number(usage?.used_audio_seconds) || 0);
+  const planLabel = usage?.plan_tier === "admin" ? copy.planLabels.admin : copy.planLabels.free;
   const usageSettingsTitle = copy.settingsUsageTitle;
   const usageSettingsHint = copy.settingsUsageHint;
-  const shouldShowMobileAds =
-    activeTab === "transcribe" &&
-    (isGuestMode || Boolean(effectiveUsage));
+  const shouldShowMobileAds = isLoggedIn && activeTab === "transcribe" && Boolean(usage);
 
   const handleCreateGlossaryTerm = useCallback(async () => {
     if (!isLoggedIn || !authToken) {
@@ -922,15 +850,6 @@ function App() {
     clearHistoryDeleteAllConfirmTimer();
   }, [clearHistoryDeleteAllConfirmTimer, clearHistoryDeleteConfirmTimer, isLoggedIn]);
 
-  useEffect(() => {
-    ensureGuestSessionId().catch(() => {});
-  }, [ensureGuestSessionId]);
-
-  useEffect(() => {
-    if (isLoggedIn || !guestModeStarted) return;
-    fetchGuestUsage().catch(() => {});
-  }, [fetchGuestUsage, guestModeStarted, isLoggedIn]);
-
   useEffect(() => () => {
     clearHistoryDeleteConfirmTimer();
     clearHistoryDeleteAllConfirmTimer();
@@ -980,10 +899,17 @@ function App() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    if (!usage && !usageLoading) {
+    if (!usageLoaded && !usageLoading) {
       fetchUsage(authToken).catch(() => {});
     }
-  }, [isLoggedIn, authToken, usage, usageLoading, fetchUsage]);
+  }, [isLoggedIn, authToken, usageLoaded, usageLoading, fetchUsage]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetchHistory(authToken);
+    fetchRecords(authToken);
+    fetchGlossary(authToken);
+  }, [isLoggedIn, authToken]);
 
   useEffect(() => {
     let active = true;
@@ -1002,6 +928,8 @@ function App() {
         const hasPrivacyConsent = savedPrivacyConsent === PRIVACY_POLICY_VERSION;
         setPrivacyAccepted(hasPrivacyConsent);
         setPrivacyConsentChecked(hasPrivacyConsent);
+      } catch {
+        // Preference storage must not block public auth and legal screens.
       } finally {
         if (active) setUiBootLoading(false);
       }
@@ -1014,15 +942,20 @@ function App() {
     };
   }, []);
 
-  useEffect(() => () => {
-    try {
-      if (audioRecorder.getStatus?.()?.isRecording) {
-        audioRecorder.stop().catch(() => {});
-      }
-    } catch {
-      // Recorder may already be released during native teardown.
-    }
-  }, [audioRecorder]);
+  useEffect(() => {
+    mountedRef.current = true;
+    const stopProtectedWork = () => {
+      discardRecordingRef.current = true;
+      invalidatePollingSession();
+      try { audioRecorder.stop().catch(() => {}); } catch { /* Native recorder may be released. */ }
+    };
+    sessionScope?.signal.addEventListener("abort", stopProtectedWork);
+    return () => {
+      mountedRef.current = false;
+      stopProtectedWork();
+      sessionScope?.signal.removeEventListener("abort", stopProtectedWork);
+    };
+  }, [audioRecorder, invalidatePollingSession, sessionScope]);
 
   useEffect(() => {
     AsyncStorage.setItem(UI_THEME_KEY, themeKey).catch(() => {});
@@ -1030,6 +963,7 @@ function App() {
   }, [themeKey, themeMode]);
 
   const pickAudioFile = async () => {
+    if (!canUseWorkspace() || submitting || recordingBusy || !privacyAccepted) return;
     clearMessages();
     resetResultWorkspace(true);
 
@@ -1039,7 +973,7 @@ function App() {
         multiple: false,
       });
 
-      if (resultDoc.canceled || !resultDoc.assets?.length) return;
+      if (!canUseWorkspace() || resultDoc.canceled || !resultDoc.assets?.length) return;
 
       const asset = resultDoc.assets[0];
       if ((asset.size || 0) > MAX_UPLOAD_BYTES) {
@@ -1063,12 +997,13 @@ function App() {
   };
 
   const startAudioRecording = async () => {
-    if (submitting || recordingBusy) return;
+    if (!canUseWorkspace() || !privacyAccepted || submitting || recordingBusy) return;
     clearMessages();
 
     try {
       setRecordingStatus("requesting");
       const permission = await requestRecordingPermissionsAsync();
+      if (!canUseWorkspace()) return;
       if (!permission?.granted) {
         setRecordingStatus("idle");
         setError(copy.errors.recordingPermissionDenied);
@@ -1080,10 +1015,15 @@ function App() {
         playsInSilentMode: true,
       });
 
+      if (!canUseWorkspace()) return;
       discardRecordingRef.current = false;
       setPickedFile(null);
       resetResultWorkspace(true);
       await audioRecorder.prepareToRecordAsync();
+      if (!canUseWorkspace()) {
+        await audioRecorder.stop().catch(() => {});
+        return;
+      }
       audioRecorder.record();
       setRecordingStatus("recording");
       setNotice(copy.notices.recordingStarted);
@@ -1108,6 +1048,7 @@ function App() {
 
       await new Promise((resolve) => setTimeout(resolve, 150));
 
+      if (!canUseWorkspace()) return;
       if (discardRecordingRef.current) {
         setPickedFile(null);
         setNotice(copy.notices.recordingCanceled);
@@ -1129,6 +1070,7 @@ function App() {
         size = 0;
       }
 
+      if (!canUseWorkspace()) return;
       if (size > MAX_UPLOAD_BYTES) {
         setPickedFile(null);
         setError(copy.errors.fileTooLarge);
@@ -1152,7 +1094,8 @@ function App() {
   };
 
   const startPollingTask = (taskId, expectedResultEpoch, initialProgress = null) => {
-    stopPolling();
+    if (!canUseWorkspace() || expectedResultEpoch !== resultEpochRef.current) return;
+    invalidatePollingSession();
     const pollToken = pollTokenRef.current;
     activeTaskIdRef.current = taskId;
     pollStartedAtRef.current = Date.now();
@@ -1166,7 +1109,7 @@ function App() {
       if (pollInFlightRef.current) return;
       pollInFlightRef.current = true;
       try {
-        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
+        if (!canUseWorkspace() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
 
         const elapsed = Date.now() - (pollStartedAtRef.current || Date.now());
         if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
@@ -1183,11 +1126,9 @@ function App() {
 
         const data = await requestApi(
           `/api/status/${taskId}`,
-          isLoggedIn
-            ? { token: authToken, timeoutMs: 45000 }
-            : { headers: await getGuestHeaders(), timeoutMs: 45000 }
+          { token: authToken, timeoutMs: 45000 }
         );
-        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
+        if (!canUseWorkspace() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
         pollFailureCountRef.current = 0;
         setNotice("");
 
@@ -1214,12 +1155,8 @@ function App() {
           if (expectedResultEpoch !== resultEpochRef.current) return;
           setResult(data);
           setNotice(copy.notices.transcribeDone);
-          if (isLoggedIn) {
-            fetchHistory(authToken);
-            fetchUsage(authToken, { quiet: true }).catch(() => {});
-          } else {
-            fetchGuestUsage().catch(() => {});
-          }
+          fetchHistory(authToken);
+          fetchUsage(authToken, { quiet: true }).catch(() => {});
           return;
         }
 
@@ -1244,18 +1181,19 @@ function App() {
           setError(copy.errors.taskNotFound);
         }
       } catch (e) {
-        if (pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
+        if (!canUseWorkspace() || pollToken !== pollTokenRef.current || activeTaskIdRef.current !== taskId) return;
         pollFailureCountRef.current += 1;
         if (pollFailureCountRef.current === 2 || pollFailureCountRef.current % 8 === 0) {
           setNotice(copy.errors.statusRetrying || copy.errors.statusFailed);
         }
       } finally {
-        pollInFlightRef.current = false;
+        if (pollToken === pollTokenRef.current) pollInFlightRef.current = false;
       }
     }, STATUS_POLL_INTERVAL_MS);
   };
 
   const handleTranscribe = async () => {
+    if (!canUseWorkspace() || !privacyAccepted || submitting || recordingBusy) return;
     clearMessages();
 
     if (!pickedFile) {
@@ -1272,9 +1210,7 @@ function App() {
     setTaskStateText(resolveProcessingDetail(copy, uploadProgress));
 
     try {
-      const requestOptions = isLoggedIn
-        ? { token: authToken }
-        : { headers: await getGuestHeaders() };
+      const requestOptions = { token: authToken };
       const uploadRequestId = createUploadRequestId();
       const data = await requestApiWithNetworkRetry(
         "/api/transcribe",
@@ -1310,9 +1246,7 @@ function App() {
         }
       );
       setNotice(data?.duplicate_active_job ? copy.notices.duplicateActiveJob : "");
-      if (!isLoggedIn && data?.quota) {
-        setGuestUsage(data.quota);
-      }
+      if (!canUseWorkspace() || submitEpoch !== resultEpochRef.current) return;
 
       if ((data.status === "queued" || data.status === "processing") && data.task_id) {
         startPollingTask(data.task_id, submitEpoch, data.progress);
@@ -1327,12 +1261,8 @@ function App() {
           setTranscriptionLanguage(String(data.language).toLowerCase());
         }
         setResult(data);
-        if (isLoggedIn) {
-          fetchHistory(authToken);
-          fetchUsage(authToken, { quiet: true }).catch(() => {});
-        } else {
-          fetchGuestUsage().catch(() => {});
-        }
+        fetchHistory(authToken);
+        fetchUsage(authToken, { quiet: true }).catch(() => {});
       } else if (data.status === "error") {
         throw new Error(data.error || copy.errors.transcribeError);
       } else {
@@ -1352,6 +1282,7 @@ function App() {
   };
 
   const handleLoadHistoryItem = async (taskId) => {
+    if (!canUseWorkspace() || submitting || recordingBusy) return;
     clearMessages();
     unlockWorkspaceScroll();
     invalidatePollingSession();
@@ -1821,6 +1752,7 @@ function App() {
   };
 
   const handleSaveTranscriptCorrection = async () => {
+    if (!canUseWorkspace()) return;
     clearMessages();
 
     if (trainingDataConsent && !isLoggedIn) {
@@ -1886,6 +1818,7 @@ function App() {
   const resolveExportContent = (text) => (text || "").trim();
 
   const handleCopyToClipboard = (label, text) => {
+    if (!canUseWorkspace()) return;
     clearMessages();
     const content = resolveExportContent(text);
     if (!content) {
@@ -1905,6 +1838,7 @@ function App() {
   };
 
   const handleShareExport = async (label, text, format = "txt") => {
+    if (!canUseWorkspace()) return;
     clearMessages();
     const content = resolveExportContent(text);
     if (!content) {
@@ -1922,6 +1856,7 @@ function App() {
         throw new Error(copy.errors.shareUnavailable);
       }
 
+      if (!canUseWorkspace()) return;
       const ext = format === "docx" ? "docx" : "txt";
       const exportFileName = `${sanitizeFileName(label)}_${Date.now()}.${ext}`;
       const fileUri = `${FileSystem.cacheDirectory}${exportFileName}`;
@@ -1937,6 +1872,10 @@ function App() {
         });
       }
 
+      if (!canUseWorkspace()) {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        return;
+      }
       await Sharing.shareAsync(fileUri, {
         mimeType:
           format === "docx"
@@ -2005,16 +1944,18 @@ function App() {
         <NmPressable
           style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
           onPress={() => setOpenSettingsMenu((prev) => (prev === "language" ? "" : "language"))}
-          accessibilityLabel={copy.languageOptionEn}
+          accessibilityRole="button"
+          accessibilityLabel={uiLanguage === "ko" ? "언어 선택" : "Language"}
         >
-          <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>🌐</Text>
+          <Feather name="globe" size={20} color={activeTheme.textPrimary} />
         </NmPressable>
         <NmPressable
           style={[styles.quickIconButton, { borderColor: activeTheme.inputBorder }]}
           onPress={() => setOpenSettingsMenu((prev) => (prev === "theme" ? "" : "theme"))}
-          accessibilityLabel="Theme menu"
+          accessibilityRole="button"
+          accessibilityLabel={uiLanguage === "ko" ? "화면 테마" : "Theme"}
         >
-          <Text style={[styles.quickIconText, { color: activeTheme.textPrimary }]}>◐</Text>
+          <Feather name="sun" size={20} color={activeTheme.textPrimary} />
         </NmPressable>
       </View>
 
@@ -2069,44 +2010,29 @@ function App() {
     </View>
   );
 
-  const renderUsageSummaryBar = () => {
-    const hasUsage = Boolean(effectiveUsage);
-    const usedLabel = isUsageLimited
-      ? `${formatSecondsToHourMinute(usedAudioSeconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
-      : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`;
-    const remainingLabel = isUsageLimited
-      ? `${copy.usageRemaining}: ${formatSecondsToHourMinute(remainingAudioSeconds)}`
-      : copy.usageUnlimited;
-    const progressWidth = isUsageLimited ? `${usagePercent}%` : "100%";
-    const ctaLabel = planLabel;
-
-    return (
-      <FadeInView delay={40} duration={260}>
-        <NmPressable
-          style={[styles.topUsageCard, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-          onPress={() => setActiveTab("settings")}
-        >
-          <View style={styles.topUsageHeader}>
-            <View style={styles.topUsageTextBlock}>
-              <Text style={[styles.topUsageLabel, { color: activeTheme.textSecondary }]}>{copy.usageThisMonth}</Text>
-              <Text style={[styles.topUsageValue, { color: activeTheme.textPrimary }]}>
-                {hasUsage ? usedLabel : copy.usageLoading}
-              </Text>
-            </View>
-            <View style={[styles.topUsagePill, { backgroundColor: activeTheme.noticeBg, borderColor: activeTheme.accent }]}>
-              <Text style={[styles.topUsagePillText, { color: activeTheme.accent }]}>{ctaLabel}</Text>
-            </View>
-          </View>
-          <View style={[styles.topUsageProgressTrack, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-            <View style={[styles.topUsageProgressFill, { backgroundColor: activeTheme.accent, width: hasUsage ? progressWidth : "12%" }]} />
-          </View>
-          <Text style={[styles.topUsageRemaining, { color: activeTheme.textSecondary }]}>
-            {hasUsage ? remainingLabel : copy.usageUnavailable}
-          </Text>
+  const renderPublicLinks = () => (
+    <View style={styles.publicLinks}>
+      {[
+        ["privacy", copy.legal.openPrivacy],
+        ["terms", copy.legal.openTerms],
+        ["companyPolicy", copy.legal.openCompanyPolicy],
+      ].map(([key, label]) => (
+        <NmPressable key={key} onPress={() => openLegalDocument(key)} style={styles.publicLink} accessibilityRole="link">
+          <Text style={[styles.publicLinkText, { color: activeTheme.textSecondary }]}>{label}</Text>
         </NmPressable>
-      </FadeInView>
-    );
-  };
+      ))}
+      <NmPressable onPress={() => Linking.openURL("mailto:" + SUPPORT_EMAIL).catch(() => setError(copy.errors.openExternalFailed))} style={styles.publicLink} accessibilityRole="link">
+        <Text style={[styles.publicLinkText, { color: activeTheme.textSecondary }]}>{copy.supportLabel}</Text>
+      </NmPressable>
+    </View>
+  );
+
+  const renderUsageSummaryBar = () => (
+    <View style={[styles.workspaceHeading, { borderColor: activeTheme.inputBorder }]}>
+      <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.tabs[activeTab]}</Text>
+      <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{planLabel}</Text>
+    </View>
+  );
 
   const renderProcessingSteps = () => {
     if (!showProcessingSteps) return null;
@@ -2181,10 +2107,6 @@ function App() {
       <SafeAreaProvider>
         <SafeAreaView edges={["top", "right", "bottom", "left"]} style={[styles.centerScreen, { backgroundColor: activeTheme.bg }]}>
           <StatusBar style={resolvedThemeKey === "noir" ? "light" : "dark"} />
-          <View pointerEvents="none" style={styles.softBackground}>
-            <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
-            <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
-          </View>
           <ActivityIndicator size="large" color={activeTheme.accent} />
           <Text style={[styles.loadingText, { color: activeTheme.textPrimary }]}>{copy.loadingApp}</Text>
         </SafeAreaView>
@@ -2202,14 +2124,8 @@ function App() {
         pointerEvents={isPrivacyGateVisible ? "none" : "auto"}
         importantForAccessibility={isPrivacyGateVisible ? "no-hide-descendants" : "auto"}
       >
-      <View pointerEvents="none" style={styles.softBackground}>
-        <View style={[styles.softGlowOrbA, { backgroundColor: activeTheme.glowA }]} />
-        <View style={[styles.softGlowOrbB, { backgroundColor: activeTheme.glowB }]} />
-        <View style={[styles.softGlowOrbC, { backgroundColor: activeTheme.glowC }]} />
-      </View>
-
-      <Banner type="error" text={error} />
-      <Banner type="notice" text={notice} />
+      <Banner type="error" text={error || authError} />
+      <Banner type="notice" text={notice || authNotice} />
       {!activeLegalDoc ? renderQuickControls() : null}
 
       {activeLegalDoc ? (
@@ -2288,103 +2204,19 @@ function App() {
             </FadeInView>
           </ScrollView>
         </View>
-      ) : !isLoggedIn && !guestModeStarted ? (
+      ) : authBootLoading ? (
+        <View style={[styles.centerScreen, { backgroundColor: activeTheme.bg }]} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color={activeTheme.accent} />
+          <Text style={[styles.loadingText, { color: activeTheme.textPrimary }]}>{copy.restoringSession}</Text>
+          {renderPublicLinks()}
+        </View>
+      ) : !isLoggedIn ? (
         <ScrollView
           contentContainerStyle={[styles.authScrollContent, compactLayout ? styles.authScrollContentCompact : null]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <FadeInView duration={280}>
-            <View
-              style={[
-                styles.card,
-                styles.authCard,
-                compactLayout ? styles.authCardCompact : null,
-                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-              ]}
-            >
-              <View style={styles.authLandingBadgeRow}>
-                {authLandingBadges.map((badge) => (
-                  <View key={`auth-badge-${badge}`} style={[styles.authLandingBadge, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                    <Text style={[styles.authLandingBadgeText, { color: activeTheme.textSecondary }]}>{badge}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <Text style={[styles.authLandingHeroTitle, { color: activeTheme.textPrimary }]}>
-                {copy.authLanding.hero}
-              </Text>
-              <Text style={[styles.authLandingHeroSubcopy, { color: activeTheme.textSecondary }]}>
-                {copy.authLanding.subcopy}
-              </Text>
-
-              <View style={styles.authLandingExampleGrid}>
-                <View style={[styles.authLandingExampleCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.authLandingExampleLabel, { color: activeTheme.textSecondary }]}>{copy.authLanding.beforeLabel}</Text>
-                  <Text style={[styles.authLandingExampleBody, { color: activeTheme.textSecondary }]}>{copy.authLanding.beforeExample}</Text>
-                </View>
-                <View style={[styles.authLandingExampleCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                  <Text style={[styles.authLandingExampleLabel, { color: activeTheme.textSecondary }]}>{copy.authLanding.afterLabel}</Text>
-                  <Text style={[styles.authLandingAfterTitle, { color: activeTheme.textPrimary }]}>{copy.authLanding.afterTitle}</Text>
-                  <View style={styles.authLandingAfterList}>
-                    {copy.authLanding.afterBullets.map((line) => (
-                      <Text key={`after-${line}`} style={[styles.authLandingAfterItem, { color: activeTheme.textSecondary }]}>
-                        - {line}
-                      </Text>
-                    ))}
-                  </View>
-                </View>
-              </View>
-
-              <View style={[styles.authLandingActionRow, compactLayout ? styles.authLandingActionRowCompact : null]}>
-                <NmPressable
-                  style={[styles.secondaryButton, styles.authLandingActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                  onPress={handleOpenOurs}
-                >
-                  <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>{copy.authLanding.oursCta}</Text>
-                </NmPressable>
-              </View>
-            </View>
-          </FadeInView>
-
-          <FadeInView delay={60} duration={280}>
-            <View style={[styles.authLandingFeatureGrid, styles.authCard, compactLayout ? styles.authCardCompact : null]}>
-              {copy.authLanding.featureCards.map((feature) => (
-                <View
-                  key={`feature-${feature.title}`}
-                  style={[styles.card, styles.authLandingFeatureCard, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                >
-                  <Text style={[styles.authLandingFeatureTitle, { color: activeTheme.textPrimary }]}>{feature.title}</Text>
-                  <Text style={[styles.authLandingFeatureBody, { color: activeTheme.textSecondary }]}>{feature.body}</Text>
-                </View>
-              ))}
-            </View>
-          </FadeInView>
-
-          <FadeInView delay={110} duration={280}>
-            <View
-              style={[
-                styles.card,
-                styles.authCard,
-                compactLayout ? styles.authCardCompact : null,
-                { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
-              ]}
-            >
-              <Text style={[styles.authLandingTestimonialLabel, { color: activeTheme.accent }]}>{copy.authLanding.testimonialLabel}</Text>
-              <View style={styles.authLandingTestimonialGrid}>
-                {copy.authLanding.testimonials.map((quote) => (
-                  <View
-                    key={`quote-${quote}`}
-                    style={[styles.authLandingTestimonialCard, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}
-                  >
-                    <Text style={[styles.authLandingTestimonialText, { color: activeTheme.textPrimary }]}>{quote}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </FadeInView>
-
-          <FadeInView delay={150} duration={320}>
+          <FadeInView duration={220}>
             <View
               style={[
                 styles.card,
@@ -2394,19 +2226,26 @@ function App() {
                 { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
               ]}
             >
+              <View style={styles.authBrandRow}>
+                <Image source={require("./assets/icon.png")} style={styles.brandImage} />
+                <Text style={[styles.brandName, { color: activeTheme.textPrimary }]}>mallog24</Text>
+                <Text style={[styles.freeLabel, { color: activeTheme.accent }]}>{copy.planLabels.free}</Text>
+              </View>
               <Text style={[styles.authIntro, compactLayout ? styles.authIntroCompact : null, { color: activeTheme.textPrimary }]}>
-                {copy.authIntro}
+                {authMode === "recovery" || authMode === "resetRequest" ? copy.recoveryTitle : copy.authIntro}
               </Text>
               <Text style={[styles.authSubcopy, { color: activeTheme.textSecondary }]}>
-                {copy.authSubcopy}
+                {authMode === "recovery" ? copy.recoveryReady : authMode === "resetRequest" ? copy.recoveryRequestHint : copy.authSubcopy}
               </Text>
 
-              <View style={styles.segmentRow}>
-                <SegmentButton label={copy.login} active={authMode === "login"} onPress={() => setAuthMode("login")} theme={activeTheme} />
-                <SegmentButton label={copy.signup} active={authMode === "signup"} onPress={() => setAuthMode("signup")} theme={activeTheme} />
-              </View>
+              {["login", "signup"].includes(authMode) ? <View style={styles.segmentRow}>
+                <SegmentButton label={copy.login} active={authMode === "login"} onPress={() => setAuthMode("login")} theme={activeTheme} disabled={authLoading || Boolean(socialLoading)} />
+                <SegmentButton label={copy.signup} active={authMode === "signup"} onPress={() => setAuthMode("signup")} theme={activeTheme} disabled={authLoading || Boolean(socialLoading)} />
+              </View> : null}
 
               {authMode === "signup" ? (
+                <View style={styles.authField}>
+                <Text style={[styles.authFieldLabel, { color: activeTheme.textSecondary }]}>{copy.namePlaceholder}</Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                   value={authName}
@@ -2414,10 +2253,19 @@ function App() {
                   placeholder={copy.namePlaceholder}
                   placeholderTextColor={activeTheme.textSecondary}
                   autoCapitalize="none"
+                  accessibilityLabel={copy.namePlaceholder}
+                  editable={!authLoading && !socialLoading}
                 />
+                </View>
               ) : null}
 
+              {authMode !== "recovery" ? <View style={styles.authField}>
+                <Text style={[styles.authFieldLabel, { color: activeTheme.textSecondary }]}>{copy.emailPlaceholder}</Text>
               <TextInput
+                accessibilityLabel={copy.emailPlaceholder}
+                autoComplete="email"
+                autoCorrect={false}
+                editable={!authLoading && !socialLoading}
                 style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                 value={authEmail}
                 onChangeText={setAuthEmail}
@@ -2425,16 +2273,37 @@ function App() {
                 placeholderTextColor={activeTheme.textSecondary}
                 autoCapitalize="none"
                 keyboardType="email-address"
-              />
+              /></View> : null}
 
+              {authMode !== "resetRequest" ? <View style={styles.authField}>
+                <Text style={[styles.authFieldLabel, { color: activeTheme.textSecondary }]}>{authMode === "recovery" ? copy.newPassword : copy.passwordPlaceholder}</Text>
               <TextInput
+                accessibilityLabel={authMode === "recovery" ? copy.newPassword : copy.passwordPlaceholder}
+                autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!authLoading && !socialLoading}
                 style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
                 value={authPassword}
                 onChangeText={setAuthPassword}
-                placeholder={copy.passwordPlaceholder}
+                placeholder={authMode === "recovery" ? copy.newPassword : copy.passwordPlaceholder}
                 placeholderTextColor={activeTheme.textSecondary}
                 secureTextEntry
-              />
+              /></View> : null}
+              {authMode === "recovery" ? <View style={styles.authField}>
+                <Text style={[styles.authFieldLabel, { color: activeTheme.textSecondary }]}>{copy.confirmPassword}</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder, color: activeTheme.textPrimary }]}
+                accessibilityLabel={copy.confirmPassword}
+                placeholder={copy.confirmPassword}
+                placeholderTextColor={activeTheme.textSecondary}
+                value={authPasswordConfirm}
+                onChangeText={setAuthPasswordConfirm}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="new-password"
+                editable={!authLoading}
+              /></View> : null}
 
               <NmPressable
                 style={[
@@ -2442,12 +2311,14 @@ function App() {
                   { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft },
                   authLoading ? styles.buttonDisabled : null,
                 ]}
-                onPress={handleAuthSubmit}
-                disabled={authLoading}
+                onPress={authMode === "recovery" ? handlePasswordRecovery : authMode === "resetRequest" ? handlePasswordResetRequest : handleAuthSubmit}
+                disabled={authLoading || Boolean(socialLoading)}
               >
                 <Text style={styles.primaryButtonText}>
                   {authLoading
                     ? copy.processing
+                  : authMode === "recovery" ? copy.saveNewPassword
+                  : authMode === "resetRequest" ? copy.sendResetLink
                   : authMode === "signup"
                       ? copy.signup
                       : copy.login}
@@ -2457,7 +2328,7 @@ function App() {
               {authMode === "login" ? (
                 <NmPressable
                   style={[styles.accountRecoveryButton, authLoading ? styles.buttonDisabled : null]}
-                  onPress={handlePasswordResetRequest}
+                  onPress={() => setAuthMode("resetRequest")}
                   disabled={authLoading}
                 >
                   <Text style={[styles.accountRecoveryButtonText, { color: activeTheme.accent }]}>
@@ -2471,23 +2342,7 @@ function App() {
                 </Text>
               ) : null}
 
-              <NmPressable
-                style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
-                onPress={() => {
-                  clearMessages();
-                  setGuestModeStarted(true);
-                  setActiveTab("transcribe");
-                  fetchGuestUsage().catch(() => {});
-                }}
-              >
-                <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>
-                  {copy.guestTrialCta}
-                </Text>
-              </NmPressable>
-              <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>
-                {copy.guestUserSubtitle}
-              </Text>
-
+              {["login", "signup"].includes(authMode) ? <>
               <Text style={[styles.orText, { color: activeTheme.textSecondary }]}>{copy.orSocial}</Text>
 
               <View style={styles.socialRow}>
@@ -2498,7 +2353,7 @@ function App() {
                     loading={socialLoading === "apple"}
                     loadingLabel={copy.connecting}
                     onPress={() => handleSocialLogin("apple")}
-                    disabled={!!socialLoading}
+                    disabled={!!socialLoading || authLoading}
                   />
                 ) : null}
 
@@ -2510,7 +2365,7 @@ function App() {
                       loading={socialLoading === "google"}
                       loadingLabel={copy.connecting}
                       onPress={() => handleSocialLogin("google")}
-                      disabled={!!socialLoading}
+                      disabled={!!socialLoading || authLoading}
                     />
 
                     <SocialAuthButton
@@ -2519,11 +2374,15 @@ function App() {
                       loading={socialLoading === "kakao"}
                       loadingLabel={copy.connecting}
                       onPress={() => handleSocialLogin("kakao")}
-                      disabled={!!socialLoading}
+                      disabled={!!socialLoading || authLoading}
                     />
                   </>
                 ) : null}
               </View>
+              </> : <NmPressable style={styles.accountRecoveryButton} onPress={() => setAuthMode("login")} disabled={authLoading}>
+                <Text style={[styles.accountRecoveryButtonText, { color: activeTheme.accent }]}>{copy.backToLogin}</Text>
+              </NmPressable>}
+              {renderPublicLinks()}
             </View>
           </FadeInView>
         </ScrollView>
@@ -2533,27 +2392,21 @@ function App() {
             <View style={[styles.userBar, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
               <View style={styles.userInfo}>
                 <Text style={[styles.userEmail, { color: activeTheme.textPrimary }]}>
-                  {isGuestMode ? copy.guestUserTitle : (authUser?.email || copy.defaultUser)}
+                  {authUser?.email || copy.defaultUser}
                 </Text>
                 <Text style={[styles.userName, { color: activeTheme.textSecondary }]}>
-                  {isGuestMode ? copy.guestUserSubtitle : (authUser?.user_metadata?.full_name || authUser?.id || "")}
+                  {authUser?.user_metadata?.full_name || copy.signedInFreeNotice}
                 </Text>
-                {!isGuestMode ? (
-                  <Text style={[styles.userSession, { color: activeTheme.textSecondary }]}>
+                <Text style={[styles.userSession, { color: activeTheme.textSecondary }]}>
                     {copy.sessionRemainingLabel}: {sessionRemainingLabel}
                   </Text>
-                ) : null}
               </View>
               <NmPressable
                 style={[styles.logoutButton, { borderColor: activeTheme.inputBorder }]}
-                onPress={isGuestMode ? () => {
-                  clearMessages();
-                  setGuestModeStarted(false);
-                  setActiveTab("transcribe");
-                } : handleLogout}
+                onPress={handleLogout}
               >
-                <Text style={[styles.logoutButtonText, { color: isGuestMode ? activeTheme.accent : activeTheme.errorText }]}>
-                  {isGuestMode ? copy.login : copy.logout}
+                <Text style={[styles.logoutButtonText, { color: activeTheme.errorText }]}>
+                  {copy.logout}
                 </Text>
               </NmPressable>
             </View>
@@ -2561,12 +2414,7 @@ function App() {
 
           <FadeInView delay={70} duration={360}>
             <View style={[styles.tabsWrap, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.segmentScroll}
-                contentContainerStyle={[styles.segmentRow, styles.segmentScrollContent]}
-              >
+              <View style={styles.segmentRow}>
                 {tabOptions.map((tab) => (
                   <SegmentButton
                     key={tab.key}
@@ -2574,9 +2422,11 @@ function App() {
                     active={activeTab === tab.key}
                     onPress={() => setActiveTab(tab.key)}
                     theme={activeTheme}
+                    icon={WORKSPACE_TAB_ICONS[tab.key]}
+                    compact
                   />
                 ))}
-              </ScrollView>
+              </View>
             </View>
           </FadeInView>
 
@@ -2637,6 +2487,9 @@ function App() {
                           },
                         ]}
                         onPress={() => setTranscriptionType(item.key)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: transcriptionType === item.key }}
+                        accessibilityLabel={item.label}
                       >
                         <View
                           style={[
@@ -2647,12 +2500,9 @@ function App() {
                             },
                           ]}
                         >
-                          <Text style={[styles.typeCardIconText, { color: transcriptionType === item.key ? "#ffffff" : activeTheme.textSecondary }]}>
-                            {TRANSCRIPTION_TYPE_CARD_META[item.key]?.icon || item.label.slice(0, 1)}
-                          </Text>
+                          <Feather name={TRANSCRIPTION_TYPE_CARD_META[item.key]?.icon || "file-text"} size={17} color={transcriptionType === item.key ? "#ffffff" : activeTheme.textSecondary} />
                         </View>
                         <Text
-                          numberOfLines={1}
                           style={[
                             styles.typeCardLabel,
                             { color: transcriptionType === item.key ? activeTheme.accent : activeTheme.textSecondary },
@@ -2671,12 +2521,12 @@ function App() {
                         backgroundColor: activeTheme.inputBg,
                         borderColor: pickedFile ? activeTheme.accent : activeTheme.inputBorder,
                       },
-                      recordingBusy ? styles.buttonDisabled : null,
+                      recordingBusy || submitting ? styles.buttonDisabled : null,
                     ]}
                     onPress={pickAudioFile}
-                    disabled={recordingBusy}
+                    disabled={recordingBusy || submitting}
                   >
-                    <Text style={[styles.uploadZoneIcon, { color: activeTheme.accent }]}>↑</Text>
+                    <Feather name="upload" size={24} color={activeTheme.accent} />
                     <Text style={[styles.uploadZoneTitle, { color: activeTheme.textPrimary }]}>
                       {pickedFile ? `${copy.selectedFileLabel}: ${pickedFile.name}` : copy.uploadZoneTitle}
                     </Text>
@@ -2764,10 +2614,10 @@ function App() {
                     style={[
                       styles.startTranscribeButton,
                       { backgroundColor: activeTheme.textPrimary, borderColor: activeTheme.textPrimary },
-                      submitting || recordingBusy ? styles.buttonDisabled : null,
+                      !pickedFile || submitting || recordingBusy ? styles.buttonDisabled : null,
                     ]}
                     onPress={handleTranscribe}
-                    disabled={submitting || recordingBusy}
+                    disabled={!pickedFile || submitting || recordingBusy}
                   >
                     <Text style={[styles.startTranscribeButtonText, { color: activeTheme.bg }]}>
                       {submitting ? copy.transcribing : copy.transcribeStart}
@@ -2775,9 +2625,6 @@ function App() {
                   </NmPressable>
 
                   <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{selectedTypeHint}</Text>
-                  {isGuestMode ? (
-                    <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
-                  ) : null}
                   {renderProcessingSteps()}
                 </View>
               </FadeInView>
@@ -3320,44 +3167,23 @@ function App() {
 
                       <Text style={[styles.metaText, { color: activeTheme.textPrimary }]}>
                         {copy.usageThisMonth}:{" "}
-                        {isUsageLimited
-                          ? `${formatSecondsToHourMinute(usedAudioSeconds)} / ${formatSecondsToHourMinute(monthlyLimitSeconds)}`
-                          : `${formatSecondsToHourMinute(usedAudioSeconds)} / ${copy.usageUnlimited}`}
+                        {formatSecondsToHourMinute(usedAudioSeconds)} / {copy.usageUnlimited}
                       </Text>
-                      {isUsageLimited ? (
-                        <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>
-                          {copy.usageRemaining}: {formatSecondsToHourMinute(remainingAudioSeconds)}
-                        </Text>
-                      ) : null}
-                      {isUsageLimited ? (
-                        <View style={[styles.usageProgressTrack, { backgroundColor: activeTheme.inputBg, borderColor: activeTheme.inputBorder }]}>
-                          <View style={[styles.usageProgressFill, { backgroundColor: activeTheme.accent, width: `${usagePercent}%` }]} />
-                        </View>
-                      ) : null}
                     </>
                   ) : (
                     <Text style={[styles.metaText, { color: activeTheme.textSecondary }]}>{copy.usageUnavailable}</Text>
                   )}
 
-                  {isGuestMode ? (
-                    <Text style={[styles.helpText, { color: activeTheme.accent }]}>{copy.guestTrialHint}</Text>
-                  ) : null}
-                  {!isGuestMode ? (
-                    <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.signedInFreeNotice}</Text>
-                  ) : null}
+                  <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.signedInFreeNotice}</Text>
 
                   <View style={styles.usageActionRow}>
                     <NmPressable
                       style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}
                       onPress={() => {
                         clearMessages();
-                        if (isGuestMode) {
-                          fetchGuestUsage({ showNotice: true }).catch(() => {});
-                        } else {
-                          fetchUsage(authToken, { quiet: true }).then(() => {
-                            setNotice(copy.notices.usageLoaded);
-                          }).catch(() => {});
-                        }
+                        fetchUsage(authToken, { quiet: false }).then((data) => {
+                          if (data && canUseWorkspace()) setNotice(copy.notices.usageLoaded);
+                        }).catch(() => {});
                       }}
                       disabled={usageLoading}
                     >
@@ -3365,20 +3191,6 @@ function App() {
                         {usageLoading ? copy.loading : copy.usageRefresh}
                       </Text>
                     </NmPressable>
-                    {isGuestMode ? (
-                      <NmPressable
-                        style={[styles.tinyButton, styles.usageActionButton, { backgroundColor: activeTheme.accent, borderColor: activeTheme.accentSoft }]}
-                        onPress={() => {
-                          clearMessages();
-                          setGuestModeStarted(false);
-                          setActiveTab("transcribe");
-                        }}
-                      >
-                        <Text style={styles.primaryButtonText}>
-                          {copy.guestLoginButton}
-                        </Text>
-                      </NmPressable>
-                    ) : null}
                   </View>
                 </View>
               </FadeInView>
@@ -3937,18 +3749,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 8,
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 0,
+    borderBottomWidth: 1,
     paddingHorizontal: 9,
     paddingVertical: 9,
   },
   quickIconButton: {
-    minWidth: 56,
-    borderRadius: 9,
+    width: 44,
+    height: 44,
+    borderRadius: 6,
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 7,
     alignItems: "center",
+    justifyContent: "center",
   },
   quickIconText: {
     fontSize: 16,
@@ -3983,6 +3797,60 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 620,
     alignSelf: "center",
+    borderBottomWidth: 0,
+  },
+  authBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  authField: {
+    gap: 7,
+  },
+  authFieldLabel: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  brandImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+  },
+  brandName: {
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  freeLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  workspaceHeading: {
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  publicLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginTop: 12,
+    gap: 4,
+  },
+  publicLink: {
+    minHeight: 44,
+    paddingHorizontal: 8,
+    justifyContent: "center",
+    flexShrink: 1,
+  },
+  publicLinkText: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
   },
   authCardCompact: {
     maxWidth: 560,
@@ -3995,7 +3863,7 @@ const styles = StyleSheet.create({
     color: NM.textPrimary,
     fontSize: 19,
     fontWeight: "900",
-    letterSpacing: -0.2,
+    letterSpacing: 0,
     marginBottom: 4,
   },
   authIntroCompact: {
@@ -4113,16 +3981,11 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: NM.surface,
-    borderRadius: NM.radius,
+    borderRadius: 0,
     padding: 18,
     gap: 12,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: NM.inputBorder,
-    shadowColor: NM.shadowTint,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.18,
-    shadowRadius: 26,
-    elevation: 5,
   },
   cardTitle: {
     color: NM.textPrimary,
@@ -4159,40 +4022,34 @@ const styles = StyleSheet.create({
     borderColor: NM.inputBorder,
   },
   primaryButton: {
-    borderRadius: 999,
+    borderRadius: 6,
     backgroundColor: NM.accent,
     paddingVertical: 13,
+    paddingHorizontal: 12,
     alignItems: "center",
     borderWidth: 1,
     borderColor: NM.accentSoft,
-    shadowColor: NM.accent,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 4,
   },
   primaryButtonText: {
     color: "#ffffff",
     fontWeight: "800",
     fontSize: 14,
+    textAlign: "center",
   },
   secondaryButton: {
-    borderRadius: 999,
+    borderRadius: 6,
     backgroundColor: NM.surface,
     paddingVertical: 12,
+    paddingHorizontal: 12,
     alignItems: "center",
     borderWidth: 1,
     borderColor: NM.inputBorder,
-    shadowColor: NM.shadowTint,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 2,
   },
   secondaryButtonText: {
     color: NM.textPrimary,
     fontWeight: "700",
     fontSize: 13,
+    textAlign: "center",
   },
   accountRecoveryButton: {
     alignSelf: "center",
@@ -4264,8 +4121,8 @@ const styles = StyleSheet.create({
   topUsageCard: {
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 0,
+    borderBottomWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 7,
@@ -4321,8 +4178,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: "47%",
     maxWidth: "49%",
-    minHeight: 82,
-    borderRadius: 10,
+    minHeight: 96,
+    borderRadius: 6,
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 10,
@@ -4344,11 +4201,13 @@ const styles = StyleSheet.create({
   },
   typeCardLabel: {
     fontSize: 11,
+    lineHeight: 16,
+    minHeight: 32,
     fontWeight: "900",
     textAlign: "center",
   },
   uploadZone: {
-    borderRadius: 10,
+    borderRadius: 6,
     borderWidth: 1,
     borderStyle: "dashed",
     paddingHorizontal: 12,
@@ -4372,19 +4231,17 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   recordPanel: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 12,
+    borderRadius: 0,
+    borderTopWidth: 1,
+    paddingVertical: 12,
     gap: 10,
   },
   recordPanelTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: 10,
   },
   recordPanelCopy: {
-    flex: 1,
     gap: 3,
   },
   recordPanelTitle: {
@@ -4403,7 +4260,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   recordButton: {
-    borderRadius: 999,
+    borderRadius: 6,
+    minHeight: 44,
+    justifyContent: "center",
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -4672,7 +4531,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 14,
     marginBottom: 10,
-    borderRadius: NM.radius,
+    borderRadius: 0,
     backgroundColor: NM.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -4680,16 +4539,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    shadowColor: NM.shadowTint,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.14,
-    shadowRadius: 22,
-    elevation: 4,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: NM.inputBorder,
   },
   userInfo: {
     flex: 1,
+    minWidth: 0,
   },
   userEmail: {
     color: NM.textPrimary,
@@ -4709,17 +4564,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   logoutButton: {
-    borderRadius: 999,
+    borderRadius: 6,
+    minHeight: 44,
+    justifyContent: "center",
     backgroundColor: "#f4e5e8",
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderWidth: 1,
     borderColor: "#f1c7d0",
-    shadowColor: NM.shadowTint,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 2,
   },
   logoutButtonText: {
     color: "#be123c",
