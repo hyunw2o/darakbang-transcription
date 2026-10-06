@@ -1,6 +1,7 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
-import { ArrowRight, Check, Eye, EyeOff, LoaderCircle, LockKeyhole } from 'lucide-react'
+import { ArrowRight, Check, Eye, EyeOff, LoaderCircle, LockKeyhole, RefreshCw } from 'lucide-react'
 import SocialProviderButton from './SocialProviderButton'
 
 export default function MallogAuthPanel(props) {
@@ -10,13 +11,14 @@ export default function MallogAuthPanel(props) {
     setAuthPasswordConfirm, authLoading, socialLoading, handleAuthSubmit,
     handleSocialLogin, socialProviders, error, notice, recoveryHref, homeHref,
     OURS_PRIVACY_URL, OURS_TERMS_URL, authUser, authPageMode,
+    authRetryAvailable, retryAuth,
   } = props
   const en = locale === 'en'
   const [showPassword, setShowPassword] = useState(false)
   const recovering = authMode === 'recover'
   const resetting = authMode === 'reset_password'
   const signup = authMode === 'signup'
-  const busy = authLoading || Boolean(socialLoading) || authInitializing
+  const busy = authLoading || Boolean(socialLoading) || (authInitializing && resetting)
   const recovered = authPageMode === 'recover' && authUser && authMode === 'login'
   const title = resetting ? (en ? 'Set a new password' : '새 비밀번호 설정')
     : recovering ? (en ? 'Account recovery' : '계정 찾기')
@@ -27,14 +29,15 @@ export default function MallogAuthPanel(props) {
   return (
     <section id="auth-card" className="mallog-auth" aria-labelledby="auth-title" aria-busy={Boolean(authInitializing)}>
       <div className="mallog-auth-heading">
-        <img src="/mallog24-app-icon.png" width="52" height="52" alt="" className="mallog-auth-logo" />
+        <Image src="/mallog24-app-icon.png" width={52} height={52} sizes="52px" priority alt="" className="mallog-auth-logo" />
         <span className="mallog-free-label"><Check size={13} aria-hidden="true" />{en ? 'Free for every account' : '모든 계정 무료 이용'}</span>
         <h1 id="auth-title">{title}</h1>
       </div>
-      {authInitializing ? (
-        <div role="status" className="mallog-auth-loading"><LoaderCircle className="animate-spin" size={22} aria-hidden="true" />{en ? 'Checking your session...' : '로그인 상태 확인 중...'}</div>
-      ) : recovered ? (
-        <Link href={homeHref} className="mallog-primary-action">{en ? 'Open workspace' : '작업 공간으로 이동'}<ArrowRight size={17} aria-hidden="true" /></Link>
+      <div role="status" aria-live="polite" className="mallog-auth-loading">
+        {authInitializing && <><LoaderCircle className="animate-spin" size={16} aria-hidden="true" />{en ? 'Checking your session...' : '로그인 상태 확인 중...'}</>}
+      </div>
+      {recovered ? (
+        <Link prefetch={false} href={homeHref} className="mallog-primary-action">{en ? 'Open workspace' : '작업 공간으로 이동'}<ArrowRight size={17} aria-hidden="true" /></Link>
       ) : (
         <>
           {!recovering && !resetting && (
@@ -64,7 +67,7 @@ export default function MallogAuthPanel(props) {
             </button>
           </form>
           <div className="mallog-auth-links">
-            <Link href={recovering || resetting ? homeHref : recoveryHref}>{recovering || resetting ? (en ? 'Back to sign in' : '로그인으로 돌아가기') : (en ? 'Find account / reset password' : '아이디·비밀번호 찾기')}</Link>
+            <Link prefetch={false} href={recovering || resetting ? homeHref : recoveryHref}>{recovering || resetting ? (en ? 'Back to sign in' : '로그인으로 돌아가기') : (en ? 'Find account / reset password' : '아이디·비밀번호 찾기')}</Link>
           </div>
           {!recovering && !resetting && <>
             <div className="mallog-auth-divider"><span>{en ? 'or' : '또는'}</span></div>
@@ -73,8 +76,9 @@ export default function MallogAuthPanel(props) {
         </>
       )}
       {error && <p role="alert" className="mallog-feedback mallog-feedback-error">{error}</p>}
+      {authRetryAvailable && <button type="button" className="mallog-primary-action" disabled={busy || authInitializing} onClick={retryAuth}><RefreshCw size={16} aria-hidden="true" />{en ? 'Retry connection' : '연결 다시 확인'}</button>}
       {notice && <p role="status" className="mallog-feedback">{notice}</p>}
-      <div className="mallog-auth-legal"><Link href={OURS_TERMS_URL}>{en ? 'Terms' : '이용약관'}</Link><Link href={OURS_PRIVACY_URL}>{en ? 'Privacy' : '개인정보처리방침'}</Link></div>
+      <div className="mallog-auth-legal"><Link prefetch={false} href={OURS_TERMS_URL}>{en ? 'Terms' : '이용약관'}</Link><Link prefetch={false} href={OURS_PRIVACY_URL}>{en ? 'Privacy' : '개인정보처리방침'}</Link></div>
     </section>
   )
 }

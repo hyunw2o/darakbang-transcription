@@ -1266,12 +1266,14 @@ def _clear_auth_cookie(response: JSONResponse, request: Request | None = None) -
     )
 
 
-def _build_auth_payload(token: str, user: dict) -> dict:
-    row = _get_or_create_usage_row(user["id"], user=user)
-    snapshot = _build_usage_snapshot(
-        row,
-        is_admin_bypass=_is_admin_bypass_user(user=user),
-    )
+def _build_auth_payload(token: str, user: dict, *, include_usage: bool = True) -> dict:
+    snapshot = None
+    if include_usage:
+        row = _get_or_create_usage_row(user["id"], user=user)
+        snapshot = _build_usage_snapshot(
+            row,
+            is_admin_bypass=_is_admin_bypass_user(user=user),
+        )
     session_expires_at = _decode_jwt_exp_unverified(token)
     return {
         "success": True,
@@ -1280,6 +1282,13 @@ def _build_auth_payload(token: str, user: dict) -> dict:
         "session_established": True,
         "session_expires_at": session_expires_at,
     }
+
+
+async def _auth_payload_for_request(request: Request, token: str, user: dict) -> dict:
+    # Existing apps keep their combined payload; new clients load usage separately.
+    if request.query_params.get("include_usage", "true").lower() == "false":
+        return _build_auth_payload(token, user, include_usage=False)
+    return await asyncio.to_thread(_build_auth_payload, token, user)
 
 
 def _resolved_engine_mode() -> str:
@@ -8830,7 +8839,7 @@ async def get_usage(
 ):
     """로그인 사용자 월간 음성 사용량 조회"""
     user = await _get_current_user(authorization)
-    row = _get_or_create_usage_row(user["id"], user=user)
+    row = await asyncio.to_thread(_get_or_create_usage_row, user["id"], user=user)
     snapshot = _build_usage_snapshot(
         row,
         is_admin_bypass=_is_admin_bypass_user(user=user),
@@ -10829,7 +10838,7 @@ async def signup(
         _cache_user_by_token(access_token, user)
 
     payload = {
-        **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
+        **(await _auth_payload_for_request(request, access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
         "message": "회원가입이 완료되었습니다. 이메일 인증 설정 여부에 따라 추가 인증이 필요할 수 있습니다.",
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -10858,7 +10867,7 @@ async def login(
         _enforce_concurrent_login_limit(access_token, user, is_fresh_login=True)
         _cache_user_by_token(access_token, user)
     payload = {
-        **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
+        **(await _auth_payload_for_request(request, access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
         "access_token": access_token,
         "refresh_token": data.get("refresh_token"),
         "expires_in": data.get("expires_in"),
@@ -10932,7 +10941,7 @@ async def confirm_password_reset(
         _cache_user_by_token(token, user)
 
     payload = {
-        **(_build_auth_payload(token, user) if isinstance(user, dict) and user.get("id") else {"success": True, "user": user}),
+        **(await _auth_payload_for_request(request, token, user) if isinstance(user, dict) and user.get("id") else {"success": True, "user": user}),
         "message": "비밀번호가 변경되었습니다.",
     }
     response = JSONResponse(payload)
@@ -10971,7 +10980,7 @@ async def login_with_apple(
         _cache_user_by_token(access_token, user)
 
     payload = {
-        **(_build_auth_payload(access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
+        **(await _auth_payload_for_request(request, access_token, user) if access_token and user.get("id") else {"success": True, "user": user}),
         "access_token": access_token,
         "refresh_token": data.get("refresh_token"),
         "expires_in": data.get("expires_in"),
@@ -11007,7 +11016,7 @@ async def establish_auth_session(
     _enforce_concurrent_login_limit(token, user, is_fresh_login=True)
     _cache_user_by_token(token, user)
     payload = {
-        **_build_auth_payload(token, user),
+        **await _auth_payload_for_request(request, token, user),
         "access_token": token,
         "refresh_token": (refresh_token or "").strip() or None,
     }
@@ -11132,19 +11141,19 @@ async def get_oauth_url(
 
 
 @app.get("/api/auth/me")
-async def me(authorization: str | None = Header(default=None)):
+async def me(request: Request, authorization: str | None = Header(default=None)):
     """현재 로그인 사용자 조회"""
     user = await _get_current_user(authorization)
     token = _extract_bearer_token(authorization)
-    return _build_auth_payload(token, user)
+    return await _auth_payload_for_request(request, token, user)
 
 
 @app.get("/api/auth/bootstrap")
-async def auth_bootstrap(authorization: str | None = Header(default=None)):
+async def auth_bootstrap(request: Request, authorization: str | None = Header(default=None)):
     """로그인 초기 화면 부팅용 사용자/사용량 통합 조회"""
     user = await _get_current_user(authorization)
     token = _extract_bearer_token(authorization)
-    return _build_auth_payload(token, user)
+    return await _auth_payload_for_request(request, token, user)
 
 
 @app.post("/api/records/draft")

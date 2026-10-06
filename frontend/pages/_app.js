@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
+import Script from 'next/script'
+import { getImageProps } from 'next/image'
 import '../styles/globals.css'
 import '../styles/workspace.css'
 
 const THEME_KEY = 'mallog24-ui-theme'
 const THEME_MODE_KEY = 'mallog24-ui-theme-mode'
+const faviconSrc = getImageProps({ src: '/mallog24-app-icon.png', width: 32, height: 32, alt: '' }).props.src
 
 function readStoredBoolean(value, fallback) {
   if (value === null) return fallback
@@ -90,8 +93,7 @@ export default function App({ Component, pageProps }) {
   return (
     <>
       <Head>
-        <link rel="icon" href="/favicon.ico?v=20260220" sizes="any" />
-        <link rel="icon" type="image/png" href="/mallog24-app-icon.png?v=20260220" />
+        <link rel="icon" href={faviconSrc} sizes="32x32" />
         <link rel="apple-touch-icon" href="/mallog24-app-icon.png?v=20260220" />
       </Head>
       <Component
@@ -102,6 +104,12 @@ export default function App({ Component, pageProps }) {
         setUiThemeMode={setUiThemeMode}
         uiTheme={uiTheme}
         setUiTheme={setUiTheme}
+      />
+      <Script
+        id="adsense"
+        strategy="lazyOnload"
+        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8592086805043488"
+        crossOrigin="anonymous"
       />
     </>
   )

@@ -27,6 +27,7 @@ const AUTH_MESSAGES = {
     loggedInUserFallback: '인증된 사용자',
     oauthRedirectPath: '',
     usageFailed: '사용량을 불러오지 못했습니다.',
+    connectionDelayed: '서버 연결이 지연되고 있습니다. 잠시 후 다시 확인해 주세요.',
   },
   en: {
     sessionExpired: 'Your session has expired. Please sign in again.',
@@ -53,12 +54,13 @@ const AUTH_MESSAGES = {
     loggedInUserFallback: 'Authenticated user',
     oauthRedirectPath: '/en',
     usageFailed: 'Failed to load monthly usage.',
+    connectionDelayed: 'The server is taking longer to respond. Please try again shortly.',
   },
 }
 
 const COOKIE_SESSION_TOKEN = '__cookie_session__'
 const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
-const WARMUP_TIMEOUT_MS = 4000
+const AUTH_TIMEOUT_MS = 20000
 
 const normalizeExpiryMs = (value) => {
   const numeric = Number(value) || 0
@@ -100,6 +102,7 @@ export default function useMallogAuth({
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [authInitializing, setAuthInitializing] = useState(true)
+  const [authRetryAvailable, setAuthRetryAvailable] = useState(false)
   const [authSessionRevision, setAuthSessionRevision] = useState(0)
   const [socialLoading, setSocialLoading] = useState('')
   const [authToken, setAuthToken] = useState('')
@@ -180,6 +183,7 @@ export default function useMallogAuth({
     setSessionExpiresAtMs(0)
     setSessionNowMs(Date.now())
     setAuthInitializing(false)
+    setAuthRetryAvailable(false)
     setAuthLoading(false)
     setSocialLoading('')
     setAuthPassword('')
@@ -203,6 +207,7 @@ export default function useMallogAuth({
     setSessionNowMs(Date.now())
     callbacks.current.onResetState?.()
     callbacks.current.setError(null)
+    setAuthRetryAvailable(false)
     if (noticeMessage) {
       callbacks.current.setNotice(noticeMessage)
     }
@@ -241,12 +246,14 @@ export default function useMallogAuth({
 
   const fetchBootstrap = useCallback(async (token = session.current.token, { silentUnauthorized = false, controller = beginAuthRequest() } = {}) => {
     setAuthInitializing(true)
+    setAuthRetryAvailable(false)
     try {
-      const res = await apiFetch(`${apiUrl}/api/auth/bootstrap`, {
+      const res = await apiFetch(`${apiUrl}/api/auth/bootstrap?include_usage=false`, {
         headers: getAuthHeaders(token),
         signal: controller.signal,
+        timeoutMs: AUTH_TIMEOUT_MS,
       })
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         resetAuthState({ errorMessage: silentUnauthorized ? null : callbacks.current.messages.sessionExpired })
         return null
       }
@@ -257,7 +264,8 @@ export default function useMallogAuth({
     } catch (error) {
       if (controller.signal.aborted) return null
       console.error('Failed to bootstrap auth state', error)
-      resetAuthState({ errorMessage: error?.message || callbacks.current.messages.sessionExpired })
+      resetAuthState({ errorMessage: callbacks.current.messages.connectionDelayed })
+      setAuthRetryAvailable(true)
       return null
     } finally {
       if (!controller.signal.aborted) setAuthInitializing(false)
@@ -268,24 +276,17 @@ export default function useMallogAuth({
     const formData = new FormData()
     formData.append('access_token', token)
 
-    const response = await apiFetch(`${apiUrl}/api/auth/session`, {
+    const response = await apiFetch(`${apiUrl}/api/auth/session?include_usage=false`, {
       method: 'POST',
       body: formData,
       signal: controller.signal,
+      timeoutMs: AUTH_TIMEOUT_MS,
     })
     const data = await readResponseData(response, callbacks.current.messages.socialSessionError)
     if (controller.signal.aborted) throw abortError()
     applySessionData(data, { noticeMessage })
     return data
   }, [apiUrl, applySessionData, readResponseData])
-
-  const warmUpBackend = useCallback(() => {
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS)
-    apiFetch(`${apiUrl}/health`, { signal: controller.signal })
-      .catch(() => {})
-      .finally(() => window.clearTimeout(timeoutId))
-  }, [apiUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -294,8 +295,6 @@ export default function useMallogAuth({
     setAuthInitializing(true)
 
     const bootstrapAuth = async () => {
-      warmUpBackend()
-
       const oauthParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
       const queryParams = new URLSearchParams(window.location.search)
       const oauthAccessToken = oauthParams.get('access_token') || queryParams.get('access_token')
@@ -347,7 +346,13 @@ export default function useMallogAuth({
       cancelled = true
       controller.abort()
     }
-  }, [beginAuthRequest, establishCookieSession, fetchBootstrap, isJwtExpired, resetAuthState, warmUpBackend])
+  }, [beginAuthRequest, establishCookieSession, fetchBootstrap, isJwtExpired, resetAuthState])
+
+  useEffect(() => {
+    if (authToken && authUser && !authInitializing && authMode !== 'reset_password') {
+      fetchUsage()
+    }
+  }, [authSessionRevision, authToken, authUser, authInitializing, authMode, fetchUsage])
 
   useEffect(() => subscribeUnauthorized((url) => {
     if (String(url).startsWith(`${apiUrl}/`) && session.current.token) {
@@ -389,8 +394,10 @@ export default function useMallogAuth({
 
   const handleAuthSubmit = useCallback(async (event) => {
     event.preventDefault()
-    if (authInitializing || authLoading) return
+    if (authLoading || socialLoading) return
     const controller = beginAuthRequest()
+    setAuthInitializing(false)
+    setAuthRetryAvailable(false)
     setError(null)
     setNotice(null)
     setAuthLoading(true)
@@ -407,6 +414,7 @@ export default function useMallogAuth({
           method: 'POST',
           body: formData,
           signal: controller.signal,
+          timeoutMs: AUTH_TIMEOUT_MS,
         })
         const data = await readResponseData(response, messages.authFailed)
         if (controller.signal.aborted) return
@@ -426,11 +434,12 @@ export default function useMallogAuth({
         }
         const formData = new FormData()
         formData.append('new_password', authPassword)
-        const response = await apiFetch(`${apiUrl}/api/auth/password-reset/confirm`, {
+        const response = await apiFetch(`${apiUrl}/api/auth/password-reset/confirm?include_usage=false`, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: formData,
           signal: controller.signal,
+          timeoutMs: AUTH_TIMEOUT_MS,
           protectedRequest: true,
         })
         const data = await readResponseData(response, messages.resetSessionExpired)
@@ -450,10 +459,11 @@ export default function useMallogAuth({
       }
 
       const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login'
-      const response = await apiFetch(`${apiUrl}${endpoint}`, {
+      const response = await apiFetch(`${apiUrl}${endpoint}?include_usage=false`, {
         method: 'POST',
         body: formData,
         signal: controller.signal,
+        timeoutMs: AUTH_TIMEOUT_MS,
       })
       const data = await readResponseData(response, messages.authFailed)
       if (controller.signal.aborted) return
@@ -482,6 +492,7 @@ export default function useMallogAuth({
     applySessionData,
     authInitializing,
     authLoading,
+    socialLoading,
     beginAuthRequest,
     authEmail,
     authMode,
@@ -507,8 +518,10 @@ export default function useMallogAuth({
   ])
 
   const handleSocialLogin = useCallback(async (provider) => {
-    if (authInitializing || socialLoading) return
+    if (authLoading || socialLoading) return
     const controller = beginAuthRequest()
+    setAuthInitializing(false)
+    setAuthRetryAvailable(false)
     setError(null)
     setNotice(null)
     setSocialLoading(provider)
@@ -517,7 +530,7 @@ export default function useMallogAuth({
       const redirectTo = `${window.location.origin}${messages.oauthRedirectPath || window.location.pathname}`
       const response = await apiFetch(
         `${apiUrl}/api/auth/oauth-url?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(redirectTo)}`,
-        { signal: controller.signal }
+        { signal: controller.signal, timeoutMs: AUTH_TIMEOUT_MS }
       )
       const data = await readResponseData(response, messages.socialUrlFailed)
       if (controller.signal.aborted) return
@@ -527,7 +540,7 @@ export default function useMallogAuth({
       setError(error?.message || messages.socialError)
       setSocialLoading('')
     }
-  }, [apiUrl, authInitializing, beginAuthRequest, messages.oauthRedirectPath, messages.socialError, messages.socialUrlFailed, readResponseData, setError, setNotice, socialLoading])
+  }, [apiUrl, authLoading, beginAuthRequest, messages.oauthRedirectPath, messages.socialError, messages.socialUrlFailed, readResponseData, setError, setNotice, socialLoading])
 
   const handleLogout = useCallback(async () => {
     const headers = getAuthHeaders()
@@ -543,6 +556,8 @@ export default function useMallogAuth({
   }, [apiUrl, getAuthHeaders, messages.loggedOut, resetAuthState])
 
   return {
+    authRetryAvailable,
+    retryAuth: () => fetchBootstrap('', { silentUnauthorized: true }),
     authMode,
     setAuthMode,
     authName,

@@ -18,9 +18,9 @@ function wav() {
   return b
 }
 
-async function fixture(browser, { signedIn = false, width = 1440, height = 1000, bootstrapDelay = 0 } = {}) {
+async function fixture(browser, { signedIn = false, width = 1440, height = 1000, bootstrapDelay = 0, bootstrapStatus = 0 } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, permissions: ['microphone'] })
-  const state = { signedIn, requests: [], expireGlossary: false, errors: [] }
+  const state = { signedIn, requests: [], expireGlossary: false, errors: [], bootstrapStatus }
   const page = await context.newPage()
   page.on('pageerror', error => state.errors.push(error.message))
   const session = () => ({ session_established: true, user, usage, session_expires_at: Math.floor(Date.now() / 1000) + 3600 })
@@ -31,7 +31,7 @@ async function fixture(browser, { signedIn = false, width = 1440, height = 1000,
       let data = {}, status = 200
       if (url.pathname === '/api/auth/bootstrap') {
         if (bootstrapDelay) await new Promise(resolve => setTimeout(resolve, bootstrapDelay))
-        status = state.signedIn ? 200 : 401
+        status = state.bootstrapStatus || (state.signedIn ? 200 : 401)
         data = state.signedIn ? session() : { detail: '로그인이 필요합니다.' }
       } else if (url.pathname === '/api/auth/login' || url.pathname === '/api/auth/session') {
         state.signedIn = true; data = session()
@@ -88,14 +88,22 @@ async function main() {
     ...(process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : {}),
   })
   try {
-    const anonymous = await fixture(browser, { bootstrapDelay: 700 })
-    await anonymous.page.goto(base)
+    const anonymous = await fixture(browser, { bootstrapDelay: 1500 })
+    await anonymous.page.goto(base, { waitUntil: 'domcontentloaded' })
     await anonymous.page.getByText('로그인 상태 확인 중...').waitFor()
     assert.equal(await anonymous.page.locator('input[type=file]').count(), 0)
     await anonymous.page.getByLabel('이메일', { exact: true }).waitFor()
+    assert.equal(await anonymous.page.getByLabel('이메일', { exact: true }).isEnabled(), true)
+    assert.equal(await anonymous.page.getByRole('button', { name: '로그인', exact: true }).last().isEnabled(), true)
+    await anonymous.page.evaluate(() => document.fonts.ready)
+    const pendingEmailBounds = await anonymous.page.locator('#account-email').boundingBox()
+    await anonymous.page.waitForFunction(() => document.querySelector('#auth-card')?.getAttribute('aria-busy') === 'false')
+    const readyEmailBounds = await anonymous.page.locator('#account-email').boundingBox()
+    assert.equal(readyEmailBounds.y, pendingEmailBounds.y, 'Session verification must not shift the sign-in form')
     await assertLoginOnly(anonymous.page)
     assert.equal(await anonymous.page.getByRole('button', { name: '녹음 시작', exact: true }).count(), 0)
     assert.equal(anonymous.state.requests.some(r => /guest|transcribe|history|records|glossary/.test(r.path)), false)
+    assert.equal(anonymous.state.requests.some(r => r.path === '/health' || r.path === '/api/stats'), false)
     await layout(anonymous.page, 'login-desktop')
     await anonymous.page.getByRole('button', { name: '회원가입', exact: true }).click()
     await anonymous.page.getByLabel('이름', { exact: true }).fill('테스트')
@@ -125,6 +133,20 @@ async function main() {
     assert.equal(await anonymous.page.locator('input[type=file]').count(), 0)
     assert.deepEqual(anonymous.state.errors, [])
     await anonymous.context.close()
+
+    for (const width of [320, 1440]) {
+      const delayed = await fixture(browser, { width, bootstrapStatus: 503 })
+      await delayed.page.goto(base)
+      await delayed.page.getByRole('button', { name: '연결 다시 확인', exact: true }).waitFor()
+      await assertLoginOnly(delayed.page)
+      await layout(delayed.page, `connection-retry-${width}`)
+      delayed.state.bootstrapStatus = 0
+      delayed.state.signedIn = true
+      await delayed.page.getByRole('button', { name: '연결 다시 확인', exact: true }).click()
+      await delayed.page.locator('.mallog-workspace').waitFor()
+      assert.deepEqual(delayed.state.errors, [])
+      await delayed.context.close()
+    }
 
     for (const [locale, width] of [['ko', 390], ['ko', 320], ['en', 320], ['en', 390], ['en', 1440]]) {
       const f = await fixture(browser, { width })

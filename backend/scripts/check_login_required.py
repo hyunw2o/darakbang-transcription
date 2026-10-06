@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import io
 import os
 import socket
 import sys
+import threading
 import time
 import unittest
 import uuid
@@ -268,6 +270,64 @@ class LoginRequiredChecks(unittest.IsolatedAsyncioTestCase):
             **self.headers("token-b"), "Cookie": f"{api.AUTH_COOKIE_NAME}=token-a",
         })
         self.assertEqual(response.json()["user"]["id"], "user-b")
+
+    async def test_light_auth_skips_usage_but_still_verifies_identity(self):
+        self.usage.side_effect = AssertionError("Light auth must not load usage")
+        for path in ("/api/auth/me", "/api/auth/bootstrap"):
+            for cookie in (False, True):
+                response = await self.client.get(path + "?include_usage=false", headers=self.headers(cookie=cookie))
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()["user"]["id"], "user-a")
+                self.assertIsNone(response.json()["usage"])
+            response = await self.client.get(path + "?include_usage=false", headers=self.headers("invalid"))
+            self.assertEqual(response.status_code, 401)
+        self.client.cookies.clear()
+        response = await self.client.post("/api/auth/login?include_usage=false", data={
+            "email": "a@example.test", "password": "test-password",
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["session_established"])
+        self.assertIn(api.AUTH_COOKIE_NAME, response.cookies)
+        self.usage.assert_not_called()
+
+    async def test_legacy_auth_keeps_usage_and_usage_is_loaded_off_event_loop(self):
+        event_loop_thread = threading.get_ident()
+        row = self.usage.return_value
+        threads = []
+
+        def read_usage(*_args, **_kwargs):
+            threads.append(threading.get_ident())
+            return row
+
+        self.usage.side_effect = read_usage
+        for path in ("/api/auth/me", "/api/auth/bootstrap", "/api/usage"):
+            response = await self.client.get(path, headers=self.headers())
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()
+            self.assertTrue((payload if path == "/api/usage" else payload["usage"])["can_upload"])
+        self.assertEqual(len(threads), 3)
+        self.assertNotIn(event_loop_thread, threads)
+
+    async def test_slow_usage_does_not_block_health_or_light_bootstrap(self):
+        started, release = threading.Event(), threading.Event()
+        row = self.usage.return_value
+
+        def slow_usage(*_args, **_kwargs):
+            started.set()
+            release.wait(timeout=3)
+            return row
+
+        self.usage.side_effect = slow_usage
+        pending = asyncio.create_task(self.client.get("/api/usage", headers=self.headers()))
+        try:
+            self.assertTrue(await asyncio.to_thread(started.wait, 2))
+            for path in ("/health", "/api/auth/bootstrap?include_usage=false"):
+                response = await asyncio.wait_for(self.client.get(path, headers=self.headers()), timeout=1)
+                self.assertEqual(response.status_code, 200, response.text)
+            self.assertFalse(pending.done())
+        finally:
+            release.set()
+            await pending
 
     async def test_owner_isolation_for_persisted_legacy_and_runtime_results(self):
         for table in (api.TRANSCRIPTION_JOBS_TABLE_NAME, "transcriptions"):

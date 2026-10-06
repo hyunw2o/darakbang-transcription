@@ -51,8 +51,9 @@ async function mount(hook, props = defaults, strict = false) {
 function mockFetch(handler) {
   const calls = []
   window.fetch = async (url, options = {}) => {
-    calls.push({ url: String(url), options })
-    return String(url).endsWith('/health') ? json({ status: 'ok' }) : handler(String(url), options, calls)
+    const path = String(url).split('?')[0]
+    calls.push({ url: path, rawUrl: String(url), options })
+    return path.endsWith('/health') ? json({ status: 'ok' }) : handler(path, options, calls)
   }
   return calls
 }
@@ -109,6 +110,54 @@ test('bootstrap verifies a user once, including changing parent callback identit
   await hook.update({ ...defaults, onResetState: () => {}, setError: () => {}, locale: 'ko' })
   equal(calls.filter((call) => call.url.endsWith('/bootstrap')).length, 1)
   equal(hook.current.authSessionRevision, revision)
+})
+
+test('startup skips warmup and loads usage without blocking verified access', async () => {
+  const usage = deferred()
+  const calls = mockFetch((url) => url.endsWith('/usage') ? usage.promise : json({ ...sessionData(), usage: null }))
+  const hook = await mount(useMallogAuth)
+  await until(() => Boolean(hook.current.authUser) && !hook.current.authInitializing)
+  equal(hook.current.usage, null)
+  equal(calls.filter(call => call.url.endsWith('/health')).length, 0)
+  equal(calls.filter(call => call.url.endsWith('/bootstrap')).length, 1)
+  assert(calls.find(call => call.url.endsWith('/bootstrap')).rawUrl.endsWith('?include_usage=false'))
+  await act(async () => usage.resolve(json({ used_audio_seconds: 30 })))
+  await until(() => hook.current.usage?.used_audio_seconds === 30)
+})
+
+test('sign-in can replace a slow bootstrap without a late response changing the account', async () => {
+  const pending = deferred()
+  mockFetch(url => url.endsWith('/bootstrap') ? pending.promise : json(sessionData('new-user')))
+  const hook = await mount(useMallogAuth)
+  assert(hook.current.authInitializing)
+  await act(async () => { hook.current.setAuthEmail('new@example.com'); hook.current.setAuthPassword('password') })
+  await act(async () => hook.current.handleAuthSubmit(submitEvent))
+  equal(hook.current.authUser.id, 'new-user')
+  await act(async () => pending.resolve(json(sessionData('old-user'))))
+  equal(hook.current.authUser.id, 'new-user')
+})
+
+test('network bootstrap failure offers retry without granting access', async () => {
+  mockFetch(async () => { throw new TypeError('Failed to fetch') })
+  const hook = await mount(useMallogAuth)
+  await until(() => hook.current.authRetryAvailable)
+  assert(!hook.current.authUser && !hook.current.authToken && !hook.current.authInitializing)
+  mockFetch(() => json(sessionData()))
+  await act(async () => hook.current.retryAuth())
+  assert(hook.current.authUser && !hook.current.authRetryAvailable)
+})
+
+test('bounded requests time out and preserve caller cancellation', async () => {
+  mockFetch((_url, options) => new Promise((resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })
+  }))
+  try { await apiFetch(`${apiUrl}/slow`, { timeoutMs: 20 }); throw new Error('Expected timeout') }
+  catch (error) { equal(error.name, 'TimeoutError') }
+  const controller = new AbortController()
+  const pending = apiFetch(`${apiUrl}/slow`, { timeoutMs: 200, signal: controller.signal })
+  controller.abort()
+  try { await pending; throw new Error('Expected cancellation') }
+  catch (error) { equal(error.name, 'AbortError') }
 })
 
 test('missing users, missing expiry, expired sessions and offline bootstrap fail closed', async () => {
@@ -353,7 +402,7 @@ test('polling 401 clears authentication and does not retry as a network failure'
   let poll
   window.setInterval = (callback, delay) => delay === 3000 ? (poll = callback, 'poll-test') : native.setInterval.call(window, callback, delay)
   window.clearInterval = (id) => { if (id !== 'poll-test') native.clearInterval.call(window, id) }
-  const calls = mockFetch((url) => url.endsWith('/bootstrap') ? json(sessionData()) : url.endsWith('/glossary') ? json({ terms: [] }) : url.endsWith('/transcribe') ? json({ status: 'queued', task_id: 'task' }) : json({ detail: 'Expired' }, 401))
+  const calls = mockFetch((url) => url.endsWith('/bootstrap') ? json(sessionData()) : url.endsWith('/usage') ? json({ plan_tier: 'free' }) : url.endsWith('/glossary') ? json({ terms: [] }) : url.endsWith('/transcribe') ? json({ status: 'queued', task_id: 'task' }) : json({ detail: 'Expired' }, 401))
   const hook = await mount(useWorkspace)
   await until(() => hook.current.accessEnabled)
   await act(async () => hook.current.transcription.setFile(new File(['audio'], 'voice.webm')))
@@ -384,7 +433,7 @@ test('transient failures preserve retries and an abort interrupts retry backoff'
 })
 
 test('unprotected login 401 is not a protected-session invalidation', async () => {
-  mockFetch((url) => url.endsWith('/bootstrap') ? json(sessionData()) : json({}, 401))
+  mockFetch((url) => url.endsWith('/bootstrap') ? json(sessionData()) : url.endsWith('/usage') ? json({ plan_tier: 'free' }) : json({}, 401))
   const hook = await mount(useMallogAuth)
   await until(() => Boolean(hook.current.authUser))
   await apiFetch(`${apiUrl}/api/auth/login`, { method: 'POST' })

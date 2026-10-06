@@ -71,7 +71,7 @@ html.dark .mallog-app {
 .mallog-social-buttons button { border-radius: 6px; height: 44px; padding: 8px 12px; }
 .mallog-auth-legal { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 24px; font-size: 11px; color: var(--nm-text-secondary); }
 .mallog-auth-note { color: var(--nm-text-secondary); font-size: 13px; margin-bottom: 20px; }
-.mallog-auth-loading { min-height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; color: var(--nm-text-secondary); }
+.mallog-auth-loading { min-height: 28px; display: flex; justify-content: center; align-items: center; gap: 8px; color: var(--nm-text-secondary); font-size: 12px; }
 .mallog-feedback { border-left: 3px solid var(--nm-accent); padding: 12px 14px; background: var(--nm-accent-soft); color: var(--nm-text-primary); font-size: 13px; margin: 16px 0; border-radius: 0 6px 6px 0; }
 .mallog-feedback-error { border-color: #c04444; color: #ac3030; background: #fff0ee; }
 html.dark .mallog-feedback-error { color: #ffb2b2; background: #402523; }

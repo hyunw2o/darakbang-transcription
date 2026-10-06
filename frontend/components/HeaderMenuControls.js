@@ -42,7 +42,7 @@ function NavItem({ item, className = '', onClick }) {
 
   if (item.href.startsWith('/')) {
     return (
-      <Link href={item.href} className={sharedClassName} onClick={onClick}>
+      <Link prefetch={false} href={item.href} className={sharedClassName} onClick={onClick}>
         {item.label}
       </Link>
     )
@@ -131,6 +131,7 @@ export default function HeaderMenuControls({
           />
         ))}
         <Link
+          prefetch={false}
           href={languageHref}
           className="inline-flex min-h-[40px] items-center rounded-lg px-3 text-sm font-semibold text-[#64748B] transition hover:bg-[rgba(15,23,42,0.06)] hover:text-[#0F172A] whitespace-nowrap dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
         >
@@ -175,6 +176,7 @@ export default function HeaderMenuControls({
                 />
               ))}
               <Link
+                prefetch={false}
                 href={languageHref}
                 onClick={() => setMobileOpen(false)}
                 className="flex min-h-[48px] items-center rounded-lg px-4 text-sm font-semibold text-[#1A1916] transition hover:bg-[#F4F3EF] whitespace-nowrap dark:text-white dark:hover:bg-white/10"

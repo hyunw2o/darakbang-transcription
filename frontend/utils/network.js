@@ -32,18 +32,34 @@ export const subscribeUnauthorized = (listener) => {
 export const abortError = () => new DOMException('Access is no longer enabled.', 'AbortError')
 
 export const apiFetch = async (url, options = {}) => {
-  const { headers = {}, credentials = 'include', protectedRequest = false, ...rest } = options
+  const { headers = {}, credentials = 'include', protectedRequest = false, timeoutMs = 0, ...rest } = options
   if (rest.signal?.aborted) throw abortError()
-  const response = await fetch(url, {
-    credentials,
-    headers,
-    ...rest,
-  })
-  if (rest.signal?.aborted) throw abortError()
-  if (protectedRequest && response.status === 401) {
-    unauthorizedListeners.forEach((listener) => listener(url))
+  const controller = timeoutMs > 0 ? new AbortController() : null
+  let timedOut = false
+  const abort = () => controller?.abort()
+  const timer = controller ? setTimeout(() => { timedOut = true; controller.abort() }, timeoutMs) : null
+  if (controller) rest.signal?.addEventListener('abort', abort, { once: true })
+  try {
+    const response = await fetch(url, {
+      credentials,
+      headers,
+      ...rest,
+      signal: controller?.signal || rest.signal,
+    })
+    if (rest.signal?.aborted) throw abortError()
+    if (timedOut) throw new DOMException('Request timed out.', 'TimeoutError')
+    if (protectedRequest && response.status === 401) {
+      unauthorizedListeners.forEach((listener) => listener(url))
+    }
+    return response
+  } catch (error) {
+    if (rest.signal?.aborted) throw abortError()
+    if (timedOut) throw new DOMException('Request timed out.', 'TimeoutError')
+    throw error
+  } finally {
+    clearTimeout(timer)
+    rest.signal?.removeEventListener('abort', abort)
   }
-  return response
 }
 
 const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
