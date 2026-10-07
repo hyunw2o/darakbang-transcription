@@ -2,19 +2,16 @@ import Head from 'next/head'
 import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
-import { LoaderCircle } from 'lucide-react'
+import { useEffect } from 'react'
+import MallogWorkspaceLoading from './MallogWorkspaceLoading'
 import HeaderMenuControls from './HeaderMenuControls'
 import MallogAuthPanel from './MallogAuthPanel'
 import Mallog24Logo from './Mallog24Logo'
 
 const MallogWorkspaceEn = dynamic(() => import('./MallogWorkspaceEn'), {
   ssr: false,
-  loading: () => (
-    <div role="status" className="flex min-h-48 items-center justify-center gap-3 text-nm-text-secondary">
-      <LoaderCircle size={20} className="animate-spin" aria-hidden="true" />
-      <span>Preparing your workspace.</span>
-    </div>
-  ),
+  timeout: 15000,
+  loading: (state) => <MallogWorkspaceLoading locale="en" {...state} />,
 })
 
 function FooterInlineRow({ items, className = '' }) {
@@ -63,6 +60,14 @@ export default function MallogHomeEnView(props) {
   } = props
 
   const accessEnabled = Boolean(props.accessEnabled)
+
+  useEffect(() => {
+    if (!accessEnabled) {
+      // Warm public UI code during auth; protected controls/data stay behind the access gate.
+      // A failed warm-up is non-fatal: the dynamic import can retry when the workspace mounts.
+      import('./MallogWorkspaceEn').catch(() => {})
+    }
+  }, [accessEnabled])
 
   const navItems = [
     { label: 'Guides', href: '/en/guides' },
