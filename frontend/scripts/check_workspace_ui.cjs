@@ -29,7 +29,11 @@ async function fixture(browser, { signedIn = false, width = 1440, height = 1000,
     if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
       state.requests.push({ path: url.pathname, method: route.request().method(), headers: route.request().headers() })
       let data = {}, status = 200
-      if (url.pathname === '/api/auth/bootstrap') {
+      if (url.pathname === '/health') {
+        if (state.readiness) await state.readiness
+        data = { status: 'healthy' }
+      }
+      else if (url.pathname === '/api/auth/bootstrap') {
         if (bootstrapDelay) await new Promise(resolve => setTimeout(resolve, bootstrapDelay))
         status = state.bootstrapStatus || (state.signedIn ? 200 : 401)
         data = state.signedIn ? session() : { detail: '로그인이 필요합니다.' }
@@ -133,6 +137,31 @@ async function main() {
     assert.equal(await anonymous.page.locator('input[type=file]').count(), 0)
     assert.deepEqual(anonymous.state.errors, [])
     await anonymous.context.close()
+
+    for (const [locale, width] of [['ko', 320], ['en', 390], ['ko', 1440]]) {
+      const cold = await fixture(browser, { width })
+      let ready
+      cold.state.readiness = new Promise(resolve => { ready = resolve })
+      try {
+        await cold.page.goto(`${base}${locale === 'en' ? '/en' : '/'}`)
+        await cold.page.locator('#account-email').fill('login-test@example.com')
+        await cold.page.locator('#account-password').fill('test-password')
+        const submit = cold.page.locator('#auth-card button[type=submit]')
+        await submit.click()
+        await cold.page.getByText(locale === 'en' ? 'Connecting to the server. Please wait.' : '서버 연결을 준비하고 있습니다. 잠시만 기다려 주세요.', { exact: true }).waitFor()
+        assert.equal(await submit.isDisabled(), true)
+        assert.equal(await cold.page.locator('input[type=file]').count(), 0)
+        assert.equal(cold.state.requests.filter(r => r.path === '/api/auth/login').length, 0)
+        await layout(cold.page, `login-cold-start-${locale}-${width}`)
+        ready()
+        await cold.page.locator('.mallog-workspace').waitFor()
+        assert.equal(cold.state.requests.filter(r => r.path === '/api/auth/login').length, 1)
+        assert.deepEqual(cold.state.errors, [])
+      } finally {
+        ready()
+        await cold.context.close()
+      }
+    }
 
     for (const width of [320, 1440]) {
       const delayed = await fixture(browser, { width, bootstrapStatus: 503 })

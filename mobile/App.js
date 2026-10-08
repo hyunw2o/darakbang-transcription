@@ -664,6 +664,8 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
 
   const {
     bootLoading: authBootLoading,
+    canRetrySession,
+    retrySession,
     authMode,
     setAuthMode,
     authName,
@@ -2228,6 +2230,11 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
                 { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder },
               ]}
             >
+              {canRetrySession ? <NmPressable
+                style={[styles.accountRecoveryButton, { borderColor: activeTheme.inputBorder }]}
+                onPress={retrySession}
+                disabled={authLoading || Boolean(socialLoading)}
+              ><Feather name="refresh-cw" size={18} color={activeTheme.accent} /><Text style={[styles.accountRecoveryButtonText, { color: activeTheme.accent }]}>{copy.retryConnection}</Text></NmPressable> : null}
               <View style={styles.authBrandRow}>
                 <Image source={require("./assets/icon.png")} style={styles.brandImage} />
                 <Text style={[styles.brandName, { color: activeTheme.textPrimary }]}>mallog24</Text>

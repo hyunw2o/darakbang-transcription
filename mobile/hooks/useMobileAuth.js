@@ -6,7 +6,7 @@ import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AUTH_REQUEST_TIMEOUT_MS, AUTH_SESSION_EXPIRES_AT_KEY, AUTH_TOKEN_KEY, OURS_URL, SITE_URL } from "../config";
 import { buildDirectOauthUrl, parseAuthParamsFromUrl, parseJwtExpMs, shouldShowOauthConfigHint } from "../utils/auth";
-import { getFriendlyAuthError, isNetworkFetchError, isTimeoutErrorMessage, requestApi, requestApiWithTimeoutRetry } from "../utils/network";
+import { getFriendlyAuthError, isNetworkFetchError, isTimeoutErrorMessage, requestApi, waitForAuthServer } from "../utils/network";
 import { createSessionScope, sessionEndedError } from "../utils/session";
 import { formatSecondsToHourMinuteSecond } from "../utils/format";
 
@@ -36,6 +36,11 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
   const mountedRef = useRef(true);
   const storageQueue = useRef(Promise.resolve());
   const callbackRef = useRef("");
+  const verificationRef = useRef(null);
+
+  const requestAuth = useCallback((path, options = {}) => requestApi(path, {
+    ...options, timeoutMs: AUTH_REQUEST_TIMEOUT_MS, totalTimeoutMs: AUTH_REQUEST_TIMEOUT_MS,
+  }), []);
 
   // Serialize storage writes: an older login must never overwrite a later logout.
   const persist = useCallback((operation) => {
@@ -47,6 +52,7 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
 
   const clearAuthState = useCallback((message = "") => {
     attemptRef.current += 1;
+    verificationRef.current?.abort();
     scopeRef.current?.invalidate();
     scopeRef.current = null;
     recoveryRef.current = null;
@@ -73,12 +79,18 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     clearAuthState(latest.current.copy.sessionExpiredNotice);
   }, [clearAuthState]);
 
-  const hydrateWithToken = useCallback(async (token, attempt, hintSeconds = 0, hintExpiresAt = 0) => {
+  const hydrateWithToken = useCallback(async (token, attempt, hintSeconds = 0, hintExpiresAt = 0, verifiedData = null) => {
     if (!isCurrent(attempt)) throw sessionEndedError();
     const hints = [parseJwtExpMs(token), Number(hintExpiresAt), hintSeconds > 0 ? Date.now() + hintSeconds * 1000 : 0].filter((n) => n > 0);
     const expiresAt = hints.length ? Math.min(...hints) : 0;
     if (!expiresAt || expiresAt <= Date.now()) throw new Error(latest.current.copy.sessionExpiredNotice);
-    const data = await requestApiWithTimeoutRetry("/api/auth/me", { token, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+    verificationRef.current?.abort();
+    const controller = new AbortController();
+    verificationRef.current = controller;
+    // Only the response from this login request can replace a second /me request.
+    const data = verifiedData?.session_established && verifiedData?.user?.id
+      ? verifiedData
+      : await requestAuth("/api/auth/me?include_usage=false", { token, signal: controller.signal });
     if (!isCurrent(attempt)) throw sessionEndedError();
     if (!data?.user?.id) throw new Error(latest.current.copy.errors.socialSessionFailed);
     if (expiresAt <= Date.now()) throw new Error(latest.current.copy.sessionExpiredNotice);
@@ -94,7 +106,32 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     setStatus("authenticated");
     setAuthPassword("");
     latest.current.setError("");
-  }, [expireSession, isCurrent, persist]);
+  }, [expireSession, isCurrent, persist, requestAuth]);
+
+  const restoreSession = useCallback(async () => {
+    if (busyRef.current || scopeRef.current?.isActive()) return;
+    const attempt = ++attemptRef.current;
+    verificationRef.current?.abort();
+    setStatus("restoring");
+    latest.current.clearMessages();
+    try {
+      const entries = await AsyncStorage.multiGet([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
+      if (!isCurrent(attempt)) return;
+      const token = entries[0][1];
+      if (token) await hydrateWithToken(token, attempt, 0, Number(entries[1][1]));
+      else setStatus("signedOut");
+    } catch (error) {
+      if (!isCurrent(attempt)) return;
+      const temporary = isNetworkFetchError(error) || isTimeoutErrorMessage(error.message) || Number(error.status) >= 500 || error.status === 429;
+      if (temporary) {
+        setStatus("connectionError");
+        latest.current.setError(latest.current.copy.connectionDelayed);
+      } else {
+        await clearAuthState();
+        latest.current.setError(error.message || latest.current.copy.errors.socialSessionFailed);
+      }
+    }
+  }, [clearAuthState, hydrateWithToken, isCurrent]);
 
   const handleDeepLink = useCallback(async (url) => {
     const params = parseAuthParamsFromUrl(url);
@@ -143,11 +180,7 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
         const initialUrl = await Linking.getInitialURL();
         if (!isCurrent(attempt)) return;
         if (initialUrl && await handleDeepLink(initialUrl)) return;
-        const entries = await AsyncStorage.multiGet([AUTH_TOKEN_KEY, AUTH_SESSION_EXPIRES_AT_KEY]);
-        if (!isCurrent(attempt)) return;
-        const token = entries[0][1];
-        if (token) await hydrateWithToken(token, attempt, 0, Number(entries[1][1]));
-        else setStatus("signedOut");
+        await restoreSession();
       } catch (error) {
         if (isCurrent(attempt)) {
           await clearAuthState();
@@ -158,10 +191,11 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     return () => {
       mountedRef.current = false;
       attemptRef.current += 1;
+      verificationRef.current?.abort();
       scopeRef.current?.invalidate();
       listener.remove();
     };
-  }, [clearAuthState, handleDeepLink, hydrateWithToken, isCurrent]);
+  }, [clearAuthState, handleDeepLink, isCurrent, restoreSession]);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -172,10 +206,10 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     const foreground = AppState.addEventListener("change", (state) => {
       if (state !== "active" || !session.scope.isActive()) return;
       check();
-      session.scope.request(requestApi, "/api/auth/me").catch(() => {});
+      session.scope.request(requestAuth, "/api/auth/me?include_usage=false").catch(() => {});
     });
     return () => { clearInterval(timer); foreground.remove(); };
-  }, [session]);
+  }, [session, requestAuth]);
 
   const fetchUsage = useCallback(async (token = scopeRef.current?.token, { quiet = false } = {}) => {
     const scope = scopeRef.current;
@@ -200,20 +234,31 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     if (authMode === "signup" && authPassword.length < 8) { setError(copy.errors.passwordMin); return; }
     busyRef.current = true;
     const attempt = ++attemptRef.current;
+    verificationRef.current?.abort();
+    const controller = new AbortController();
+    verificationRef.current = controller;
     setAuthLoading(true);
     try {
+      setNotice(copy.preparingLogin);
+      const baseUrl = await waitForAuthServer({ signal: controller.signal });
+      if (!isCurrent(attempt)) return;
+      setNotice(copy.verifyingLogin);
       const body = new FormData();
       body.append("email", authEmail.trim());
       body.append("password", authPassword);
       if (authMode === "signup" && authName.trim()) body.append("full_name", authName.trim());
-      const data = await requestApiWithTimeoutRetry(authMode === "signup" ? "/api/auth/signup" : "/api/auth/login", { method: "POST", body, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      const data = await requestApi(authMode === "signup" ? "/api/auth/signup?include_usage=false" : "/api/auth/login?include_usage=false", {
+        method: "POST", body, baseUrl, signal: controller.signal,
+        timeoutMs: 45000, totalTimeoutMs: 45000,
+      });
       if (!isCurrent(attempt)) return;
       if (data?.access_token) {
         setStatus("verifying");
-        await hydrateWithToken(data.access_token, attempt, Number(data.expires_in) || 0);
+        await hydrateWithToken(data.access_token, attempt, Number(data.expires_in) || 0, 0, data);
         if (isCurrent(attempt)) setNotice(authMode === "signup" ? copy.notices.authDoneSignup : copy.notices.authDoneLogin);
       } else {
         setNotice(data?.message || copy.notices.signupDone);
+        setStatus("signedOut");
       }
       if (isCurrent(attempt)) { setAuthPassword(""); setAuthMode("login"); }
     } catch (error) {
@@ -237,14 +282,14 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
       const body = new FormData();
       body.append("email", authEmail.trim());
       body.append("redirect_to", language === "en" ? SITE_URL + "/en/recover" : SITE_URL + "/recover");
-      await requestApiWithTimeoutRetry("/api/auth/password-reset/request", { method: "POST", body, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      await requestAuth("/api/auth/password-reset/request", { method: "POST", body });
       if (isCurrent(attempt)) setNotice(copy.notices.passwordResetRequested);
     } catch (error) {
       if (isCurrent(attempt)) setError(error.message || copy.errors.passwordResetFailed);
     } finally {
       if (isCurrent(attempt)) { busyRef.current = false; setAuthLoading(false); }
     }
-  }, [authEmail, clearMessages, copy, isCurrent, language, setError, setNotice]);
+  }, [authEmail, clearMessages, copy, isCurrent, language, requestAuth, setError, setNotice]);
 
   const handlePasswordRecovery = useCallback(async () => {
     if (busyRef.current) return;
@@ -264,7 +309,7 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     try {
       const body = new FormData();
       body.append("new_password", authPassword);
-      await requestApi("/api/auth/password-reset/confirm", { method: "POST", token: recovery.token, body, timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      await requestAuth("/api/auth/password-reset/confirm?include_usage=false", { method: "POST", token: recovery.token, body });
       // Recovery credentials never become a workspace session, even if the API returns a token.
       if (isCurrent(attempt)) await clearAuthState(copy.recoveryComplete);
     } catch (error) {
@@ -272,7 +317,7 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     } finally {
       if (isCurrent(attempt)) { busyRef.current = false; setAuthLoading(false); }
     }
-  }, [authPassword, authPasswordConfirm, clearAuthState, clearMessages, copy, isCurrent, setError]);
+  }, [authPassword, authPasswordConfirm, clearAuthState, clearMessages, copy, isCurrent, requestAuth, setError]);
 
   const changeAuthMode = useCallback((mode) => {
     if (busyRef.current) return;
@@ -299,20 +344,20 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
         if (!isCurrent(attempt)) return;
         if (!credential?.identityToken) throw new Error(copy.errors.socialSessionFailed);
         const fullName = credential.fullName || {};
-        const data = await requestApiWithTimeoutRetry("/api/auth/apple", {
+        const data = await requestAuth("/api/auth/apple?include_usage=false", {
           method: "POST", timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
           body: JSON.stringify({ identity_token: credential.identityToken, authorization_code: credential.authorizationCode || "", user_identifier: credential.user || "", email: credential.email || "", full_name: [fullName.givenName, fullName.middleName, fullName.familyName].filter(Boolean).join(" ") }),
         });
         if (!isCurrent(attempt)) return;
         setStatus("verifying");
-        await hydrateWithToken(data?.access_token, attempt, Number(data?.expires_in) || 0);
+        await hydrateWithToken(data?.access_token, attempt, Number(data?.expires_in) || 0, 0, data);
         if (isCurrent(attempt)) setNotice(copy.notices.socialLoginDone);
         return;
       }
       const redirectTo = ExpoLinking.createURL("auth-callback");
       let oauthUrl = "";
       try {
-        const data = await requestApiWithTimeoutRetry("/api/auth/oauth-url?provider=" + encodeURIComponent(provider) + "&redirect_to=" + encodeURIComponent(redirectTo), { timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+        const data = await requestAuth("/api/auth/oauth-url?provider=" + encodeURIComponent(provider) + "&redirect_to=" + encodeURIComponent(redirectTo));
         oauthUrl = data?.auth_url || "";
       } catch (error) {
         const fallback = buildDirectOauthUrl(provider, redirectTo);
@@ -332,7 +377,7 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     } finally {
       if (isCurrent(attempt)) { busyRef.current = false; setSocialLoading(""); }
     }
-  }, [authMode, clearAuthState, clearMessages, copy, handleDeepLink, hydrateWithToken, isCurrent, setError, setNotice]);
+  }, [authMode, clearAuthState, clearMessages, copy, handleDeepLink, hydrateWithToken, isCurrent, requestAuth, setError, setNotice]);
 
   const handleDeleteAccount = useCallback(async () => {
     const scope = scopeRef.current;
@@ -355,6 +400,8 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
   }, [copy.errors.openExternalFailed, setError]);
 
   return {
+    retrySession: restoreSession,
+    canRetrySession: status === "connectionError",
     status, sessionKey, sessionScope: session?.scope || null,
     bootLoading: status === "restoring" || status === "verifying",
     authMode, setAuthMode: changeAuthMode, authName, setAuthName, authEmail, setAuthEmail,

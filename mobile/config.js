@@ -34,7 +34,7 @@ const ECOMMERCE_REG_NUMBER = process.env.EXPO_PUBLIC_ECOMMERCE_REG_NUMBER || "í†
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || "ours113814@gmail.com";
 const AUTH_REQUEST_TIMEOUT_MS = Math.max(
   10000,
-  Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 120000
+  Math.min(30000, Number(process.env.EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS) || 20000)
 );
 const TRANSCRIBE_POLL_TIMEOUT_MS = Math.max(
   120000,

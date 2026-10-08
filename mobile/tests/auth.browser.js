@@ -19,9 +19,9 @@ const until = async condition => {
   while (!condition() && now() < deadline) await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
   assert(condition(), 'Timed out waiting for native auth state');
 };
-const fixture = ({ token = '', initialUrl = '', api = async () => ({ user }) } = {}) => {
+const fixture = ({ token = '', initialUrl = '', api = async () => ({ user }), readiness = async () => 'https://example.invalid' } = {}) => {
   const storage = new Map(token ? [['test-token', token]] : []);
-  return window.mobileAuthFixture = { storage, initialUrl, api, requests: [], foreground: null, deepLink: null };
+  return window.mobileAuthFixture = { storage, initialUrl, api, readiness, readinessCalls: 0, requests: [], foreground: null, deepLink: null };
 };
 async function mount(strict = false) {
   const host = document.createElement('div');
@@ -35,6 +35,66 @@ async function mount(strict = false) {
   return result;
 }
 const tests = [
+  ['cold startup waits once before sending credentials to the ready server', async () => {
+    const ready = deferred();
+    const token = jwt();
+    const f = fixture({ readiness: () => ready.promise, api: async () => ({ user, access_token: token, session_established: true }) });
+    const h = await mount();
+    await until(() => !h.current.bootLoading);
+    await act(async () => { h.current.setAuthEmail(user.email); h.current.setAuthPassword('password123'); });
+    let pending;
+    await act(async () => { pending = h.current.handleAuthSubmit(); await h.current.handleAuthSubmit(); });
+    assert(h.current.authLoading && !h.current.isLoggedIn && !f.storage.has('test-token'));
+    assert(f.readinessCalls === 1 && f.requests.length === 0);
+    await act(async () => { ready.resolve('https://ready.invalid'); await pending; });
+    assert(h.current.isLoggedIn && !h.current.authLoading && f.requests.length === 1);
+    assert(f.requestOptions.baseUrl === 'https://ready.invalid' && f.requestOptions.totalTimeoutMs === 45000);
+  }],
+  ['logout cancels readiness and rejects a late login', async () => {
+    const ready = deferred();
+    const f = fixture({ readiness: () => ready.promise });
+    const h = await mount();
+    await until(() => !h.current.bootLoading);
+    await act(async () => { h.current.setAuthEmail(user.email); h.current.setAuthPassword('password123'); });
+    let pending;
+    await act(async () => { pending = h.current.handleAuthSubmit(); });
+    await act(async () => h.current.handleLogout());
+    assert(f.readinessOptions.signal.aborted);
+    await act(async () => { ready.resolve('https://ready.invalid'); await pending; });
+    assert(!h.current.isLoggedIn && !h.current.authLoading && f.requests.length === 0);
+  }],
+  ['readiness failure does not send credentials and allows a new explicit attempt', async () => {
+    const f = fixture({ readiness: async () => { throw new Error('Server startup timed out.'); } });
+    const h = await mount();
+    await until(() => !h.current.bootLoading);
+    await act(async () => { h.current.setAuthEmail(user.email); h.current.setAuthPassword('password123'); });
+    await act(async () => h.current.handleAuthSubmit());
+    assert(!h.current.authLoading && !h.current.isLoggedIn && f.requests.length === 0);
+    await act(async () => { h.current.setAuthEmail(user.email); h.current.setAuthPassword('password123'); });
+    await act(async () => h.current.handleAuthSubmit());
+    assert(f.readinessCalls === 2 && f.requests.length === 0);
+  }],
+  ['transient startup failure preserves saved credentials and retries without unlocking', async () => {
+    const token = jwt();
+    const f = fixture({ token, api: async () => { throw new TypeError('Failed to fetch'); } });
+    const h = await mount();
+    await until(() => h.current.canRetrySession);
+    assert(!h.current.isLoggedIn && !h.current.bootLoading && f.storage.get('test-token') === token);
+    assert(f.requestOptions.totalTimeoutMs === f.requestOptions.timeoutMs);
+    assert(f.lastUrl === '/api/auth/me?include_usage=false');
+    f.api = async () => ({ user });
+    await act(async () => h.current.retrySession());
+    assert(h.current.isLoggedIn && !h.current.canRetrySession);
+  }],
+  ['verified login response avoids a duplicate account request', async () => {
+    const token = jwt();
+    const f = fixture({ api: async () => ({ user, access_token: token, session_established: true }) });
+    const h = await mount();
+    await until(() => !h.current.bootLoading);
+    await act(async () => { h.current.setAuthEmail(user.email); h.current.setAuthPassword('password123'); });
+    await act(async () => h.current.handleAuthSubmit());
+    assert(h.current.isLoggedIn && f.requests.length === 1 && f.requests[0] === '/api/auth/login');
+  }],
   ['saved token waits for server verification before opening a workspace', async () => {
     const pending = deferred();
     const f = fixture({ token: jwt(), api: () => pending.promise });

@@ -40,7 +40,7 @@ function getFriendlyAuthError(message, copy) {
   if (normalized.includes("email not confirmed")) {
     return authErrors.emailNotConfirmed;
   }
-  if (normalized.includes("timeout")) {
+  if (isTimeoutErrorMessage(normalized)) {
     return authErrors.timeout;
   }
   return raw || authErrors.default || "Authentication failed";
@@ -56,6 +56,8 @@ async function requestApi(
     timeoutMs = 20000,
     headers: customHeaders = {},
     signal,
+    totalTimeoutMs = 0,
+    baseUrl: selectedBaseUrl = "",
   } = {}
 ) {
   const headers = { ...customHeaders };
@@ -67,15 +69,21 @@ async function requestApi(
 
   const baseCandidates = [API_URL, ...API_FALLBACK_URLS]
     .filter(Boolean)
-    .filter((value, idx, arr) => arr.indexOf(value) === idx);
+    .filter((value, idx, arr) => arr.indexOf(value) === idx)
+    .filter(value => !selectedBaseUrl || value === selectedBaseUrl);
+  if (!baseCandidates.length) throw new Error("Unknown API server.");
 
   let lastError = null;
+  const deadline = totalTimeoutMs > 0 ? Date.now() + totalTimeoutMs : 0;
 
   for (let idx = 0; idx < baseCandidates.length; idx += 1) {
     assertNotAborted(signal);
+    const remainingMs = deadline ? deadline - Date.now() : timeoutMs;
+    if (remainingMs <= 0) throw new Error("Request timed out. Please check server status.");
     const baseUrl = baseCandidates[idx];
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, Math.min(timeoutMs, remainingMs));
     const abort = () => controller.abort();
     signal?.addEventListener("abort", abort);
 
@@ -89,11 +97,14 @@ async function requestApi(
 
       const rawText = await response.text();
       assertNotAborted(signal);
+      if (timedOut || (deadline && Date.now() >= deadline)) throw new Error("Request timed out. Please check server status.");
       const data = parseResponseText(rawText);
 
       if (!response.ok) {
         const requestError = new Error(data?.detail || data?.message || `Request failed (${response.status})`);
         requestError.status = response.status;
+        const retryAfter = Number(response.headers?.get?.("retry-after"));
+        requestError.retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(30000, retryAfter * 1000) : 0;
         throw requestError;
       }
 
@@ -101,7 +112,7 @@ async function requestApi(
     } catch (error) {
       assertNotAborted(signal);
       lastError = error;
-      const isTimeout = error?.name === "AbortError" || isTimeoutErrorMessage(error?.message);
+      const isTimeout = timedOut || error?.name === "AbortError" || isTimeoutErrorMessage(error?.message);
       const canFallback = idx < baseCandidates.length - 1 && (isTimeout || isNetworkFetchError(error));
       if (!canFallback) {
         if (isTimeout) {
@@ -119,6 +130,47 @@ async function requestApi(
     throw new Error("Request timed out. Please check server status.");
   }
   throw lastError || new Error("Request failed.");
+}
+
+// Only public readiness checks are retried. The caller sends credentials once
+// to the server that actually answered, avoiding duplicate login sessions.
+async function waitForAuthServer({ signal, timeoutMs = 90000, attemptTimeoutMs = 15000, retryDelayMs = 1000 } = {}) {
+  const bases = [API_URL, ...API_FALLBACK_URLS].filter(Boolean).filter((value, idx, arr) => arr.indexOf(value) === idx);
+  if (!bases.length) throw new Error("Unknown API server.");
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+  while (Date.now() < deadline) {
+    assertNotAborted(signal);
+    const requestBudget = deadline - Date.now();
+    if (requestBudget <= 0) break;
+    const baseUrl = bases[attempt++ % bases.length];
+    let retryAfterMs = retryDelayMs;
+    try {
+      const data = await requestApi("/health", {
+        baseUrl, signal, timeoutMs: Math.min(attemptTimeoutMs, requestBudget),
+        totalTimeoutMs: requestBudget,
+      });
+      assertNotAborted(signal);
+      if (data?.status !== "healthy") throw new Error("Server is not ready.");
+      return baseUrl;
+    } catch (error) {
+      assertNotAborted(signal);
+      const retryable = isTimeoutErrorMessage(error.message) || isNetworkFetchError(error)
+        || [408, 425, 429, 500, 502, 503, 504].includes(Number(error.status));
+      if (!retryable) throw error;
+      retryAfterMs = error.retryAfterMs || retryDelayMs;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise((resolve, reject) => {
+      const abort = () => { clearTimeout(timer); reject(sessionEndedError()); };
+      const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, Math.min(retryAfterMs, remaining));
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
+    });
+  }
+  assertNotAborted(signal);
+  throw new Error("Server startup timed out.");
 }
 
 async function requestApiWithNetworkRetry(
@@ -179,4 +231,5 @@ export {
   requestApi,
   requestApiWithTimeoutRetry,
   requestApiWithNetworkRetry,
+  waitForAuthServer,
 };

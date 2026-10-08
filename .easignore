@@ -1,0 +1,26 @@
+# EAS builds only need the standalone mobile project, not private training data.
+/*
+!/mobile
+!/mobile/**
+!/.easignore
+
+node_modules
+.DS_Store
+mobile/.env*
+!mobile/.env.example
+mobile/.expo
+mobile/dist
+mobile/build
+mobile/ios
+mobile/android
+mobile/screenshots
+mobile/credentials.json
+mobile/credentials
+mobile/*.ipa
+mobile/*.aab
+mobile/*.apk
+mobile/*.tar.gz
+mobile/*.xcarchive
+mobile/*.log
+mobile/ios-export*
+mobile/ios-simulator*

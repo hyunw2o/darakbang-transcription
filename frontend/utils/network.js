@@ -32,7 +32,7 @@ export const subscribeUnauthorized = (listener) => {
 export const abortError = () => new DOMException('Access is no longer enabled.', 'AbortError')
 
 export const apiFetch = async (url, options = {}) => {
-  const { headers = {}, credentials = 'include', protectedRequest = false, timeoutMs = 0, ...rest } = options
+  const { headers = {}, credentials = 'include', protectedRequest = false, timeoutMs = 0, readResponse, ...rest } = options
   if (rest.signal?.aborted) throw abortError()
   const controller = timeoutMs > 0 ? new AbortController() : null
   let timedOut = false
@@ -51,7 +51,10 @@ export const apiFetch = async (url, options = {}) => {
     if (protectedRequest && response.status === 401) {
       unauthorizedListeners.forEach((listener) => listener(url))
     }
-    return response
+    const result = readResponse ? await readResponse(response) : response
+    if (rest.signal?.aborted) throw abortError()
+    if (timedOut) throw new DOMException('Request timed out.', 'TimeoutError')
+    return result
   } catch (error) {
     if (rest.signal?.aborted) throw abortError()
     if (timedOut) throw new DOMException('Request timed out.', 'TimeoutError')
@@ -97,6 +100,47 @@ const resolveRetryDelay = (response, attempt, baseDelayMs) => {
     return Math.min(30000, retryAfter * 1000)
   }
   return Math.min(10000, baseDelayMs * (2 ** Math.max(0, attempt - 1)))
+}
+
+// Cold starts can outlast authentication timeouts. Retry only this public GET,
+// never replay a password submission while an earlier request may still succeed.
+export const waitForAuthServer = async (
+  apiUrl,
+  { signal, timeoutMs = 90000, attemptTimeoutMs = 15000, retryDelayMs = 1000 } = {}
+) => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw abortError()
+    const requestBudget = deadline - Date.now()
+    if (requestBudget <= 0) break
+    let response
+    try {
+      response = await apiFetch(`${apiUrl}/health`, {
+        signal, credentials: 'omit', cache: 'no-store',
+        timeoutMs: Math.min(attemptTimeoutMs, requestBudget),
+        readResponse: async res => {
+          if (res.ok) {
+            const data = await res.json()
+            if (data?.status !== 'healthy') throw new Error('Server is not ready.')
+          } else await res.body?.cancel?.().catch(() => {})
+          return res
+        },
+      })
+      if (signal?.aborted) throw abortError()
+      if (response.ok) return
+      if (!RETRYABLE_HTTP_STATUSES.has(response.status)) {
+        throw new Error(`Server readiness check failed (${response.status}).`)
+      }
+    } catch (error) {
+      if (signal?.aborted) throw abortError()
+      if (error?.name !== 'TimeoutError' && !isNetworkFetchError(error)) throw error
+    }
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await sleep(Math.min(resolveRetryDelay(response, 1, retryDelayMs), remaining), signal)
+  }
+  if (signal?.aborted) throw abortError()
+  throw new DOMException('Server startup timed out.', 'TimeoutError')
 }
 
 export const apiFetchWithNetworkRetry = async (

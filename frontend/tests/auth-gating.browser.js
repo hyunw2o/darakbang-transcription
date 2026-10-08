@@ -48,12 +48,12 @@ async function mount(hook, props = defaults, strict = false) {
   return result
 }
 
-function mockFetch(handler) {
+function mockFetch(handler, health = () => json({ status: 'healthy' })) {
   const calls = []
   window.fetch = async (url, options = {}) => {
     const path = String(url).split('?')[0]
     calls.push({ url: path, rawUrl: String(url), options })
-    return path.endsWith('/health') ? json({ status: 'ok' }) : handler(path, options, calls)
+    return path.endsWith('/health') ? health(options) : handler(path, options, calls)
   }
   return calls
 }
@@ -145,6 +145,58 @@ test('network bootstrap failure offers retry without granting access', async () 
   mockFetch(() => json(sessionData()))
   await act(async () => hook.current.retryAuth())
   assert(hook.current.authUser && !hook.current.authRetryAvailable)
+})
+
+test('one password submission waits for cold startup and ignores duplicate clicks', async () => {
+  const ready = deferred()
+  let notice
+  const calls = mockFetch(url => url.endsWith('/bootstrap') ? json({}, 401) : json(sessionData()), () => ready.promise)
+  const hook = await mount(useMallogAuth, { ...defaults, setNotice: value => { notice = value } })
+  await until(() => !hook.current.authInitializing)
+  await act(async () => { hook.current.setAuthEmail('user@example.com'); hook.current.setAuthPassword('password123') })
+  let pending
+  await act(async () => {
+    pending = hook.current.handleAuthSubmit(submitEvent)
+    await hook.current.handleAuthSubmit(submitEvent)
+  })
+  const startedAt = Date.now()
+  Date.now = () => startedAt + 60000
+  assert(hook.current.authLoading && !hook.current.authUser)
+  equal(notice, 'Connecting to the server. Please wait.')
+  equal(calls.filter(call => call.url.endsWith('/health')).length, 1)
+  equal(calls.filter(call => call.url.endsWith('/login')).length, 0)
+  equal(calls.find(call => call.url.endsWith('/health')).options.credentials, 'omit')
+  await act(async () => { ready.resolve(json({ status: 'healthy' })); await pending })
+  assert(hook.current.authUser && !hook.current.authLoading)
+  equal(calls.filter(call => call.url.endsWith('/login')).length, 1)
+})
+
+test('logout during readiness prevents a late password submission', async () => {
+  const ready = deferred()
+  const calls = mockFetch(url => url.endsWith('/bootstrap') ? json({}, 401) : json({}), () => ready.promise)
+  const hook = await mount(useMallogAuth)
+  await until(() => !hook.current.authInitializing)
+  let pending
+  await act(async () => { pending = hook.current.handleAuthSubmit(submitEvent) })
+  await act(async () => hook.current.handleLogout())
+  assert(calls.find(call => call.url.endsWith('/health')).options.signal.aborted)
+  await act(async () => { ready.resolve(json({ status: 'healthy' })); await pending })
+  equal(calls.filter(call => call.url.endsWith('/login')).length, 0)
+  assert(!hook.current.authUser && !hook.current.authLoading)
+})
+
+test('bad passwords are not automatically replayed and a user can try again', async () => {
+  const calls = mockFetch(() => json({ detail: 'Invalid login credentials' }, 401))
+  let error, notice
+  const hook = await mount(useMallogAuth, { ...defaults, setError: value => { error = value }, setNotice: value => { notice = value } })
+  await until(() => !hook.current.authInitializing)
+  await act(async () => hook.current.handleAuthSubmit(submitEvent))
+  equal(calls.filter(call => call.url.endsWith('/login')).length, 1)
+  equal(error, 'Invalid login credentials')
+  equal(notice, null)
+  assert(!hook.current.authUser && !hook.current.authLoading)
+  await act(async () => hook.current.handleAuthSubmit(submitEvent))
+  equal(calls.filter(call => call.url.endsWith('/login')).length, 2)
 })
 
 test('bounded requests time out and preserve caller cancellation', async () => {

@@ -25,10 +25,17 @@ export const getFriendlyAuthError = message => message;
 export const isNetworkFetchError = error => error instanceof TypeError;
 export const isTimeoutErrorMessage = message => /timeout/i.test(message);
 export const requestApi = async (route, options) => {
-  state().requests.push(route);
-  return state().api(route, options);
+  state().requests.push(route.split('?')[0]);
+  state().requestOptions = options;
+  state().lastUrl = route;
+  return state().api(route.split('?')[0], options);
 };
 export const requestApiWithTimeoutRetry = requestApi;
+export const waitForAuthServer = async options => {
+  state().readinessCalls += 1;
+  state().readinessOptions = options;
+  return state().readiness(options);
+};
 export const AppleAuthenticationScope = { FULL_NAME: 0, EMAIL: 1 };
 export const isAvailableAsync = async () => false;
 export const signInAsync = async () => { throw new Error('Unexpected Apple login'); };

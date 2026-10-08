@@ -20,13 +20,18 @@ WebView 셸이 아니라 React Native 화면으로 mallog24 핵심 기능을 직
 ```bash
 EXPO_PUBLIC_API_URL=https://<your-backend>.onrender.com
 EXPO_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
-EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS=120000
+EXPO_PUBLIC_AUTH_REQUEST_TIMEOUT_MS=20000
 EXPO_PUBLIC_LEGAL_DOC_VERSION=v2026.09.11
 ```
 
 기본값은 `https://api.mallog24.com` 입니다.
 법률 문서 버전을 개정할 때는 `EXPO_PUBLIC_LEGAL_DOC_VERSION` 값만 올리면 앱 내 표기가 함께 갱신됩니다.
 소셜 로그인 시작 API가 지연될 때를 대비해 `EXPO_PUBLIC_SUPABASE_URL` 설정을 권장합니다.
+세션 복원 등 일반 인증 요청의 제한 시간은 기본 20초이며 10~30초 범위로 제한됩니다. 대체 API 주소를 포함한 전체 요청에 같은 시간 한도를 적용합니다.
+이메일 로그인과 회원가입은 서버 휴면 복귀를 위해 공개 `/health` 조회만 최대 90초 동안 재시도합니다. 준비된 서버에 인증 요청을 한 번 전송하고 응답 본문까지 최대 45초 기다립니다. 비밀번호 요청은 자동 재전송하지 않습니다.
+이 대기는 로그인 버튼을 누른 경우에만 수행하며, 주기적으로 서버를 깨우지 않습니다. 첫 접속 지연 자체를 없애려면 로그인 API 서비스의 유료 컴퓨트 전환을 별도로 검토해야 합니다. 워크스페이스 요금제와 서비스 컴퓨트 요금제는 별개입니다.
+일시적인 연결 실패 시 저장된 로그인 정보를 삭제하지 않고 재연결 버튼을 표시하지만, 서버 인증 전에는 작업 공간을 열지 않습니다.
+인증 API는 `include_usage=false`로 사용량 조회를 분리합니다. 이 변경은 모바일 앱 재빌드가 필요하며, 서버는 해당 옵션이 없는 이전 앱의 응답 형식을 유지합니다.
 
 ## 설치/실행
 ```bash
@@ -107,5 +112,7 @@ Expo Go가 SDK 54인데 프로젝트가 다르면 실행되지 않습니다.
 3. Google/Kakao 개발자 콘솔에서 Supabase OAuth 리다이렉트 URL과 앱 딥링크 정책이 일치해야 함
 
 ## 주의
+- EAS production 빌드는 원격 버전 번호를 자동 증가시킵니다. `app.json`에 `versionCode`나 `buildNumber`를 별도로 지정하지 않습니다.
+- 루트 `.easignore`는 모바일 소스만 전송하고 학습 음원, 로컬 환경 파일, 인증 파일, 생성된 네이티브 프로젝트를 제외합니다. 공개 API 주소 등의 빌드 설정은 EAS production 환경에서 관리합니다.
 - Expo Go에서는 딥링크가 `exp://...` 형태일 수 있어 Supabase/백엔드 허용 설정이 필요합니다.
 - 스토어 배포(standalone)에서는 `mallog24://auth-callback` 딥링크를 권장합니다.

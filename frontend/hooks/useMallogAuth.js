@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { abortError, apiFetch, safeReadJson, subscribeUnauthorized } from '../utils/network'
+import { abortError, apiFetch, safeReadJson, subscribeUnauthorized, waitForAuthServer } from '../utils/network'
 
 const AUTH_MESSAGES = {
   ko: {
@@ -28,6 +28,8 @@ const AUTH_MESSAGES = {
     oauthRedirectPath: '',
     usageFailed: '사용량을 불러오지 못했습니다.',
     connectionDelayed: '서버 연결이 지연되고 있습니다. 잠시 후 다시 확인해 주세요.',
+    preparingLogin: '서버 연결을 준비하고 있습니다. 잠시만 기다려 주세요.',
+    verifyingLogin: '로그인 정보를 확인하고 있습니다.',
   },
   en: {
     sessionExpired: 'Your session has expired. Please sign in again.',
@@ -55,12 +57,15 @@ const AUTH_MESSAGES = {
     oauthRedirectPath: '/en',
     usageFailed: 'Failed to load monthly usage.',
     connectionDelayed: 'The server is taking longer to respond. Please try again shortly.',
+    preparingLogin: 'Connecting to the server. Please wait.',
+    verifyingLogin: 'Verifying your sign-in details.',
   },
 }
 
 const COOKIE_SESSION_TOKEN = '__cookie_session__'
 const AUTH_TOKEN_EXP_LEEWAY_MS = 30 * 1000
 const AUTH_TIMEOUT_MS = 20000
+const LOGIN_TIMEOUT_MS = 45000
 
 const normalizeExpiryMs = (value) => {
   const numeric = Number(value) || 0
@@ -114,6 +119,7 @@ export default function useMallogAuth({
   callbacks.current = { onResetState, setError, setNotice, messages, authMode }
   const session = useRef({ token: '', user: null, expiresAt: 0 })
   const requestController = useRef(null)
+  const authSubmitBusy = useRef(false)
 
   const beginAuthRequest = useCallback(() => {
     requestController.current?.abort()
@@ -175,6 +181,7 @@ export default function useMallogAuth({
 
   const resetAuthState = useCallback(({ errorMessage = null, noticeMessage = null } = {}) => {
     requestController.current?.abort()
+    authSubmitBusy.current = false
     session.current = { token: '', user: null, expiresAt: 0 }
     setAuthSessionRevision((revision) => revision + 1)
     setAuthToken('')
@@ -394,7 +401,8 @@ export default function useMallogAuth({
 
   const handleAuthSubmit = useCallback(async (event) => {
     event.preventDefault()
-    if (authLoading || socialLoading) return
+    if (authSubmitBusy.current || authLoading || socialLoading) return
+    authSubmitBusy.current = true
     const controller = beginAuthRequest()
     setAuthInitializing(false)
     setAuthRetryAvailable(false)
@@ -459,13 +467,17 @@ export default function useMallogAuth({
       }
 
       const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login'
-      const response = await apiFetch(`${apiUrl}${endpoint}?include_usage=false`, {
+      setNotice(messages.preparingLogin)
+      await waitForAuthServer(apiUrl, { signal: controller.signal })
+      if (controller.signal.aborted) return
+      setNotice(messages.verifyingLogin)
+      const data = await apiFetch(`${apiUrl}${endpoint}?include_usage=false`, {
         method: 'POST',
         body: formData,
         signal: controller.signal,
-        timeoutMs: AUTH_TIMEOUT_MS,
+        timeoutMs: LOGIN_TIMEOUT_MS,
+        readResponse: response => readResponseData(response, messages.authFailed),
       })
-      const data = await readResponseData(response, messages.authFailed)
       if (controller.signal.aborted) return
 
       if (data.session_established) {
@@ -483,8 +495,10 @@ export default function useMallogAuth({
       }
     } catch (error) {
       if (controller.signal.aborted) return
-      setError(error?.message || messages.authError)
+      setNotice(null)
+      setError(error?.name === 'TimeoutError' ? messages.connectionDelayed : error?.message || messages.authError)
     } finally {
+      if (requestController.current === controller) authSubmitBusy.current = false
       if (!controller.signal.aborted) setAuthLoading(false)
     }
   }, [
@@ -503,6 +517,9 @@ export default function useMallogAuth({
     messages.authError,
     messages.authFailed,
     messages.loginDone,
+    messages.preparingLogin,
+    messages.verifyingLogin,
+    messages.connectionDelayed,
     messages.oauthRedirectPath,
     messages.passwordMismatch,
     messages.passwordMin,

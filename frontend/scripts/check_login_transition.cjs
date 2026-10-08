@@ -30,9 +30,10 @@ async function checkDownloadRecovery(browser, files, locale, failure) {
         await download.promise
         await route.abort().catch(() => {})
       } else await route.abort()
-    } else if (url.pathname.startsWith('/api/')) {
+    } else if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
       let data = {}
-      if (url.pathname === '/api/auth/bootstrap') {
+      if (url.pathname === '/health') data = { status: 'healthy' }
+      else if (url.pathname === '/api/auth/bootstrap') {
         await auth.promise
         data = { session_established: true, user: { id: 'recovery-test', email: 'test@example.com' }, session_expires_at: Math.floor(Date.now() / 1000) + 3600 }
       } else if (url.pathname === '/api/glossary') data = { terms: [] }
@@ -95,9 +96,10 @@ async function main() {
           chunks.push({ pathname: url.pathname, startedAt: performance.now() })
           await delay(2500)
           await route.continue()
-        } else if (url.pathname.startsWith('/api/')) {
+        } else if (url.pathname.startsWith('/api/') || url.pathname === '/health') {
           let status = 200, data = {}
-          if (url.pathname === '/api/auth/bootstrap' && mode === 'password') {
+          if (url.pathname === '/health') data = { status: 'healthy' }
+          else if (url.pathname === '/api/auth/bootstrap' && mode === 'password') {
             status = 401
             data = { detail: 'Sign in required' }
           } else if (['/api/auth/bootstrap', '/api/auth/login'].includes(url.pathname)) {
