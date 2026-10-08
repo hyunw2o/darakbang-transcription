@@ -115,6 +115,7 @@ const PROCESSING_STAGE_STEP_INDEX = {
   merging_transcript: 7,
   correcting_text: 8,
   finalizing_text: 8,
+  identifying_speakers: 8,
   saving_result: 9,
   completed: PROCESSING_STEP_KEYS.length,
 };
@@ -132,6 +133,7 @@ const PROCESSING_STAGE_PERCENT = {
   merging_transcript: 80,
   correcting_text: 84,
   finalizing_text: 94,
+  identifying_speakers: 95,
   saving_result: 97,
   completed: 100,
   error: 100,

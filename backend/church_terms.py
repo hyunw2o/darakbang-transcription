@@ -71,6 +71,7 @@ DARAKBANG_CORE = [
     "성회", "전도대회", "수련회", "전도집회", "집회", "세미나", "기도수첩", "포럼방", "포럼 방", "대학부",
 
     # 선교/교육 약어
+    "OURS", "WIOS", "WIO",
     "HMC",  # Harvesters Missions Church
     "HMIS", # Harvesters Missions International School
     "HMVS", # Harvester Mission Vision School
@@ -96,6 +97,32 @@ DARAKBANG_CORE = [
 # ===== 특수 용어 강화 규칙 =====
 # 1차 품질 개선용 중앙 규칙입니다. 새 특수 용어가 생기면 여기부터 추가합니다.
 SPECIAL_TERM_RULES = [
+    {
+        "canonical": "OURS",
+        "meaning": "OURS",
+        "aliases": [
+            "OURS", "O U R S", "Our-S",
+            "아월스", "아워스",
+            "오 유 알 에스", "오 유 아르 에스",
+        ],
+        "case_sensitive_aliases": ["OURS", "O U R S"],
+        "standalone_aliases": True,
+    },
+    {
+        "canonical": "WIOS",
+        "meaning": "WIOS",
+        "aliases": [
+            "WIOS", "W I O S",
+            "더블유 아이 오 에스", "더블유 아이 오 애스",
+        ],
+        "standalone_aliases": True,
+    },
+    {
+        "canonical": "WIO",
+        "meaning": "WIO",
+        "aliases": ["WIO", "W I O", "더블유 아이 오"],
+        "standalone_aliases": True,
+    },
     {
         "canonical": "CVDIP",
         "meaning": "Covenant Vision Dream Image Practice",
@@ -1422,7 +1449,20 @@ def _normalize_special_term_rules(text: str) -> str:
         for alias in rule.get("aliases", []):
             pattern = _special_term_alias_pattern(alias)
             if pattern:
-                corrected = re.sub(pattern, canonical, corrected, flags=re.IGNORECASE)
+                if rule.get("standalone_aliases"):
+                    # Keep adjoining words intact, while allowing Korean particles.
+                    suffix = r"(?:(?:으로|에서|에게|처럼|보다|부터|까지|은|는|이|가|을|를|과|와|의|도|만|로)(?:는|도|만)?|입니다|이다|이고|이며|이라는|이라고|이라면)?"
+                    pattern = rf"(?<!\w)(?:{pattern})(?={suffix}(?!\w))"
+                flags = 0 if alias in rule.get("case_sensitive_aliases", []) else re.IGNORECASE
+                corrected = re.sub(pattern, canonical, corrected, flags=flags)
+
+        if rule.get("standalone_aliases"):
+            # ASR may emit both the pronunciation and its spelling: 아월스(Our-S).
+            corrected = re.sub(
+                rf"(?<!\w){re.escape(canonical)}[ \t]*\([ \t]*{re.escape(canonical)}[ \t]*\)",
+                canonical,
+                corrected,
+            )
 
         for alias in rule.get("full_name_aliases", []):
             pattern = _special_term_alias_pattern(alias)
@@ -1507,6 +1547,8 @@ def get_special_term_prompt_hint(language: str = "ko") -> str:
         f"- 한국어 의미 기준 다국어 매핑: {multilingual_pairs}.\n"
         "- 이 매핑은 STT 오인식 보정에만 사용하고, 원문에 없는 번역어를 임의로 추가하지 말라.\n"
         f"- 문맥 보정: {note}.\n"
+        "- 고유명사 OURS(아월스/아워스/Our-S), WIOS(더블유 아이 오 에스), WIO(더블유 아이 오)는 각각 영문 대문자로만 표기하라. 발음이나 괄호 속 별칭을 덧붙이지 마라.\n"
+        "- WIOS와 WIO는 서로 다른 표기다. 마지막 S 발화를 구분하고 임의로 추가·삭제하지 마라. 풀네임을 추정하거나 일반 영어 대명사 ours를 고유명사 OURS로 바꾸지 마라.\n"
         "- 약어를 풀어 쓰거나 다른 비슷한 약어로 바꾸지 말고, 도메인 문맥에서는 위 표기를 우선하라."
     )
 
@@ -1652,7 +1694,13 @@ def get_gemini_content_prompt(custom_terms: list[str] = None):
 5. '드로에게 교회/드로우게 교회'처럼 '교회'가 붙을 때만 '드로아교회'로 교정하고, '베드로에게는' 같은 조사 표현은 유지하라.
 6. 매우 빠른 단독 발화(대략 120BPM 이상, 랩처럼 빠른 말)도 음절 단위로 끊어 문맥을 복원하고 누락 없이 기록하라.
 7. 통역이 없는 단독 화자 구간은 문장을 짧게 끊어 요약하지 말고, 원문 흐름대로 연결해 기록하라.
-8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko")
+8. 문장 중간에서 임의 줄바꿈하지 마라. 줄바꿈은 문단 경계, 화자 전환, 섹션/목록 구분에서만 사용하라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + "\n" + KOREAN_ENDING_PRESERVATION_HINT
+
+
+KOREAN_ENDING_PRESERVATION_HINT = (
+    "종결어미는 실제 발화대로 구분하세요. '기도하시라'를 '기도하십시오'로, '하십시오'를 '하시라'로 일괄 치환하지 마세요. "
+    "'하시리라'·'하시라고'·'하소서'도 보존하고, 불확실하면 원문을 유지하세요."
+)
 
 def get_korean_phonological_recovery_prompt() -> str:
     """한국어 음운 변이를 표준 표기로 복원하되 고유명사 과교정을 막는 공통 지침."""
@@ -1663,7 +1711,7 @@ def get_korean_phonological_recovery_prompt() -> str:
 - 예: 성교사→선교사, 장노님→장로님, 성녕→성령, 능녁→능력, 협녁→협력, 동닙→독립, 범뉼→법률, 어냐글→언약을, 보그믈→복음을, 말쓰믈→말씀을, 력사→역사, 리유→이유, 령혼→영혼.
 - 문맥상 자연스러운 표준어가 분명하면 비표준 조합이나 의미 없는 낯선 단어를 새로 만들지 마라. 확신이 낮으면 고유명사나 다른 전문용어를 추정하지 말고 원문 표기를 보존하라.
 - 모든 ㄹ·ㄴ·ㅇ을 일괄 치환하지 마라. 리더, 류광수, 노회, 원노트 같은 정상 외래어·고유명사·표기는 그대로 유지하라.
-"""
+""" + KOREAN_ENDING_PRESERVATION_HINT
 
 
 def get_gemini_correction_prompt(custom_terms: list[str] = None):
@@ -2015,21 +2063,14 @@ def get_conversation_correction_prompt(custom_terms: list[str] = None):
 - 인문/교육: 철학, 윤리, 역사해석, 문해력, 교육과정, 평가 루브릭
 - 교회/사역: Blessing, 블레싱, 교역자, 부교역자, 대학부
 
-[화자 분리 - 반드시 적용]
-- 회의 참석자를 구분하여 각 발언 앞에 화자 레이블을 붙여라.
-- 화자를 "참석자 1:", "참석자 2:", "참석자 3:" 등으로 표시하라.
-- 화자 구분 기준 (복합적으로 판단하라):
-  1) 역할/직급 차이: 회의 주재자, 보고자, 의사결정자, 실무자
-  2) 호칭 사용: "팀장님", "과장님", "대리님" 등 호칭으로 역할 파악
-  3) 발언 패턴: 진행하는 사람, 보고하는 사람, 질문하는 사람, 의견 제시하는 사람
-  4) 전문 분야: 기술적 발언, 마케팅 발언, 재무 발언 등 전문 영역으로 구분
-  5) 대화 맥락: "제가 말씀드린 것처럼", "아까 김과장님이" 등 자기/타인 언급
-- 이름이나 직함이 언급되면 레이블에 반영하라. (예: "참석자 1(김팀장):")
-- 화자가 바뀔 때마다 빈 줄을 넣고 새 화자 레이블을 시작하라.
-- 같은 화자의 연속 발언은 하나의 블록으로 묶어라.
-- 회의 본문(요약 전 구간)의 모든 문장은 반드시 참석자 레이블로 시작해야 한다.
-- 화자가 애매한 문장도 문맥상 가장 가능성 높은 참석자에게 임시 배정하라. 레이블 없는 줄을 남기지 마라.
-- 질문/답변, 보고/피드백 흐름을 기준으로 발언 턴을 유지하라.
+[화자 보존 - 반드시 적용]
+- 이 단계에는 원본 음성이 없으므로 텍스트만 보고 목소리나 참석자 수를 추측하지 마라.
+- 원문에 있는 화자 레이블과 발언 순서를 보존하라. 레이블이 없으면 본문을 그대로 유지하라.
+- 역할, 직급, 전문 분야, 질문과 답변이라는 이유로 참석자 번호를 번갈아 붙이지 마라.
+- 화자 구분은 후속 원본 음성 분석에서 수행한다. 불확실한 화자는 "참석자 ?(확인 필요):"로만 표시하라.
+- 다른 사람의 이름을 언급한 것만으로 그 이름을 발언자에게 붙이지 마라.
+- 자기소개와 신원 확인 문답은 문구를 그대로 보존하고, 이름의 성이나 직함을 보충하지 마라.
+- 짧은 응답과 겹친 발언도 삭제하거나 임의로 다른 화자의 문장에 합치지 마라.
 
 [텍스트 교정]
 - 음성인식 오류를 문맥에 맞게 교정하라.
@@ -2079,14 +2120,14 @@ def get_conversation_correction_prompt(custom_terms: list[str] = None):
 1. 담당: OOO - 내용 (기한)
 2. 담당: OOO - 내용 (기한)
 
-[출력 예시]
-참석자 1(김팀장): 오늘 회의는 다음 분기 마케팅 전략에 대해 논의하겠습니다. 먼저 지난 분기 실적부터 보겠습니다.
+[출력 예시 - 원문에 화자 레이블이 없는 경우]
+오늘 회의는 다음 분기 마케팅 전략에 대해 논의하겠습니다. 먼저 지난 분기 실적부터 보겠습니다.
 
-참석자 2(이대리): 지난 분기 매출은 전년 대비 15% 증가했습니다. 특히 온라인 채널에서 성과가 좋았습니다.
+지난 분기 매출은 전년 대비 15% 증가했습니다. 특히 온라인 채널에서 성과가 좋았습니다.
 
-참석자 3(박과장): 온라인 쪽은 좋았는데 오프라인 매장 실적은 5% 감소했습니다. 원인 분석이 필요합니다.
+온라인 쪽은 좋았는데 오프라인 매장 실적은 5% 감소했습니다. 원인 분석이 필요합니다.
 
-참석자 1(김팀장): 좋습니다. 오프라인 매장 분석은 박과장이 다음 주까지 보고서로 정리해 주세요.
+좋습니다. 오프라인 매장 분석은 다음 주까지 보고서로 정리해 주세요.
 
 
 요약
@@ -2097,12 +2138,10 @@ def get_conversation_correction_prompt(custom_terms: list[str] = None):
 2. 다음 분기 전략 - 온라인 강화 + 오프라인 개선 병행
 
 결정 사항
-1. 온라인 마케팅 예산 20% 증액
-2. 오프라인 매장 리뉴얼 검토
+1. 오프라인 매장 실적 감소 원인 분석
 
 후속 조치
-1. 담당: 이대리 - 온라인 마케팅 세부 계획 수립 (2주 내)
-2. 담당: 박과장 - 오프라인 매장 분석 보고서 작성 (1주 내)
+1. 담당: 확인 필요 - 오프라인 매장 분석 보고서 작성 (다음 주까지)
 
 위 형식대로 [원본 텍스트]를 교정하여 출력하라. 내용은 절대 줄이지 마라.""" + get_special_term_prompt_hint("ko") + _build_name_correction_instruction(custom_terms, "ko") + get_korean_phonological_recovery_prompt()
 
@@ -2311,19 +2350,13 @@ Correct and structure this text following the rules below.
   Prayer Journal, Blessing, Immanuel, presbytery, sermon note, prayer topic, fellowship
 - Medical data standards: CDE (Common Data Elements), CRF, eCRF, CDISC
 
-[Speaker Separation - Must Apply]
-- Label meeting participants: "Participant 1:", "Participant 2:", "Participant 3:", etc.
-- Criteria for speaker identification:
-  1) Role/seniority: meeting chair, presenter, decision-maker, contributor
-  2) Title usage: "Manager", "Director", identifying roles
-  3) Speaking patterns: facilitator, reporter, questioner, opinion-giver
-  4) Expertise: technical, marketing, financial domains
-  5) Self/other references: "As I mentioned", "Like John said"
-- If names/titles are identified, reflect in labels (e.g., "Participant 1 (Sarah, PM):")
-- Add blank lines between speaker changes.
-- Every sentence in the meeting body (before summary) must start with a participant label.
-- If speaker identity is uncertain, assign the most likely participant from context. Do not leave unlabeled lines.
-- Preserve turn-taking using question→answer and report→feedback patterns.
+[Speaker Preservation - Must Apply]
+- This text-only step cannot hear voices. Preserve existing labels and turn order; leave unlabeled text unlabeled.
+- Never infer or alternate participants from roles, expertise, topics, or question/answer patterns.
+- A later original-audio analysis assigns voices. Use "Participant ?(needs review):" only when a label is needed but uncertain.
+- Mentioning or addressing someone does not identify the current speaker.
+- Preserve self-introductions and identity-confirmation exchanges verbatim. Never expand names or titles.
+- Keep short responses and overlapping utterances without assigning them to a guessed speaker.
 
 [Text Correction]
 - Fix STT errors based on context.
@@ -2478,12 +2511,10 @@ def get_ja_conversation_correction_prompt(custom_terms: list[str] = None):
 - フォーラムや討論に近い場合も、発言の切れ目を保って整形してください。
 
 [話者分離]
-- 発話は次の形式でラベルを付けてください:
-  参加者1:
-  参加者2:
-  参加者3:
-- 話者が切り替わるたびに空行を入れてください。
-- 話者の役割や流れから最も自然な参加者に割り当ててください。
+- この段階では音声を聞けません。既存の話者ラベルと発言順を保持してください。
+- ラベルがない本文に、役割・話題・質問と回答の流れから参加者番号を推測して付けないでください。
+- 後続の音声分析で話者を判別します。不明な話者は「参加者 ?(要確認):」としてください。
+- 他人の名前への言及だけでは発言者の名前は確定しません。自己紹介と本人確認の応答をそのまま残してください。
 
 [本文補正]
 - 句読点、語境界、数値、固有名詞を自然な日本語に整えてください。
@@ -3094,13 +3125,14 @@ def _normalize_korean_phonological_variants(text: str) -> str:
 
 
 def _normalize_korean_colloquial_demonstratives(text: str) -> str:
-    """안전한 지시대명사 구어체를 문어체로 정리한다."""
+    """안전한 지시대명사와 접속 표현을 문어체로 정리한다."""
     import re
 
     if not text:
         return text
 
     replacements = [
+        (r"(?<!\w)그럼(?!\w)", "그러면"),
         (r"(?<![가-힣])이\s*거\s*(?:를|을)(?![가-힣])", "이것을"),
         (r"(?<![가-힣])이\s*걸(?![가-힣])", "이것을"),
         (r"(?<![가-힣])이\s*게(?![가-힣])", "이것이"),
@@ -3540,13 +3572,18 @@ def get_correction_prompt_by_type(transcription_type: str = "sermon", language: 
             return get_ja_sermon_correction_prompt(custom_terms)
     else:
         if transcription_type == "prayer":
-            return get_prayer_correction_prompt(custom_terms)
+            prompt = get_prayer_correction_prompt(custom_terms)
         elif transcription_type == "phonecall":
-            return get_phonecall_correction_prompt(custom_terms)
+            prompt = get_phonecall_correction_prompt(custom_terms)
         elif transcription_type == "conversation":
-            return get_conversation_correction_prompt(custom_terms)
+            prompt = get_conversation_correction_prompt(custom_terms)
         else:
-            return get_gemini_correction_prompt(custom_terms)
+            prompt = get_gemini_correction_prompt(custom_terms)
+        return prompt + (
+            "\n\n[문어체 정리]\n"
+            "- 문장을 잇는 독립된 '그럼'은 '그러면'으로 정리하라. '그럼요', '그럼에도', '그럼으로써' 같은 다른 표현은 일괄 치환하지 마라.\n"
+            "- 문어체로 정리한다는 이유로 명령·권유·간구·인용의 종결어미나 높임을 바꾸지 마라."
+        )
 
 
 def correct_text(

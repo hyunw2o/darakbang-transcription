@@ -46,6 +46,46 @@ python scripts/check_login_required.py --self-test
 
 ## API 키 / DB
 
+### Meeting speaker attribution
+
+For `transcription_type=conversation` with correction enabled (not `raw` mode),
+the final step sends the original recording to Gemini and asks for speaker
+assignments over indexed transcript words. It does not regenerate the transcript.
+Contiguous, complete word coverage is required; gaps, overlaps and truncated
+responses are rejected. IDs are scoped to one recording, not to a person's voice
+across recordings.
+
+Names are accepted only with an explicit self-introduction or an identity
+question followed by confirmation, also present in the raw transcript. Mentioning
+or calling on someone is not sufficient. Unknown turns are marked
+`참석자 ?(확인 필요)` / `Participant ?(needs review)` rather than alternating
+invented participants. No glossary-based full-name expansion is used in this step.
+
+- `MEETING_DIARIZATION_ENABLED=true` (default): enable the audio analysis.
+- `MEETING_DIARIZATION_MODEL=gemini-2.5-flash`: configurable audio-capable model.
+- `MEETING_DIARIZATION_TIMEOUT_SECONDS=180`: request budget (30–600 seconds),
+  excluding a best-effort 10-second remote-file cleanup. HTTP timeouts limit each
+  I/O operation; they are not a strict end-to-end wall-clock guarantee.
+- `MEETING_DIARIZATION_MAX_AUDIO_SECONDS=7200`: default two-hour audio limit.
+  Text is also limited to 120,000 characters and 24,000 whitespace-delimited words.
+
+This adds one billable audio-analysis request and processing time per eligible
+meeting. Tokens are included in administrator-only usage under
+`meeting_diarization`. Uploaded analysis files are deleted after the request;
+failed cleanup relies on Gemini Files' automatic expiration. On missing keys,
+limits, disabled analysis, API errors or invalid coverage, the transcript remains
+available with unverified labels. This validates text coverage, not 100% acoustic
+speaker accuracy. Overlapping/similar voices still require human review.
+
+Web and mobile consume the same labeled `corrected_text`. Deploy the backend
+**and worker** for attribution; deploy web/rebuild mobile for the new
+`identifying_speakers` progress message. Before production rollout, validate a
+consented recording with several voices and self-introductions. Offline checks:
+
+```bash
+python scripts/check_meeting_speakers.py
+```
+
 ### Gemini API 키
 1. https://aistudio.google.com/app/apikey
 2. `GEMINI_API_KEY` 발급 후 `.env`에 입력

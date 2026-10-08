@@ -37,6 +37,13 @@ from transcription_chunking import (
     find_coverage_gaps,
     trim_fuzzy_overlap,
 )
+from meeting_speakers import (
+    render_assignment,
+    request_assignment,
+    strip_speaker_labels,
+    transcript_words,
+    unverified_transcript,
+)
 
 try:
     import stripe
@@ -60,6 +67,7 @@ from church_terms import (
     get_summary_prompt,
     ALL_CHURCH_TERMS,
     DARAKBANG_CORE,
+    KOREAN_ENDING_PRESERVATION_HINT,
     REFERENCE_PERSON_NAMES,
     COMMON_MISTAKES,
     print_terms_summary
@@ -532,6 +540,10 @@ GEMINI_CORRECTION_CHUNK_CONCURRENCY = max(1, int(os.getenv("GEMINI_CORRECTION_CH
 GEMINI_CORRECTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_CORRECTION_MAX_RETRIES", "2")))
 GEMINI_CORRECTION_SKIP_OVER_CHARS = max(0, int(os.getenv("GEMINI_CORRECTION_SKIP_OVER_CHARS", "0")))
 GEMINI_TRANSCRIPTION_MAX_RETRIES = max(1, int(os.getenv("GEMINI_TRANSCRIPTION_MAX_RETRIES", "3")))
+MEETING_DIARIZATION_ENABLED = os.getenv("MEETING_DIARIZATION_ENABLED", "true").strip().lower() == "true"
+MEETING_DIARIZATION_MODEL = os.getenv("MEETING_DIARIZATION_MODEL", "gemini-2.5-flash").strip()
+MEETING_DIARIZATION_TIMEOUT_SECONDS = max(30, min(600, int(os.getenv("MEETING_DIARIZATION_TIMEOUT_SECONDS", "180"))))
+MEETING_DIARIZATION_MAX_AUDIO_SECONDS = max(60, int(os.getenv("MEETING_DIARIZATION_MAX_AUDIO_SECONDS", "7200")))
 
 # OpenAI (Whisper) 설정
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -822,6 +834,7 @@ TRANSCRIPTION_PROGRESS_BASE_PERCENT = {
     "merging_transcript": 80,
     "correcting_text": 84,
     "finalizing_text": 94,
+    "identifying_speakers": 95,
     "saving_result": 97,
     "completed": 100,
     "error": 100,
@@ -4554,6 +4567,14 @@ def _build_gemini_only_system_instruction(
     custom_terms: list[str] | None = None,
 ) -> str:
     if language == "ko":
+        if transcription_type == "conversation":
+            return (
+                "당신은 한국어 회의 녹음의 전문 전사자입니다. 원본 음성의 모든 발언을 순서대로 받아쓰세요. "
+                "자기소개, 이름, 짧은 응답을 그대로 보존하고 성이나 직함을 추측하지 마세요. "
+                "설교 형식이나 요약을 추가하지 말고 본문만 출력하세요. "
+                f"{KOREAN_ENDING_PRESERVATION_HINT}\n"
+                f"{get_special_term_prompt_hint(language)}\n\n{_gemini_audio_continuity_guard(language)}"
+            )
         if transcription_type == "prayer":
             return (
                 f"{get_correction_prompt_by_type('prayer', language, custom_terms)}\n\n"
@@ -4624,6 +4645,13 @@ def _build_gemini_only_content_prompt(
     custom_terms: list[str] | None = None,
 ) -> str:
     if language == "ko":
+        if transcription_type == "conversation":
+            terms = ", ".join(_merge_custom_terms(custom_terms))
+            return (
+                "이 회의 음성을 처음부터 끝까지 생략 없이 받아쓰세요. 발언 순서와 자기소개를 보존하고, "
+                "이름을 언급했다는 이유만으로 그 사람의 발언이라고 단정하지 마세요. "
+                f"용어 참고(발언자 신원 근거로 사용 금지): {terms}\n\n{_gemini_audio_continuity_guard(language)}"
+            )
         if transcription_type == "prayer":
             return (
                 "이 기도 음성을 한국어 기도문으로 처음부터 끝까지 받아쓰세요. "
@@ -4677,7 +4705,7 @@ def _split_transcript_body_and_tail(text: str) -> tuple[list[str], list[str]]:
 
 def _parse_speaker_line(line: str) -> dict | None:
     match = re.match(
-        r"^(화자|참석자|speaker|participant)\s*([A-Za-z0-9]+)(?:\s*\(([^)]*)\))?\s*[:：]\s*(.*)$",
+        r"^(화자|참석자|speaker|participant|話者|参加者)\s*([A-Za-z0-9?]+)(?:\s*\(([^)]*)\))?\s*[:：]\s*(.*)$",
         line.strip(),
         flags=re.IGNORECASE,
     )
@@ -4706,9 +4734,9 @@ def _count_detected_speakers(text: str) -> int:
             continue
         speaker_id = str(parsed.get("speaker_id") or "").strip().upper()
         speaker_alias = str(parsed.get("speaker_alias") or "").strip().lower()
-        if speaker_id:
+        if speaker_id and speaker_id != "?":
             speaker_keys.add(f"id:{speaker_id}")
-        elif speaker_alias:
+        elif not speaker_id and speaker_alias:
             speaker_keys.add(f"alias:{speaker_alias}")
     return len(speaker_keys)
 
@@ -4729,6 +4757,12 @@ def _infer_content_style(
         return "phonecall"
     if normalized_type == "prayer":
         return "prayer"
+    if normalized_type == "conversation" and any(
+        (parsed := _parse_speaker_line(line)) and parsed["speaker_id"] == "?"
+        for line in normalized_text.splitlines()
+    ):
+        # An unverified voice count is not evidence of a single-speaker lecture.
+        return "meeting"
 
     if speaker_count <= 1:
         if _contains_context_hint(lower_text, SERMON_CONTEXT_HINTS):
@@ -4764,7 +4798,7 @@ def _default_speaker_label(transcription_type: str, language: str, turn_index: i
         return f"{token} {'A' if turn_index % 2 == 0 else 'B'}"
 
     token = _conversation_token(language)
-    return f"{token} {1 if turn_index % 2 == 0 else 2}"
+    return f"{token} ?"
 
 
 def _flip_phonecall_label(label: str, language: str) -> str:
@@ -4820,6 +4854,8 @@ def _normalize_speaker_label(
         return base
 
     token = "Participant" if language == "en" else "参加者" if language == "ja" else "참석자"
+    if speaker_id == "?":
+        return f"{token} ?"
     if speaker_id.isdigit():
         number = max(1, int(speaker_id))
     else:
@@ -6644,6 +6680,9 @@ def _build_compact_whisper_prompt(
         else "한국어 회의 또는 대화 녹음입니다."
     )
     terms = [
+        "OURS",
+        "WIOS",
+        "WIO",
         *custom_terms,
         *REFERENCE_PERSON_NAMES,
         "렘넌트",
@@ -6733,7 +6772,8 @@ def _build_compact_whisper_prompt(
         "예: 성교사→선교사, 장노님→장로님, 성녕→성령, 능녁→능력, 동닙→독립, 어냐글→언약을, 보그믈→복음을, 력사→역사, 리유→이유. "
         "조사·어미·부정 표현은 약하게 들려도 삭제하지 마세요. 다만 리더·류광수 같은 외래어·고유명사는 바꾸지 말고, "
         "문맥상 자연스러운 표준어가 분명한데 의미 없는 낯선 단어를 새로 만들지 마세요. 문맥 확신이 낮은 소리를 사전 단어에 억지로 맞추거나 이상한 고유명사로 만들지 마세요. "
-        "부분 인명이나 애매한 호칭에 성/직함을 추정해 붙이지 마세요."
+        "부분 인명이나 애매한 호칭에 성/직함을 추정해 붙이지 마세요. "
+        f"{KOREAN_ENDING_PRESERVATION_HINT}"
     )
     return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "핵심 용어")
 
@@ -7663,6 +7703,45 @@ def _postprocess_transcript(
     return _normalize_transcript_line_breaks(corrected)
 
 
+def _apply_meeting_speakers(
+    *, task_id: str, file_path: str, source_mime_type: str, text: str,
+    raw_text: str, language: str, audio_seconds: int, progress_callback,
+) -> tuple[str, bool]:
+    body_lines, tail_lines = _split_transcript_body_and_tail(text)
+    body = strip_speaker_labels("\n".join(body_lines))
+    if not body:
+        return text, False
+    labeled = unverified_transcript(body, language)
+    applied = False
+    eligible = (
+        MEETING_DIARIZATION_ENABLED and GEMINI_API_KEY and file_path and os.path.isfile(file_path)
+        and 0 < audio_seconds <= MEETING_DIARIZATION_MAX_AUDIO_SECONDS
+        and len(body) <= 120000 and len(transcript_words(body)) <= 24000
+    )
+    if eligible:
+        progress_callback("identifying_speakers")
+        try:
+            data = request_assignment(
+                file_path=file_path, mime_type=source_mime_type or _resolve_audio_mime_type(file_path),
+                body=body, language=language, api_key=GEMINI_API_KEY,
+                model=MEETING_DIARIZATION_MODEL, timeout=MEETING_DIARIZATION_TIMEOUT_SECONDS,
+                record_usage=lambda response: _record_gemini_api_usage(
+                    task_id, response, model=MEETING_DIARIZATION_MODEL, operation="meeting_diarization",
+                ),
+                heartbeat=lambda: _touch_task_runtime_state(task_id),
+            )
+            source_lines, _ = _split_transcript_body_and_tail(raw_text)
+            labeled = render_assignment(body, data, language, strip_speaker_labels("\n".join(source_lines)))
+            applied = True
+        except Exception as error:
+            # Keep speech even if audio analysis, quota, or coverage validation fails.
+            print(f"[{task_id}] Meeting speaker analysis unavailable ({type(error).__name__}); keeping unverified turns.")
+    else:
+        print(f"[{task_id}] Meeting speaker analysis skipped; keeping unverified turns.")
+    tail = "\n".join(tail_lines).strip()
+    return f"{labeled}\n\n{tail}".strip() if tail else labeled, applied
+
+
 def _should_skip_gemini_correction(raw_text: str, correct: bool) -> tuple[bool, str]:
     if not correct:
         return True, "correction disabled by request"
@@ -7884,10 +7963,8 @@ def _process_transcription_sync(
                         "(raw transcript retained separately)."
                     )
 
-                # 임시 파일 삭제
-                if os.path.exists(temp_file_path):
-                    os.unlink(temp_file_path)
-                    temp_file_path = ""
+                # Keep the original audio for meeting speaker analysis and any audio fallback.
+                # The pipeline's finally block removes it on both success and failure.
 
                 # 2단계: Gemini로 교정 + 구조화
                 skip_gemini_correction, skip_reason = _should_skip_gemini_correction(
@@ -8032,6 +8109,15 @@ def _process_transcription_sync(
                 f"(source={len(fidelity_source_text)}, corrected={len(corrected_text)} chars)."
             )
         corrected_text = _normalize_transcript_line_breaks(corrected_text)
+
+        if transcription_type == "conversation" and correct and correction_mode != "raw":
+            corrected_text, speakers_applied = _apply_meeting_speakers(
+                task_id=task_id, file_path=temp_file_path, source_mime_type=source_mime_type,
+                text=corrected_text, raw_text=raw_text, language=language,
+                audio_seconds=audio_seconds, progress_callback=report_pipeline_progress,
+            )
+            if speakers_applied:
+                engine = f"{engine}+audio-speakers"
 
         # 결과 저장
         report_pipeline_progress("saving_result")

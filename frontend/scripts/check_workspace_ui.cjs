@@ -20,7 +20,7 @@ function wav() {
 
 async function fixture(browser, { signedIn = false, width = 1440, height = 1000, bootstrapDelay = 0, bootstrapStatus = 0 } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, permissions: ['microphone'] })
-  const state = { signedIn, requests: [], expireGlossary: false, errors: [], bootstrapStatus }
+  const state = { signedIn, requests: [], expireGlossary: false, errors: [], bootstrapStatus, transcription: completed }
   const page = await context.newPage()
   page.on('pageerror', error => state.errors.push(error.message))
   const session = () => ({ session_established: true, user, usage, session_expires_at: Math.floor(Date.now() / 1000) + 3600 })
@@ -47,7 +47,7 @@ async function fixture(browser, { signedIn = false, width = 1440, height = 1000,
       } else if (url.pathname === '/api/usage') data = usage
       else if (url.pathname === '/api/history') data = [{ task_id: completed.task_id, status: 'completed', created_at: new Date().toISOString(), transcription_type: 'prayer', summary_preview: '저장된 테스트 기록' }]
       else if (url.pathname === '/api/records') data = []
-      else if (url.pathname === '/api/transcribe' || url.pathname.startsWith('/api/status/')) data = completed
+      else if (url.pathname === '/api/transcribe' || url.pathname.startsWith('/api/status/')) data = state.transcription
       await route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': base, 'access-control-allow-credentials': 'true', 'access-control-allow-headers': '*' }, body: JSON.stringify(data) })
     } else if (url.origin === base) await route.continue()
     else await route.abort()
@@ -58,7 +58,7 @@ async function fixture(browser, { signedIn = false, width = 1440, height = 1000,
 async function layout(page, name) {
   await page.evaluate(() => document.fonts.ready)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: viewport overflow`)
-  const overflow = await page.locator('.mallog-auth, .mallog-workspace, .mallog-workspace nav button, .mallog-account, .mallog-conversion-options, .mallog-primary-action, .mallog-social-buttons button').evaluateAll(nodes => nodes.filter(n => n.getClientRects().length && n.scrollWidth > n.clientWidth + 2).map(n => n.className))
+  const overflow = await page.locator('.mallog-auth, .mallog-workspace, .mallog-workspace nav button, .mallog-account, .mallog-conversion-options, .mallog-primary-action, .mallog-social-buttons button, .mallog-speaker-label').evaluateAll(nodes => nodes.filter(n => n.getClientRects().length && n.scrollWidth > n.clientWidth + 2).map(n => n.className))
   assert.deepEqual(overflow, [], `${name}: overflowing controls`)
   const clippedSelections = await page.locator('select:visible').evaluateAll(selects => selects.filter(select => {
     const style = getComputedStyle(select)
@@ -171,6 +171,25 @@ async function main() {
       await f.context.close()
     }
 
+    for (const [locale, width] of [['ko', 320], ['ko', 1440], ['en', 390], ['en', 1440]]) {
+      const meeting = await fixture(browser, { signedIn: true, width })
+      const en = locale === 'en'
+      meeting.state.transcription = { ...completed, status: 'processing', raw_text: '', corrected_text: '', transcription_type: 'conversation',
+        progress: { stage: 'identifying_speakers', percent: 95 } }
+      await meeting.page.goto(`${base}${en ? '/en' : '/'}`)
+      await meeting.page.locator('input[type=file]').setInputFiles({ name: 'meeting.wav', mimeType: 'audio/wav', buffer: wav() })
+      await meeting.page.getByRole('button', { name: en ? 'Start transcription' : '변환 시작', exact: true }).click()
+      await meeting.page.getByText(en ? 'Matching meeting voices to utterances and checking spoken names.' : '회의 녹음의 목소리를 발언과 연결하고, 직접 소개된 이름을 확인하고 있습니다.', { exact: true }).waitFor()
+      await layout(meeting.page, `meeting-progress-${locale}-${width}`)
+      const labels = en ? ['Participant 1(Alex)', 'Participant 2(Morgan)', `Participant 3(${'Longname'.repeat(7)})`, 'Participant ?(needs review)']
+        : ['참석자 1(김준서)', '참석자 2(이세라)', '참석자 3', '참석자 ?(확인 필요)']
+      meeting.state.transcription = { ...completed, transcription_type: 'conversation', corrected_text: labels.map((label, i) => `${label}: ${en ? `Meeting utterance ${i + 1}.` : `회의 발언 ${i + 1}입니다.`}`).join('\n\n') }
+      for (const label of labels) await meeting.page.getByText(label, { exact: true }).waitFor()
+      await layout(meeting.page, `meeting-result-${locale}-${width}`)
+      assert.deepEqual(meeting.state.errors, [])
+      await meeting.context.close()
+    }
+
     const recovery = await fixture(browser)
     const jwt = `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.signature`
     await recovery.page.goto(`${base}/recover#access_token=${jwt}&type=recovery`)
@@ -195,7 +214,7 @@ async function main() {
       assert.deepEqual(dark.state.errors, [])
       await dark.context.close()
     }
-    console.log(`PASS: anonymous gate, signup, login, upload, history, 401, logout, recovery, public privacy, KO/EN desktop/mobile layouts. Screenshots: ${output}`)
+    console.log(`PASS: anonymous gate, signup, login, upload, history, 401, logout, recovery, public privacy, meeting speakers/progress, KO/EN desktop/mobile layouts. Screenshots: ${output}`)
   } finally { await browser.close() }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

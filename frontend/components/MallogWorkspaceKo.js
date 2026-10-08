@@ -386,11 +386,11 @@ export default function MallogWorkspaceKo(props) {
                               </div>
                             )
                           }
-                          const speakerMatch = trimmed.match(/^(화자\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|참석자\s*\d+(?:\s*\([^)]*\))?|Speaker\s*(?:[A-Z]|\d+)(?:\s*\([^)]*\))?|Participant\s*\d+(?:\s*\([^)]*\))?)\s*[:：]/)
+                          const speakerMatch = trimmed.match(/^((?:화자|참석자|Speaker|Participant|話者|参加者)\s*(?:[A-Z]|\d+|\?)(?:\s*\([^)]*\))?)\s*[:：]/)
                           if (speakerMatch) {
                             return (
                               <p key={i} className="mb-1.5">
-                                <span className="inline-block px-2 py-0.5 mr-1.5 text-[11px] font-semibold rounded-md nm-flat text-nm-accent">
+                                <span className="mallog-speaker-label inline-block max-w-full break-words px-2 py-0.5 mr-1.5 text-[11px] font-semibold rounded-md nm-flat text-nm-accent">
                                   {speakerMatch[1]}
                                 </span>
                                 {trimmed.slice(speakerMatch[0].length).trim()}
