@@ -72,6 +72,18 @@ class PrivacyTests(unittest.TestCase):
         self.assertEqual(model_candidates("whisper-1", ["gpt-4o-transcribe"], date(2027, 2, 26)), ["gpt-transcribe"])
         self.assertEqual(model_candidates("gpt-transcribe", ["whisper-1"], date(2027, 2, 25)), ["gpt-transcribe", "whisper-1"])
 
+    def test_migration_keeps_canonical_glossary_and_existing_domain_hints(self):
+        for language in ("ko", "en", "ja"):
+            terms = api._build_compact_whisper_prompt(language, "sermon", ["SpecialName (meaning; misheard as wrong-name)"], keywords_only=True)
+            args = transcription_arguments("gpt-transcribe", language, "", terms, "sermon", 30)
+            keywords = args["extra_body"]["keywords"]
+            self.assertIn("SpecialName", keywords)
+            self.assertIn("RVS", keywords)
+            self.assertFalse(any("wrong-name" in term for term in keywords))
+            if language == "ko":
+                for term in ("OURS", "WIOS", "WIO", "렘넌트", "선교사", "장로"):
+                    self.assertIn(term, keywords)
+
     def test_legacy_request_rollback_before_shutdown(self):
         args = transcription_arguments("whisper-1", "ko", "context", [], "sermon", 30)
         self.assertEqual(args["response_format"], "text")

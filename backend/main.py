@@ -6550,7 +6550,9 @@ def _build_compact_whisper_prompt(
     language: str,
     transcription_type: str,
     custom_terms: list[str] | None = None,
-) -> str:
+    *,
+    keywords_only: bool = False,
+) -> str | list[str]:
     custom_terms = _normalize_whisper_prompt_terms(custom_terms)
     if language == "en":
         prefix = (
@@ -6597,6 +6599,8 @@ def _build_compact_whisper_prompt(
             "Preserve domain terms exactly. Recover slurred or merged pronunciation from context, "
             "but do not invent unrelated names."
         )
+        if keywords_only:
+            return _dedupe_prompt_terms(terms)
         return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "Key terms")
 
     if language == "ja":
@@ -6634,6 +6638,8 @@ def _build_compact_whisper_prompt(
             "CVDIP",
         ]
         suffix = "専門用語を正確に保ち、不明瞭な発音は文脈で自然な語へ復元してください。"
+        if keywords_only:
+            return _dedupe_prompt_terms(terms)
         return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "重要語")
 
     prefix = (
@@ -6741,6 +6747,8 @@ def _build_compact_whisper_prompt(
         "부분 인명이나 애매한 호칭에 성/직함을 추정해 붙이지 마세요. "
         f"{KOREAN_ENDING_PRESERVATION_HINT}"
     )
+    if keywords_only:
+        return _dedupe_prompt_terms(terms)
     return _build_prompt_with_budget(prefix, terms, suffix, WHISPER_PROMPT_MAX_CHARS, "핵심 용어")
 
 
@@ -6805,7 +6813,9 @@ def whisper_transcribe(
         for model_index, model_name in enumerate(transcription_models):
             try:
                 request_kwargs = transcription_arguments(
-                    model_name, language, prompt_text, custom_terms, transcription_type,
+                    model_name, language, prompt_text,
+                    _build_compact_whisper_prompt(language, transcription_type, custom_terms, keywords_only=True),
+                    transcription_type,
                     WHISPER_CHUNK_TIMEOUT_SECONDS, OPENAI_TRANSCRIPTION_TEMPERATURE,
                     WHISPER_INCLUDE_LOGPROBS,
                 )

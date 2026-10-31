@@ -28,7 +28,7 @@ def transcription_arguments(model, language, prompt, terms, recording_type, time
             and not any(c in term for c in "<>\r\n")
         ))[:100]
         context = {"sermon": "A recorded sermon.", "prayer": "A recorded prayer.",
-                   "sermon_prayer": "A recorded sermon and prayer.",
+                   "phonecall": "A recorded phone call.",
                    "conversation": "A recorded conversation or meeting."}.get(recording_type, "A recorded speech.")
         args.update(prompt=context, extra_body={"languages": [language], "keywords": keywords})
         return args
