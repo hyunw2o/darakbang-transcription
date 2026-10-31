@@ -33,7 +33,11 @@
     },
     "android": {
       "package": "com.mallog24.app",
-      "blockedPermissions": ["com.google.android.gms.permission.AD_ID"],
+      "blockedPermissions": [
+        "com.google.android.gms.permission.AD_ID",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1431"
