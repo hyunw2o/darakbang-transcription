@@ -44,6 +44,16 @@ from meeting_speakers import (
     transcript_words,
     unverified_transcript,
 )
+from transcript_fidelity import (
+    EDIT_SCHEMA,
+    correction_instruction,
+    decode_edits,
+    fidelity_issue,
+    join_owned_chunks,
+    merge_opening,
+    render_units,
+    source_units,
+)
 
 try:
     import stripe
@@ -57,6 +67,7 @@ except Exception:
 
 # 다락방 용어 임포트
 from church_terms import (
+    _normalize_special_term_rules,
     get_gemini_prompt,
     get_gemini_content_prompt,
     get_gemini_correction_prompt,
@@ -5477,31 +5488,12 @@ def _correction_introduces_repetition(source_text: str, corrected_text: str) -> 
 
 
 def _guard_correction_fidelity(source_text: str, corrected_text: str) -> tuple[str, str]:
-    """
-    Keep correction output aligned with the source transcript.
-
-    Returns the accepted text and an audit action. A generated repetition is collapsed only
-    when doing so leaves a complete result; otherwise the original source segment wins.
-    """
     source = (source_text or "").strip()
     candidate = (corrected_text or "").strip()
     if not source:
-        return candidate, "accepted"
-    if not candidate:
-        return source, "empty_fallback"
-    if _is_suspiciously_incomplete_correction(source, candidate):
-        return source, "incomplete_fallback"
-    if not _correction_introduces_repetition(source, candidate):
-        return candidate, "accepted"
-
-    collapsed = _collapse_pathological_repeats(candidate).strip()
-    if (
-        collapsed
-        and not _is_suspiciously_incomplete_correction(source, collapsed)
-        and not _correction_introduces_repetition(source, collapsed)
-    ):
-        return collapsed, "generated_repeat_collapsed"
-    return source, "repetition_fallback"
+        return source, "empty_source"
+    issue = fidelity_issue(source, candidate, normalizer=_normalize_special_term_rules)
+    return (source, issue) if issue else (candidate, "accepted")
 
 
 def _trim_duplicate_chunk_prefix(previous_text: str, current_text: str) -> str:
@@ -5554,42 +5546,7 @@ def _compact_transcript_for_match(text: str) -> str:
 
 
 def _merge_opening_guard_text(opening_text: str, main_text: str) -> str:
-    """
-    A short opening-only Whisper pass catches first remarks that the long first chunk may drop.
-    Prefer preserving the opening pass, while trimming exact overlap to avoid obvious duplication.
-    """
-    opening = (opening_text or "").strip()
-    main = (main_text or "").strip()
-    if not opening:
-        return main
-    if not main:
-        return opening
-
-    opening_tokens = _transcript_tokens(opening)
-    compact_opening = _compact_transcript_for_match(opening)
-    if not opening_tokens or len(compact_opening) < 3:
-        return main
-
-    main_prefix = main[:3000]
-    compact_main_prefix = _compact_transcript_for_match(main_prefix)
-    if compact_opening and compact_opening in compact_main_prefix:
-        return main
-
-    # 짧은 인사/첫 단어가 긴 청크에서 누락되는 케이스가 많다.
-    # opening guard가 잡은 짧은 발화는 main 앞부분에 없으면 보존한다.
-    if len(opening_tokens) < 4 or len(compact_opening) < 12:
-        return f"{opening}\n\n{main}".strip()
-
-    trimmed_main = _trim_duplicate_chunk_prefix(opening, main)
-    if trimmed_main != main:
-        return f"{opening}\n\n{trimmed_main}".strip()
-
-    opening_prefix = opening_tokens[: min(8, len(opening_tokens))]
-    main_prefix_tokens = _transcript_tokens(main_prefix)[:120]
-    if _contains_token_sequence(main_prefix_tokens, opening_prefix):
-        return main
-
-    return f"{opening}\n\n{main}".strip()
+    return merge_opening(opening_text or "", main_text or "")
 
 
 def _extract_opening_guard_clip(source_path: str, duration_seconds: float) -> str | None:
@@ -5715,50 +5672,12 @@ def _transcribe_with_whisper_timestamp_audit(
 
 
 def _join_whisper_chunk_texts(chunks: list[str]) -> str:
-    joined_parts: list[str] = []
-    previous_text = ""
-    for chunk in chunks:
-        current = (chunk or "").strip()
-        if not current:
-            continue
-        current = _trim_duplicate_chunk_prefix(previous_text, current)
-        current = current.strip()
-        if not current:
-            continue
-        joined_parts.append(current)
-        previous_text = f"{previous_text}\n\n{current}".strip()
-        if len(previous_text) > 3000:
-            previous_text = previous_text[-3000:]
-    return "\n\n".join(joined_parts)
+    # Text similarity alone is not evidence that two spoken occurrences are one.
+    return "\n\n".join(chunk.strip() for chunk in chunks if chunk.strip())
 
 
 def _join_whisper_chunk_results(chunks: list[dict], results: list[dict]) -> str:
-    joined_parts: list[str] = []
-    previous_text = ""
-    previous_end = 0.0
-    for chunk, result in zip(chunks, results):
-        current = str(result.get("text") or "").strip()
-        if not current:
-            continue
-
-        current_start = float(chunk.get("start") or 0.0)
-        has_time_overlap = bool(joined_parts) and current_start < previous_end - 0.01
-        if has_time_overlap:
-            exact_trimmed = _trim_duplicate_chunk_prefix(previous_text, current)
-            if exact_trimmed == current:
-                current = trim_fuzzy_overlap(previous_text, current)
-            else:
-                current = exact_trimmed
-        current = current.strip()
-        if not current:
-            previous_end = max(previous_end, float(chunk.get("end") or previous_end))
-            continue
-        joined_parts.append(current)
-        previous_text = f"{previous_text}\n\n{current}".strip()
-        if len(previous_text) > 5000:
-            previous_text = previous_text[-5000:]
-        previous_end = max(previous_end, float(chunk.get("end") or previous_end))
-    return "\n\n".join(joined_parts)
+    return join_owned_chunks(chunks, results)
 
 
 def _get_openai_transcription_model_candidates() -> list[str]:
@@ -6083,6 +6002,8 @@ def _transcription_retry_reasons(result: dict, chunk: dict, total_chunks: int) -
         reasons.append("cut_off_boundary")
     if _contains_pathological_repeats(text):
         reasons.append("pathological_repeat")
+    if chunk.get("boundary_review"):
+        reasons.append("unverified_audio_boundary")
     return reasons
 
 
@@ -6100,12 +6021,9 @@ def _prefer_retry_transcription(primary: dict, retry: dict) -> dict:
     retry_low = _is_low_confidence_transcription(retry)
     primary_repeats = _contains_pathological_repeats(primary_text)
     retry_repeats = _contains_pathological_repeats(retry_text)
-    if primary_repeats and not retry_repeats and not retry_low:
-        collapsed_primary_len = _compact_transcript_length(
-            _collapse_pathological_repeats(primary_text)
-        )
-        if retry_len >= max(8, int(collapsed_primary_len * 0.5)):
-            return retry
+    # Frequency cannot distinguish a model loop from deliberate repeated speech.
+    if primary_repeats and fidelity_issue(primary_text, retry_text):
+        return primary
     if retry_repeats and not primary_repeats:
         return primary
     if primary_low and not retry_low and retry_len >= max(8, int(primary_len * 0.65)):
@@ -6165,6 +6083,8 @@ def _detect_silence_intervals(
     audio_path: str,
     duration_seconds: float,
     ffmpeg_bin: str,
+    *,
+    min_silence_seconds: float | None = None,
 ) -> list[tuple[float, float]]:
     try:
         completed = subprocess.run(
@@ -6177,7 +6097,7 @@ def _detect_silence_intervals(
                 "-af",
                 (
                     f"silencedetect=noise={WHISPER_SILENCE_THRESHOLD_DB:.1f}dB:"
-                    f"d={WHISPER_SILENCE_MIN_SECONDS:.3f}"
+                    f"d={WHISPER_SILENCE_MIN_SECONDS if min_silence_seconds is None else min_silence_seconds:.3f}"
                 ),
                 "-f",
                 "null",
@@ -6224,6 +6144,7 @@ def _chunk_manifest(chunks: list[dict], status: str | None = None) -> list[dict]
             "core_end": round(float(chunk.get("core_end") or 0.0), 3),
             "duration": round(float(chunk.get("duration") or 0.0), 3),
             "status": status or str(chunk.get("status") or "pending"),
+            "boundary_review": bool(chunk.get("boundary_review")),
         })
     return manifest
 
@@ -6351,10 +6272,9 @@ def split_audio_file(
         silence_count=len(silence_intervals),
         source_duration=round(source_duration, 3),
     )
-    overlap_seconds = min(
-        WHISPER_CHUNK_OVERLAP_SECONDS,
-        max(0, WHISPER_SEGMENT_MAX_SECONDS // 4),
-    )
+    # Primary ASR owns disjoint, silence-aligned spans. Text-only overlap trimming
+    # cannot tell a genuine second utterance from a duplicate ASR hypothesis.
+    overlap_seconds = 0
     plans = build_silence_aware_chunk_plan(
         source_duration,
         silence_intervals,
@@ -6363,6 +6283,19 @@ def split_audio_file(
         max_seconds=WHISPER_SEGMENT_MAX_SECONDS,
         overlap_seconds=overlap_seconds,
     )
+    def is_silent_boundary(point):
+        return point <= 0 or point >= source_duration or any(start <= point <= end for start, end in silence_intervals)
+
+    if any(not is_silent_boundary(plan.core_end) for plan in plans[:-1]):
+        # Fast speech may have only short inter-word pauses, not 450ms pauses.
+        silence_intervals += _detect_silence_intervals(
+            file_path, source_duration, ffmpeg_bin, min_silence_seconds=0.12,
+        )
+        plans = build_silence_aware_chunk_plan(
+            source_duration, silence_intervals,
+            target_seconds=WHISPER_SEGMENT_SECONDS, min_seconds=WHISPER_SEGMENT_MIN_SECONDS,
+            max_seconds=WHISPER_SEGMENT_MAX_SECONDS, overlap_seconds=0,
+        )
     coverage_gaps = find_coverage_gaps(
         plans,
         source_duration,
@@ -6427,7 +6360,7 @@ def split_audio_file(
                 if actual_duration + WHISPER_COVERAGE_TOLERANCE_SECONDS >= requested_duration:
                     break
                 if extraction_attempt == 0:
-                    requested_duration = min(prepared_duration - prepared_start, requested_duration + 0.25)
+                    # Retry the same interval; extending it would violate ownership.
                     continue
                 raise RuntimeError(
                     f"Chunk {plan.index + 1} extraction is shorter than requested "
@@ -6446,6 +6379,7 @@ def split_audio_file(
                 "core_end": plan.core_end,
                 "duration": plan.duration,
                 "actual_duration": actual_duration,
+                "boundary_review": not (is_silent_boundary(plan.core_start) and is_silent_boundary(plan.core_end)),
                 "status": "pending",
             })
             _notify_pipeline_progress(
@@ -7149,7 +7083,7 @@ def whisper_transcribe(
                     )
                     if audit:
                         offset = float(chunk.get("start") or 0.0)
-                        chosen["timestamp_segments"] = [
+                        audit_segments = [
                             {
                                 **segment,
                                 "start": round(offset + float(segment.get("start") or 0.0), 3),
@@ -7158,35 +7092,16 @@ def whisper_transcribe(
                             for segment in audit.get("segments") or []
                         ]
                         audit_text = str(audit.get("text") or "")
-                        chosen_len = _compact_transcript_length(str(chosen.get("text") or ""))
-                        audit_len = _compact_transcript_length(audit_text)
-                        chosen_repeats = _contains_pathological_repeats(
-                            str(chosen.get("text") or "")
-                        )
-                        audit_repeats = _contains_pathological_repeats(audit_text)
-                        collapsed_chosen_len = _compact_transcript_length(
-                            _collapse_pathological_repeats(str(chosen.get("text") or ""))
-                        )
-                        prefer_clean_audit = (
-                            chosen_repeats
-                            and not audit_repeats
-                            and audit_len >= max(8, int(collapsed_chosen_len * 0.5))
-                        )
-                        if prefer_clean_audit or audit_len > max(20, int(chosen_len * 1.25)):
-                            chosen = {
-                                **chosen,
-                                "text": audit_text,
-                                "model": "whisper-1-timestamp-audit",
-                                "average_logprob": audit.get("average_logprob"),
-                                "low_confidence_ratio": None,
-                            }
+                        audit_result = {
+                            "text": audit_text,
+                            "model": "whisper-1-timestamp-audit",
+                            "average_logprob": audit.get("average_logprob"),
+                            "low_confidence_ratio": None,
+                            "timestamp_segments": audit_segments,
+                        }
+                        if _prefer_retry_transcription(chosen, audit_result) is audit_result:
+                            chosen = audit_result
                             unresolved_reasons = _transcription_retry_reasons(chosen, chunk, len(chunks))
-
-                if _contains_pathological_repeats(str(chosen.get("text") or "")):
-                    collapsed_text = _collapse_pathological_repeats(str(chosen.get("text") or ""))
-                    if collapsed_text.strip():
-                        chosen = {**chosen, "text": collapsed_text, "repeat_collapsed": True}
-                        unresolved_reasons = _transcription_retry_reasons(chosen, chunk, len(chunks))
 
                 if unresolved_reasons:
                     chosen["needs_review"] = True
@@ -7202,13 +7117,15 @@ def whisper_transcribe(
 
         for index, result in enumerate(all_results):
             result_text = str(result.get("text") or "")
-            if not _contains_pathological_repeats(result_text):
+            if not _contains_pathological_repeats(result_text) and not chunks[index].get("boundary_review"):
                 continue
-            collapsed_text = _collapse_pathological_repeats(result_text)
-            if collapsed_text.strip() and collapsed_text != result_text:
-                all_results[index] = {**result, "text": collapsed_text, "repeat_collapsed": True}
-                if chunks[index].get("status") == "transcribed":
-                    chunks[index]["status"] = "repeat_collapsed"
+            # Uncertain repetition needs listening, not destructive text cleanup.
+            review_label = "확인 필요" if language == "ko" else "要確認" if language == "ja" else "Review needed"
+            marker = f"[{review_label} {_format_review_timestamp(float(chunks[index].get('core_start') or 0.0))}]"
+            if marker not in result_text:
+                result_text = f"{marker}\n{result_text}"
+            all_results[index] = {**result, "text": result_text, "needs_review": True}
+            chunks[index]["status"] = "needs_review"
 
         _notify_pipeline_progress(
             progress_callback,
@@ -7243,96 +7160,20 @@ async def gemini_correct_and_structure(
     target_model = get_optimal_model()
     print(f"[{task_id}] Gemini correction model: {target_model}, type: {transcription_type}, lang: {language}")
 
-    correction_prompt = get_correction_prompt_by_type(transcription_type, language, custom_terms)
-    normalized_mode = (correction_mode or "normal").strip().lower()
-    if normalized_mode != "strict":
-        if language == "en":
-            correction_prompt += (
-                "\n\n[Over-correction Guard]\n"
-                "- Prefer preserving the original wording and tone.\n"
-                "- Do not replace terms unless confidence is high from context.\n"
-                "- If uncertain, keep the original token as-is."
-            )
-        elif language == "ja":
-            correction_prompt += (
-                "\n\n[過剰補正防止]\n"
-                "- 元の語彙と口調をできるだけ維持してください。\n"
-                "- 文脈の確信が低い語を無理に別の固有名詞や専門用語へ置き換えないでください。\n"
-                "- 確信が低い場合は元の表記を優先してください。"
-            )
-        else:
-            correction_prompt += (
-                "\n\n[과교정 방지 규칙]\n"
-                "- 원문 어휘와 표현을 최대한 유지하라.\n"
-                "- 문맥 확신이 낮은 단어는 임의로 다른 고유명사/전문용어로 치환하지 마라.\n"
-                "- 확신이 없으면 원문 표기를 유지하라."
-            )
-    if language == "en":
-        correction_prompt += (
-            "\n\n[Repeat/Drop Guard]\n"
-            "- Preserve the transcript from the first line in chronological order.\n"
-            "- Do not remove opening greetings, prayers, introductions, or short initial remarks as unnecessary filler.\n"
-            "- Do not generate repeated paragraphs or reuse one section to fill missing text.\n"
-            "- If the source contains unclear content, keep a single [unclear] marker instead of inventing or looping text.\n"
-            "- If the same paragraph appears 3 or more times by generation error, keep it once."
-        )
-        correction_prompt += (
-            "\n\n[Slurred Speech Recovery]\n"
-            "- Some ASR tokens may be distorted by slurred or merged pronunciation.\n"
-            "- Repair distorted fragments only when the surrounding sentence makes the intended word clear.\n"
-            "- Do not convert unclear fragments into unrelated proper nouns or random acronyms.\n"
-            "- Keep truly unintelligible short spans as [unclear] once."
-        )
-    elif language == "ja":
-        correction_prompt += (
-            "\n\n[反復・欠落防止]\n"
-            "- 文字起こしの最初の行から時系列を保ってください。\n"
-            "- 冒頭の挨拶、祈り、導入、短い発話を不要な前置きとして削除しないでください。\n"
-            "- 同じ段落を生成で繰り返したり、一つの区間で不足分を埋めたりしないでください。\n"
-            "- 不明瞭な内容は一度だけ[不明瞭]とし、創作やループを避けてください。\n"
-            "- 生成エラーで同じ段落が3回以上続く場合は1回だけ残してください。"
-        )
-        correction_prompt += (
-            "\n\n[不明瞭発音の復元]\n"
-            "- ASR結果には、発音の崩れ・連音・早口による壊れた語が含まれる場合があります。\n"
-            "- 前後の文脈で意図が明確な場合のみ自然な語へ復元してください。\n"
-            "- 不確かな断片を無関係な固有名詞や略語に変換しないでください。\n"
-            "- 本当に判別できない短い部分だけ[不明瞭]としてください。"
-        )
-    else:
-        correction_prompt += (
-            "\n\n[반복/누락 방지]\n"
-            "- 원본 텍스트 첫 줄부터 시간 순서를 유지하라.\n"
-            "- 시작부 인사, 기도, 도입 멘트, 짧은 첫 발화를 불필요한 앞말로 판단해 삭제하지 마라.\n"
-            "- 같은 문단을 반복 생성하거나 한 구간을 재사용해 빈 내용을 채우지 마라.\n"
-            "- 불명확한 내용은 [불명확]으로 한 번만 표시하고 창작/루프를 피하라.\n"
-            "- 생성 오류로 동일 문단이 3회 이상 이어지면 1회만 남겨라."
-        )
-        correction_prompt += (
-            "\n\n[뭉개진 발음 복원]\n"
-            "- 원본 ASR에는 발음 뭉개짐, 연음, 비음화, 유음화, 구개음화, 된소리되기, 받침 탈락, 두음법칙, 작은 목소리 때문에 깨진 단어가 있을 수 있다.\n"
-            "- 깨진 음절 후보를 앞뒤 조사·서술어·주제와 함께 비교하고, 문맥상 의도가 명확할 때만 표준 맞춤법으로 복원하라.\n"
-            "- 조사, 어미, 부정 표현과 짧은 기능어를 발음이 약하다는 이유로 삭제하지 마라.\n"
-            "- 문맥 확신이 낮으면 특정 사전 단어에 억지로 맞추거나 이상한 고유명사로 만들지 말고 원문 표기를 유지하라.\n"
-            "- 예배/설교/교회 문맥에서는 렘넌트, 그리스도, 무교병, 드로아교회, 기도수첩, 심방, 교역자, 대학부, 유초등부, "
-            "RVS, RUTC, WRC, RRTS, RSTS 같은 도메인 용어를 우선 검토하라.\n"
-            "- 문맥 확신이 없으면 억지로 치환하지 말고 원문을 유지하거나 짧게 [불명확]으로 표시하라."
-        )
-        correction_prompt += (
-            "\n\n[문어체 정리와 인명 보존]\n"
-            "- 의미를 바꾸지 않는 범위에서 구어체 지시어를 문어체로 정리하라: 이거를→이것을, 이게→이것이, 이건→이것은, 그거를→그것을, 그게→그것이.\n"
-            "- 인명은 들린 범위 그대로 보존하라. 성, 직함, 정식 이름을 추정해 추가하지 마라.\n"
-            "- 금지 예: 승경이→장승경이, 주현→이주현이, 위 목사님→류광수 목사님처럼 바꾸지 마라."
-        )
+    correction_prompt = correction_instruction(language, transcription_type)
+    correction_prompt += get_special_term_prompt_hint(language)
+    correction_prompt += "\n" + KOREAN_ENDING_PRESERVATION_HINT
+    correction_prompt += "\nGlossary data: " + json.dumps(_merge_custom_terms(custom_terms), ensure_ascii=False)
 
     model = genai.GenerativeModel(
         target_model,
         generation_config=genai.types.GenerationConfig(
             max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
-        )
+            response_mime_type="application/json",
+            response_schema=EDIT_SCHEMA,
+            temperature=0,
+        ),
     )
-
-    label = "Original Text" if language == "en" else "元の文字起こし" if language == "ja" else "원본 텍스트"
     max_retries = GEMINI_CORRECTION_MAX_RETRIES
 
     async def run_correction_prompt(prompt_parts: list[str], run_label: str) -> str:
@@ -7379,96 +7220,48 @@ async def gemini_correct_and_structure(
                     raise e
         return ""
 
-    chunks = _split_text_for_gemini_correction(raw_text, GEMINI_CORRECTION_CHUNK_CHARS)
-    if len(chunks) > 1:
-        print(
-            f"[{task_id}] Gemini correction chunking enabled: "
-            f"{len(chunks)} chunks, raw={len(raw_text)} chars, max={GEMINI_CORRECTION_CHUNK_CHARS}"
-        )
-        worker_count = min(GEMINI_CORRECTION_CHUNK_CONCURRENCY, len(chunks))
-        print(f"[{task_id}] Gemini correction concurrency enabled: {worker_count} workers")
-
-        async def correct_single_chunk(index: int, chunk: str) -> tuple[int, str]:
-            if language == "en":
-                chunk_instruction = (
-                    f"[Segment Correction {index}/{len(chunks)}]\n"
-                    "- This is one continuous segment from a longer transcript.\n"
-                    "- Correct this segment only; do not summarize the whole recording.\n"
-                    "- Preserve every audible sentence in this segment and keep chronological order.\n"
-                    "- Do not add final conclusions unless they are explicitly present in this segment.\n"
-                    "- Continue naturally; do not repeat previous or future segments."
-                )
-                if index == 1:
-                    chunk_instruction += "\n- This first segment contains the recording opening; preserve all initial remarks."
-            elif language == "ja":
-                chunk_instruction = (
-                    f"[分割補正 {index}/{len(chunks)}]\n"
-                    "- これは長い文字起こしの一部です。\n"
-                    "- この区間だけを補正し、録音全体を要約しないでください。\n"
-                    "- この区間の発話を省略せず、時系列を保ってください。\n"
-                    "- この区間に明示されていない結論や締め文を追加しないでください。\n"
-                    "- 前後の区間を繰り返さないでください。"
-                )
-                if index == 1:
-                    chunk_instruction += "\n- この最初の区間には録音の冒頭が含まれるため、冒頭発話をすべて残してください。"
-            else:
-                chunk_instruction = (
-                    f"[분할 교정 {index}/{len(chunks)}]\n"
-                    "- 이것은 긴 녹취 원문의 일부 구간이다.\n"
-                    "- 이 구간만 교정하고, 녹음 전체를 요약하지 마라.\n"
-                    "- 이 구간에 있는 모든 발화를 빠짐없이 보존하고 시간 순서를 유지하라.\n"
-                    "- 이 구간에 명시되지 않은 결론/마무리 문장을 추가하지 마라.\n"
-                    "- 앞/뒤 구간 내용을 반복하지 마라."
-                )
-                if index == 1:
-                    chunk_instruction += "\n- 이 첫 구간에는 녹음 시작부가 포함되므로 첫 발화와 도입부를 모두 보존하라."
-
-            corrected_chunk = await run_correction_prompt(
-                [correction_prompt, chunk_instruction, f"[{label} {index}/{len(chunks)}]", chunk],
-                f"chunk {index}/{len(chunks)}",
-            )
-            corrected_chunk, fidelity_action = _guard_correction_fidelity(chunk, corrected_chunk)
-            if fidelity_action != "accepted":
-                source_len = _compact_transcript_length(chunk)
-                corrected_len = _compact_transcript_length(corrected_chunk)
-                print(
-                    f"[{task_id}] Gemini correction chunk {index}/{len(chunks)} fidelity guard: "
-                    f"{fidelity_action} ({corrected_len}/{source_len} compact chars)."
-                )
-            return index, corrected_chunk
-
-        if worker_count <= 1:
-            corrected_chunks: list[str] = []
-            for index, chunk in enumerate(chunks, start=1):
-                _, corrected_chunk = await correct_single_chunk(index, chunk)
-                corrected_chunks.append(corrected_chunk)
-            return "\n\n".join(part for part in corrected_chunks if part).strip()
-
-        semaphore = asyncio.Semaphore(worker_count)
-
-        async def run_with_limit(index: int, chunk: str) -> tuple[int, str]:
-            async with semaphore:
-                return await correct_single_chunk(index, chunk)
-
-        corrected_results = await asyncio.gather(
-            *(run_with_limit(index, chunk) for index, chunk in enumerate(chunks, start=1))
-        )
-        corrected_results.sort(key=lambda item: item[0])
-        return "\n\n".join(part for _, part in corrected_results if part).strip()
-
-    if not chunks:
+    units = source_units(raw_text)
+    if not units:
         return ""
+    batches = []
+    pending, size = [], 0
+    for unit in units:
+        if pending and (size + len(unit.text) > GEMINI_CORRECTION_CHUNK_CHARS or len(pending) >= 64):
+            batches.append(pending)
+            pending, size = [], 0
+        pending.append(unit)
+        size += len(unit.text)
+    if pending:
+        batches.append(pending)
+    semaphore = asyncio.Semaphore(min(GEMINI_CORRECTION_CHUNK_CONCURRENCY, len(batches)))
 
-    corrected_single = await run_correction_prompt([correction_prompt, f"[{label}]", chunks[0]], "single")
-    corrected_single, fidelity_action = _guard_correction_fidelity(chunks[0], corrected_single)
-    if fidelity_action != "accepted":
-        source_len = _compact_transcript_length(chunks[0])
-        corrected_len = _compact_transcript_length(corrected_single)
-        print(
-            f"[{task_id}] Gemini correction single fidelity guard: "
-            f"{fidelity_action} ({corrected_len}/{source_len} compact chars)."
-        )
-    return corrected_single or chunks[0].strip()
+    async def correct_batch(index, batch):
+        async with semaphore:
+            # Oversized unpunctuated speech is preserved, never truncated to fit a model.
+            if sum(len(unit.text) for unit in batch) > GEMINI_CORRECTION_CHUNK_CHARS * 2:
+                return batch
+            payload = json.dumps(
+                {"units": [{"id": unit.id, "text": unit.text} for unit in batch]}, ensure_ascii=False,
+            )
+            try:
+                response = await run_correction_prompt(
+                    [correction_prompt, f"Batch {index + 1}/{len(batches)}", payload],
+                    f"chunk {index + 1}/{len(batches)}",
+                )
+                edited, rejected = decode_edits(batch, response, normalizer=_normalize_special_term_rules)
+                if rejected:
+                    print(f"[{task_id}] Fidelity guard: preserved {rejected}/{len(batch)} source units in batch {index + 1}.")
+                return edited
+            except Exception as exc:
+                print(f"[{task_id}] Correction batch {index + 1} unavailable ({type(exc).__name__}); preserving source.")
+                return batch
+
+    results = await asyncio.gather(*(correct_batch(index, batch) for index, batch in enumerate(batches)))
+    corrected = render_units([unit for batch in results for unit in batch], language, transcription_type)
+    corrected, action = _guard_correction_fidelity(raw_text, corrected)
+    if action != "accepted":
+        print(f"[{task_id}] Final source-unit coverage guard: {action}.")
+    return corrected
 
 
 def _is_retryable_gemini_error(error: Exception) -> bool:
@@ -7686,7 +7479,7 @@ def _postprocess_transcript(
 ) -> str:
     normalized_mode = (correction_mode or "normal").strip().lower()
     if normalized_mode == "raw":
-        return _normalize_transcript_line_breaks(_collapse_pathological_repeats(text))
+        return _normalize_transcript_line_breaks(text)
 
     corrected = correct_text(
         text,
@@ -7698,8 +7491,6 @@ def _postprocess_transcript(
         corrected = _enforce_speaker_separation(corrected, transcription_type, language)
     if source_text is not None:
         corrected, _ = _guard_correction_fidelity(source_text, corrected)
-    else:
-        corrected = _collapse_pathological_repeats(corrected)
     return _normalize_transcript_line_breaks(corrected)
 
 
@@ -7955,7 +7746,7 @@ def _process_transcription_sync(
                 )
                 _log_stage_memory(task_id, "after_whisper")
 
-                correction_source_text = _collapse_pathological_repeats(raw_text)
+                correction_source_text = raw_text
                 if correction_source_text != raw_text:
                     print(
                         f"[{task_id}] Pathological ASR repetition collapsed for correction: "
@@ -8098,7 +7889,7 @@ def _process_transcription_sync(
             engine = f"{engine}+fine-tuned-correction"
             _log_stage_memory(task_id, "after_fine_tuned_correction")
 
-        fidelity_source_text = _collapse_pathological_repeats(raw_text)
+        fidelity_source_text = raw_text
         corrected_text, final_fidelity_action = _guard_correction_fidelity(
             fidelity_source_text,
             corrected_text,
@@ -11820,6 +11611,7 @@ async def health_check():
         "darakbang_terms": len(DARAKBANG_CORE),
         "engine": "whisper+gemini" if openai_client else "gemini-only",
         "transcription": {
+            "fidelity_pipeline": "source-owned-v1",
             "worker_queue_configured": _can_use_worker_queue(),
             "max_concurrent_jobs": MAX_CONCURRENT_TRANSCRIPTIONS,
             "chunk_concurrency_per_job": WHISPER_CHUNK_CONCURRENCY,

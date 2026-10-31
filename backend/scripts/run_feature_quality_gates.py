@@ -17,6 +17,8 @@ PYTHON_FILES = [
     "backend/main.py",
     "backend/church_terms.py",
     "backend/transcription_chunking.py",
+    "backend/transcript_fidelity.py",
+    "backend/scripts/check_transcript_fidelity.py",
     "backend/meeting_speakers.py",
     "backend/worker.py",
     "backend/scripts/export_correction_finetune_dataset.py",
@@ -94,9 +96,9 @@ def run_special_term_sample() -> None:
             "assert status['progress']['stage'] == 'transcribing' and len(status['chunk_manifest']) == 1; "
             "fallback_status=_build_transcription_status_response({'status':'processing'}, 't2'); "
             "assert fallback_status['progress']['stage'] == 'transcribing'; "
-            "joined=_join_whisper_chunk_results([{'start':0,'end':102},{'start':78,'end':180}], "
+            "joined=_join_whisper_chunk_results([{'start':0,'end':90},{'start':90,'end':180}], "
             "[{'text':'오늘 우리는 렘넌트의 언약을 확인합니다.'},{'text':'렘넌트의 언약을 확인합니다. 그리고 세계복음화를 시작합니다.'}]); "
-            "assert joined.count('렘넌트의 언약을 확인합니다') == 1 and '세계복음화' in joined; "
+            "assert joined.count('렘넌트의 언약을 확인합니다') == 2 and '세계복음화' in joined; "
             "loop=', '.join(['우리 장노님도 있고']*40)+'.'; "
             "collapsed=_collapse_pathological_repeats(loop); "
             "assert collapsed.count('우리 장노님도 있고') == 1, collapsed; "
@@ -114,7 +116,7 @@ def run_special_term_sample() -> None:
             "reasons=_transcription_retry_reasons({'text':loop}, {'index':0,'duration':90}, 1); "
             "assert 'pathological_repeat' in reasons, reasons; "
             "clean={'text':'요즘 우리 장로님도 있고 함께 예배드리는 성도들도 있습니다. 오늘의 말씀을 확인합니다.'}; "
-            "assert _prefer_retry_transcription({'text':loop}, clean) is clean; "
+            "assert _prefer_retry_transcription({'text':loop}, clean)['text'] == loop; "
             "_start_task_api_usage('usage-test', 60); "
             "_record_openai_api_usage('usage-test', {'usage':{'input_tokens':100,'input_token_details':{'audio_tokens':90,'text_tokens':10},'output_tokens':20,'total_tokens':120}}, model='gpt-4o-transcribe', operation='primary_transcription', processed_seconds=60); "
             "_record_gemini_api_usage('usage-test', {'usage_metadata':{'prompt_token_count':30,'candidates_token_count':15,'thoughts_token_count':5,'total_token_count':50}}, model='gemini-2.5-flash', operation='correction'); "
@@ -225,6 +227,7 @@ def run_special_term_sample() -> None:
 
 
 def run_script_self_tests() -> None:
+    run_command([sys.executable, "backend/scripts/check_transcript_fidelity.py"])
     run_command([sys.executable, "backend/scripts/check_meeting_speakers.py"])
     run_command([sys.executable, "backend/scripts/check_feature_readiness.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/export_correction_finetune_dataset.py", "--self-test", "--dry-run", "--min-kept", "1"])
