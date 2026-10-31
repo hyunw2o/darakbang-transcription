@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Linking, Platform } from "react-native";
+import { Alert, AppState, Linking, Platform } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as ExpoLinking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
@@ -385,14 +385,34 @@ export default function useMobileAuth({ copy, language, clearMessages, setNotice
     busyRef.current = true;
     setAuthLoading(true);
     try {
-      await scope.request(requestApi, "/api/auth/account", { method: "DELETE", timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
+      let authorizationCode;
+      if (Platform.OS === "ios") {
+        try {
+          const settings = await scope.request(requestApi, "/api/auth/privacy");
+          const providers = session?.user?.app_metadata?.providers || [];
+          if (settings.apple_revocation_configured && providers.includes("apple")) {
+            const credential = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+            authorizationCode = credential.authorizationCode;
+          }
+        } catch { /* A missing Apple token must not prevent account deletion. */ }
+      }
+      const result = await scope.request(requestApi, "/api/auth/account", {
+        method: "DELETE", timeoutMs: 60000,
+        ...(authorizationCode ? { body: JSON.stringify({ apple_authorization_code: authorizationCode }) } : {}),
+      });
+      if (!result?.success) throw new Error(latest.current.copy.errors.accountDeleteFailed);
       await clearAuthState(latest.current.copy.notices.accountDeleted);
+      if (result.apple_revocation === "manual_disconnect_required") {
+        Alert.alert(latest.current.copy.notices.accountDeleted, latest.current.language === "ko"
+          ? "Apple 로그인 연결은 자동 해제되지 않았습니다. iPhone 설정 > Apple 계정 > Apple로 로그인 > mallog24에서 사용 중단을 선택해 주세요."
+          : "Apple access was not revoked automatically. Open iPhone Settings > Apple Account > Sign in with Apple > mallog24 to stop using it.");
+      }
     } catch (error) {
       if (scope.isActive()) latest.current.setError(error.message || latest.current.copy.errors.accountDeleteFailed);
     } finally {
       if (scope.isActive()) { busyRef.current = false; setAuthLoading(false); }
     }
-  }, [clearAuthState]);
+  }, [clearAuthState, session]);
 
   const handleOpenOurs = useCallback(async () => {
     try { await Linking.openURL(OURS_URL); }

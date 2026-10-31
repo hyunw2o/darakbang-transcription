@@ -2,7 +2,7 @@
   "expo": {
     "name": "mallog24",
     "slug": "mallog24-mobile-shell",
-    "version": "1.1.7",
+    "version": "1.1.8",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -33,9 +33,7 @@
     },
     "android": {
       "package": "com.mallog24.app",
-      "permissions": [
-        "com.google.android.gms.permission.AD_ID"
-      ],
+      "blockedPermissions": ["com.google.android.gms.permission.AD_ID"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1431"
@@ -65,14 +63,7 @@
           "recordAudioAndroid": true
         }
       ],
-      "expo-asset",
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-8592086805043488~9419599131",
-          "iosAppId": "ca-app-pub-8592086805043488~8107056464"
-        }
-      ]
+      "expo-asset"
     ]
   }
 }

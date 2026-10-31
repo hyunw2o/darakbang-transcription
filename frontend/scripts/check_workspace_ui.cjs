@@ -41,6 +41,8 @@ async function fixture(browser, { signedIn = false, width = 1440, height = 1000,
         state.signedIn = true; data = session()
       } else if (url.pathname === '/api/auth/logout') {
         state.signedIn = false
+      } else if (url.pathname === '/api/auth/privacy') {
+        data = { version: '2026-10-31', accepted: true, deletion_pending: false }
       } else if (url.pathname === '/api/auth/signup') {
         data = { message: '이메일 인증 후 로그인해주세요.' }
       } else if (url.pathname === '/api/auth/password-reset/confirm') {

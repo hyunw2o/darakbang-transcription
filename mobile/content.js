@@ -306,21 +306,21 @@ const I18N = {
     exportTxtShort: "TXT",
     exportDocxShort: "DOCX",
     privacy: {
-      title: "개인정보처리방침 동의",
+      title: "AI 전송 동의",
       version: `정책 버전: ${LEGAL_DOC_VERSION}`,
-      body: "mallog24 이용 전 개인정보 및 AI 처리 내용을 확인해주세요. 음성 변환을 요청하면 원본 음성과 변환 텍스트가 제3자 AI 처리 서비스로 전송될 수 있으며, 동의 후 로그인 및 음성 변환 기능을 사용할 수 있습니다.",
-      gateNotice: "동의 전에는 로그인과 음성 변환 기능을 사용할 수 없습니다.",
+      body: "음성·전사문·관련 용어를 OpenAI 및 Google(Gemini)에 전송해 음성 인식, 화자 구분, 교정 및 요약을 수행합니다. 국외에서 처리될 수 있습니다. 선택적 학습 데이터 제공과는 별도 동의입니다.",
+      gateNotice: "거부·철회해도 로그인, 기록 조회 및 계정 삭제는 가능합니다. AI 전송 기능만 제한됩니다.",
       versionNotice: "정책 버전이 변경되면 다시 동의가 필요합니다.",
       summaryFile: "• 전송 데이터: 사용자가 선택한 원본 음성 파일",
       summaryText: "• 전송 데이터: 음성에서 생성된 변환 텍스트, 요약/교정 요청 내용",
       summaryAi: "• 전송 대상/목적: OpenAI 및 Google(Gemini)에 음성 인식, 텍스트 교정, 요약 생성을 위해 전송",
-      summaryStorage: "• 보관: 원본 음성은 처리 후 임시 저장소에서 삭제하고, 변환 텍스트/기록본은 히스토리 제공 범위 내 보관",
+      summaryStorage: "• 보관: mallog24 임시 음성은 처리 후 삭제하며 기록은 삭제 전까지 보관합니다. AI 제공자의 로그·보관 기간은 해당 정책과 프로젝트 설정에 따릅니다.",
       summaryVendors: "• 처리 위탁/보관: Supabase, OpenAI, Google(Gemini)",
-      summarySocial: "• 소셜 로그인: Google/Kakao 계정 정보(이메일, 프로필, UID)",
+      summarySocial: "• 소셜 로그인: Apple/Google/Kakao 계정 정보(이메일, 프로필, UID)",
       viewPolicy: "개인정보처리방침 전문 보기",
       viewTerms: "이용약관 보기",
       viewCompanyPolicy: "회사 정책 보기",
-      check: "개인정보처리방침을 확인했고 동의합니다.",
+      check: "위 수신자·목적·항목을 확인했으며 AI 처리 전송에 동의합니다.",
       accept: "동의하고 시작하기",
       saving: "저장 중...",
     },
@@ -737,21 +737,21 @@ const I18N = {
     exportTxtShort: "TXT",
     exportDocxShort: "DOCX",
     privacy: {
-      title: "Privacy Policy Consent",
+      title: "AI Data Transfer Consent",
       version: `Policy version: ${LEGAL_DOC_VERSION}`,
-      body: "Please review our privacy and AI processing details before using mallog24. When you request transcription, the source audio and generated text may be sent to third-party AI processors. Login and transcription become available after consent.",
-      gateNotice: "Login and transcription stay locked until consent is completed.",
+      body: "Audio, transcripts and relevant terms are sent to OpenAI and Google (Gemini) for recognition, speaker separation, correction and summaries. Processing may occur outside Korea. This is separate from optional training-data contribution.",
+      gateNotice: "Declining or withdrawing only restricts AI transfers. Sign-in, history and account deletion remain available.",
       versionNotice: "If the policy version changes, consent is required again.",
       summaryFile: "• Data sent: source audio files selected by the user",
       summaryText: "• Data sent: generated transcript text and correction/summary request content",
       summaryAi: "• Recipient/purpose: OpenAI and Google (Gemini) for speech recognition, text correction, and summary generation",
-      summaryStorage: "• Retention: source audio is deleted from temporary storage after processing; transcript text/records are retained for history features",
+      summaryStorage: "• Retention: mallog24 removes temporary audio after processing; saved records remain until deletion. Provider logs and retention follow their policies and project settings.",
       summaryVendors: "• Processors/storage: Supabase, OpenAI, Google (Gemini)",
-      summarySocial: "• Social login: Google/Kakao account data (email, profile, UID)",
+      summarySocial: "• Social login: Apple/Google/Kakao account data (email, profile, UID)",
       viewPolicy: "View full privacy policy",
       viewTerms: "View terms of service",
       viewCompanyPolicy: "View company policy",
-      check: "I have reviewed and agree to the Privacy Policy.",
+      check: "I agree to the AI data transfers, recipients and purposes described above.",
       accept: "Agree and Continue",
       saving: "Saving...",
     },
@@ -896,51 +896,13 @@ const LEGAL_DOCUMENTS = {
     privacy: {
       title: "개인정보처리방침",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 9월 11일",
-      sections: [
-        {
-          title: "1. 처리 항목",
-          body: [
-            "회원정보(이메일/UID), 소셜로그인(Google/Kakao/Apple ID) 정보, 업로드 음성, 변환 텍스트, 기록본, 접속/오류 로그를 처리할 수 있습니다.",
-            "과거 결제 기능 운영 기간에 생성된 거래 식별자와 처리 상태는 법령 준수 및 분쟁 대응에 필요한 기간만 보관하며, 신규 결제 정보는 수집하지 않습니다.",
-          ],
-        },
-        {
-          title: "2. 처리 목적",
-          body: [
-            "로그인/계정보호, 전사·교정·요약·기록본 기능 제공, 서비스 사용량 측정, 보안 및 고객지원 목적입니다.",
-          ],
-        },
-        {
-          title: "3. 보관 및 파기",
-          body: [
-            "원본 음성은 임시 저장 후 처리 완료 시 지체 없이 삭제합니다.",
-            "변환 결과/기록본은 기능 제공 범위 내 보관되며 삭제 요청 또는 계정 종료 시 파기됩니다.",
-          ],
-        },
-        {
-          title: "4. 위탁 및 국외 처리",
-          body: [
-            "Supabase(인증/DB), OpenAI(Whisper), Google(Gemini), Apple(Sign in with Apple)을 이용하며 API 처리 과정에서 국외 서버 처리가 발생할 수 있습니다.",
-          ],
-        },
-        {
-          title: "5. 이용자 권리",
-          body: [
-            "열람·정정·삭제·처리정지를 요청할 수 있으며, 문의 메일로 접수 시 합리적 기간 내 안내합니다.",
-            "민감정보 업로드는 지양해 주세요.",
-          ],
-        },
-        {
-          title: "6. 문의",
-          body: [SUPPORT_CONTACT_KO],
-        },
-      ],
+      updatedAt: "최종 업데이트: 2026년 10월 31일",
+      sections: PRIVACY_SECTIONS.ko,
     },
     terms: {
       title: "이용약관",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "시행일: 2026년 9월 11일",
+      updatedAt: "시행일: 2026년 10월 31일",
       sections: [
         {
           title: "1. 서비스 범위",
@@ -1006,7 +968,7 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "회사 정책",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 9월 11일",
+      updatedAt: "최종 업데이트: 2026년 10월 31일",
       sections: [
         {
           title: "1. 운영 원칙",
@@ -1063,7 +1025,7 @@ const LEGAL_DOCUMENTS = {
     notice: {
       title: "공지사항",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 9월 11일",
+      updatedAt: "최종 업데이트: 2026년 10월 31일",
       sections: [
         {
           title: "1. 서비스 안정화 안내",
@@ -1090,7 +1052,7 @@ const LEGAL_DOCUMENTS = {
     faq: {
       title: "자주 묻는 질문 (FAQ)",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "최종 업데이트: 2026년 9월 11일",
+      updatedAt: "최종 업데이트: 2026년 10월 31일",
       sections: [
         {
           title: "Q1. 로그인은 되는데 처리 시작이 느립니다.",
@@ -1120,50 +1082,13 @@ const LEGAL_DOCUMENTS = {
     privacy: {
       title: "Privacy Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: September 11, 2026",
-      sections: [
-        {
-          title: "1. Data We Process",
-          body: [
-            "We may process account data (email/UID), social-login data (Google/Kakao/Apple ID), uploaded audio, transcript text, saved records, and access/error logs.",
-            "Legacy transaction identifiers and status created while billing was previously available are retained only as required for legal compliance and dispute handling. No new payment data is collected.",
-          ],
-        },
-        {
-          title: "2. Purpose",
-          body: [
-            "Used for authentication, account security, transcription/correction/summarization, records, usage measurement, support, and service protection.",
-          ],
-        },
-        {
-          title: "3. Retention and Deletion",
-          body: [
-            "Source audio is kept in temporary storage and removed promptly after processing.",
-            "Transcripts/records are kept for service features and removed on request or account closure.",
-          ],
-        },
-        {
-          title: "4. Processors and Overseas Processing",
-          body: [
-            "We use Supabase (auth/DB), OpenAI (Whisper), Google (Gemini), and Apple (Sign in with Apple). API processing may involve overseas infrastructure.",
-          ],
-        },
-        {
-          title: "5. User Rights",
-          body: [
-            "You may request access, correction, deletion, and restriction via support email. Avoid uploading unnecessary sensitive data.",
-          ],
-        },
-        {
-          title: "6. Contact",
-          body: [SUPPORT_CONTACT_EN],
-        },
-      ],
+      updatedAt: "Last updated: October 31, 2026",
+      sections: PRIVACY_SECTIONS.en,
     },
     terms: {
       title: "Terms of Service",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Effective date: September 11, 2026",
+      updatedAt: "Effective date: October 31, 2026",
       sections: [
         {
           title: "1. Service Scope",
@@ -1229,7 +1154,7 @@ const LEGAL_DOCUMENTS = {
     companyPolicy: {
       title: "Company Policy",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: September 11, 2026",
+      updatedAt: "Last updated: October 31, 2026",
       sections: [
         {
           title: "1. Operating Principles",
@@ -1285,7 +1210,7 @@ const LEGAL_DOCUMENTS = {
     notice: {
       title: "Notices",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: September 11, 2026",
+      updatedAt: "Last updated: October 31, 2026",
       sections: [
         {
           title: "1. Service Stability Notice",
@@ -1312,7 +1237,7 @@ const LEGAL_DOCUMENTS = {
     faq: {
       title: "Frequently Asked Questions (FAQ)",
       version: LEGAL_DOC_VERSION,
-      updatedAt: "Last updated: September 11, 2026",
+      updatedAt: "Last updated: October 31, 2026",
       sections: [
         {
           title: "Q1. Login works, but processing starts slowly.",
@@ -1342,3 +1267,4 @@ const LEGAL_DOCUMENTS = {
 
 
 export { I18N, LEGAL_DOCUMENTS };
+import { PRIVACY_SECTIONS } from './privacyPolicy';

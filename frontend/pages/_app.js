@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
-import Script from 'next/script'
 import { getImageProps } from 'next/image'
 import '../styles/globals.css'
 import '../styles/workspace.css'
@@ -104,12 +103,6 @@ export default function App({ Component, pageProps }) {
         setUiThemeMode={setUiThemeMode}
         uiTheme={uiTheme}
         setUiTheme={setUiTheme}
-      />
-      <Script
-        id="adsense"
-        strategy="lazyOnload"
-        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8592086805043488"
-        crossOrigin="anonymous"
       />
     </>
   )

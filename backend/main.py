@@ -30,6 +30,9 @@ import subprocess
 import shutil
 import resource
 from collections import defaultdict, deque
+from privacy_controls import AI_CONSENT_VERSION, AI_PATHS, DELETION_KEY, PrivacyControls, cleanup_account, consent_status
+from transcription_models import DEFAULT_TRANSCRIPTION_MODEL, legacy_available, model_candidates, transcription_arguments
+from apple_revocation import configured as apple_revocation_configured, revoke_for_deletion
 
 from transcription_chunking import (
     AudioChunkPlan,
@@ -355,6 +358,7 @@ LOGIN_REQUIRED_API_PATHS = (
     "/api/auth/me",
     "/api/auth/bootstrap",
     "/api/auth/account",
+    "/api/auth/privacy",
 )
 
 
@@ -407,7 +411,13 @@ async def attach_auth_cookie_to_authorization(request: Request, call_next):
             request.scope["headers"] = headers
         # Authenticate before multipart parsing, schema checks, storage or ASR work.
         if requires_login:
-            await _get_current_user(authorization)
+            user = await _get_current_user(authorization)
+            if request.method not in {"GET", "HEAD"}:
+                privacy_user = await asyncio.to_thread(_privacy_controls().user, user["id"])
+                if (privacy_user.get("app_metadata") or {}).get(DELETION_KEY) and request.url.path.rstrip("/") != "/api/auth/account":
+                    raise HTTPException(409, detail="계정 삭제가 진행 중입니다. 계정 삭제를 다시 시도해 주세요.")
+                if request.url.path.rstrip("/") in AI_PATHS and not consent_status(privacy_user)["accepted"]:
+                    raise HTTPException(403, detail="AI 전송 동의가 필요합니다. 개인정보 설정을 확인해 주세요. (AI_CONSENT_REQUIRED)")
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
     return await call_next(request)
@@ -420,10 +430,10 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 # Whisper 파일 크기 제한 (25MB)
 WHISPER_MAX_SIZE = 24 * 1024 * 1024  # 약간 여유
-OPENAI_TRANSCRIPTION_MODEL = (os.getenv("OPENAI_TRANSCRIPTION_MODEL") or "gpt-4o-transcribe").strip()
+OPENAI_TRANSCRIPTION_MODEL = (os.getenv("OPENAI_TRANSCRIPTION_MODEL") or DEFAULT_TRANSCRIPTION_MODEL).strip()
 OPENAI_TRANSCRIPTION_FALLBACK_MODELS = _parse_csv_env(
     "OPENAI_TRANSCRIPTION_FALLBACK_MODELS",
-    ["whisper-1"],
+    [],
 )
 OPENAI_TRANSCRIPTION_TEMPERATURE = max(
     0.0,
@@ -534,7 +544,7 @@ WHISPER_SELECTIVE_RETRY_ENABLED = (
     os.getenv("WHISPER_SELECTIVE_RETRY_ENABLED", "true").strip().lower() == "true"
 )
 WHISPER_TIMESTAMP_AUDIT_ENABLED = (
-    os.getenv("WHISPER_TIMESTAMP_AUDIT_ENABLED", "true").strip().lower() == "true"
+    os.getenv("WHISPER_TIMESTAMP_AUDIT_ENABLED", "false").strip().lower() == "true"
 )
 WHISPER_PREVIOUS_CONTEXT_CHARS = max(
     100,
@@ -1866,6 +1876,36 @@ async def _get_current_user(authorization: str | None) -> dict:
         raise
     _cache_user_by_token(token, user)
     return user
+
+
+def _privacy_controls() -> PrivacyControls:
+    return PrivacyControls(SUPABASE_URL, SUPABASE_KEY)
+
+
+def _require_task_ai_consent(task_id: str | None) -> None:
+    owner_id = task_owner.get(task_id)
+    if owner_id:
+        _privacy_controls().require(owner_id)
+
+
+@app.get("/api/auth/privacy")
+async def get_privacy_settings(authorization: str | None = Header(default=None)):
+    user = await _get_current_user(authorization)
+    fresh = await asyncio.to_thread(_privacy_controls().user, user["id"])
+    return {**consent_status(fresh), "apple_revocation_configured": apple_revocation_configured()}
+
+
+@app.put("/api/auth/privacy")
+async def update_privacy_settings(request: Request, authorization: str | None = Header(default=None)):
+    user = await _get_current_user(authorization)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "유효한 JSON 설정이 필요합니다.")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "유효한 JSON 설정이 필요합니다.")
+    result = await asyncio.to_thread(_privacy_controls().update, user["id"], body.get("accepted"), body.get("version"))
+    return result
 
 
 def _validate_redirect_url(redirect_to: str) -> str:
@@ -5611,9 +5651,10 @@ def _transcribe_with_whisper_timestamp_audit(
     task_id: str | None = None,
     processed_seconds: int | float = 0,
 ) -> dict | None:
-    if not WHISPER_TIMESTAMP_AUDIT_ENABLED or openai_client is None:
+    if not WHISPER_TIMESTAMP_AUDIT_ENABLED or openai_client is None or not legacy_available():
         return None
     try:
+        _require_task_ai_consent(task_id)
         with open(audio_path, "rb") as audio_file:
             response = openai_client.audio.transcriptions.create(
                 model="whisper-1",
@@ -5681,16 +5722,7 @@ def _join_whisper_chunk_results(chunks: list[dict], results: list[dict]) -> str:
 
 
 def _get_openai_transcription_model_candidates() -> list[str]:
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for model in [OPENAI_TRANSCRIPTION_MODEL, *OPENAI_TRANSCRIPTION_FALLBACK_MODELS]:
-        normalized = str(model or "").strip()
-        key = normalized.lower()
-        if not normalized or key in seen:
-            continue
-        seen.add(key)
-        candidates.append(normalized)
-    return candidates or ["whisper-1"]
+    return model_candidates(OPENAI_TRANSCRIPTION_MODEL, OPENAI_TRANSCRIPTION_FALLBACK_MODELS)
 
 
 def _extract_transcription_response_text(response) -> str:
@@ -6772,27 +6804,13 @@ def whisper_transcribe(
         last_error: Exception | None = None
         for model_index, model_name in enumerate(transcription_models):
             try:
-                response_format = "text" if model_name == "whisper-1" else "json"
-                request_kwargs = {
-                    "model": model_name,
-                    "language": language,
-                    "prompt": prompt_text,
-                    "response_format": response_format,
-                    "temperature": OPENAI_TRANSCRIPTION_TEMPERATURE,
-                    "timeout": WHISPER_CHUNK_TIMEOUT_SECONDS,
-                }
-                normalized_model = model_name.strip().lower()
-                if (
-                    WHISPER_INCLUDE_LOGPROBS
-                    and response_format == "json"
-                    and normalized_model in {
-                        "gpt-4o-transcribe",
-                        "gpt-4o-mini-transcribe",
-                        "gpt-4o-mini-transcribe-2025-12-15",
-                    }
-                ):
-                    request_kwargs["include"] = ["logprobs"]
+                request_kwargs = transcription_arguments(
+                    model_name, language, prompt_text, custom_terms, transcription_type,
+                    WHISPER_CHUNK_TIMEOUT_SECONDS, OPENAI_TRANSCRIPTION_TEMPERATURE,
+                    WHISPER_INCLUDE_LOGPROBS,
+                )
                 with open(audio_path, "rb") as audio_file:
+                    _require_task_ai_consent(task_id)
                     response = openai_client.audio.transcriptions.create(
                         file=audio_file,
                         **request_kwargs,
@@ -7180,6 +7198,7 @@ async def gemini_correct_and_structure(
         for attempt in range(max_retries):
             try:
                 _touch_task_runtime_state(task_id)
+                await asyncio.to_thread(_require_task_ai_consent, task_id)
                 response = await asyncio.to_thread(
                     model.generate_content,
                     prompt_parts,
@@ -7390,6 +7409,7 @@ def _transcribe_with_gemini_only(
     custom_terms: list[str] = None,
 ) -> tuple[str, str]:
     mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
+    _require_task_ai_consent(task_id)
     audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
     try:
         target_model = get_optimal_model()
@@ -7415,6 +7435,7 @@ def _transcribe_with_gemini_only(
         for attempt in range(max_retries):
             try:
                 _touch_task_runtime_state(task_id)
+                _require_task_ai_consent(task_id)
                 response = model.generate_content(
                     [content_prompt, audio_file],
                     request_options={"timeout": GEMINI_REQUEST_TIMEOUT_SECONDS},
@@ -7512,6 +7533,7 @@ def _apply_meeting_speakers(
     if eligible:
         progress_callback("identifying_speakers")
         try:
+            _require_task_ai_consent(task_id)
             data = request_assignment(
                 file_path=file_path, mime_type=source_mime_type or _resolve_audio_mime_type(file_path),
                 body=body, language=language, api_key=GEMINI_API_KEY,
@@ -7607,6 +7629,7 @@ def _apply_fine_tuned_correction_if_enabled(
         return text, False
 
     try:
+        _require_task_ai_consent(task_id)
         response = openai_client.chat.completions.create(
             model=CORRECTION_FINE_TUNED_MODEL,
             messages=_build_fine_tuned_correction_messages(
@@ -7680,6 +7703,7 @@ def _process_transcription_sync(
 
     try:
         _set_task_runtime_state(task_id, "processing", owner_id=user_id)
+        _privacy_controls().require(user_id)
         initial_progress = _build_transcription_progress("loading_glossary")
         task_progress[task_id] = initial_progress
         _upsert_transcription_job(task_id, user_id, {
@@ -8070,6 +8094,7 @@ async def transcribe_audio(
             _ensure_user_usage_scope_ready()
         _ensure_transcription_jobs_scope_ready()
         task_id = _normalize_upload_request_id(x_mallog24_upload_id)
+        await asyncio.to_thread(_privacy_controls().require, user_id)
 
         normalized_language = (language or "ko").strip().lower()
         if normalized_language not in ALLOWED_LANGUAGES:
@@ -8214,6 +8239,7 @@ async def transcribe_audio(
             else _enforce_upload_quota_or_raise(user, audio_seconds, force_free_plan=force_ios_free_plan)
         )
 
+        await asyncio.to_thread(_privacy_controls().require, user_id)
         _set_task_runtime_state(task_id, "queued", owner_id=user_id)
         queued_progress = _build_transcription_progress("queued")
         task_progress[task_id] = queued_progress
@@ -10930,23 +10956,16 @@ async def logout(
 
 
 def _delete_user_app_data(user_id: str) -> None:
-    if not user_id:
-        return
-    cleanup_targets = [
-        (USER_CORRECTION_SAMPLES_TABLE_NAME, "user_id"),
-        (USER_GLOSSARY_TABLE_NAME, "user_id"),
-        ("saved_records", "user_id"),
-        ("transcriptions", "user_id"),
-        (USAGE_TABLE_NAME, "user_id"),
-        (BILLING_REFUND_TABLE_NAME, "user_id"),
-        (BILLING_TABLE_NAME, "user_id"),
-    ]
-    client = _get_supabase_client()
-    for table_name, column_name in cleanup_targets:
-        try:
-            client.table(table_name).delete().eq(column_name, user_id).execute()
-        except Exception as exc:
-            print(f"Account deletion cleanup skipped for {table_name}: {exc}")
+    def delete_object(bucket, object_path):
+        _get_supabase_client().storage.from_(bucket).remove([object_path])
+    cleanup_account(
+        _get_supabase_client(), user_id, delete_object,
+        required_tables=["transcriptions", USAGE_TABLE_NAME],
+        optional_tables=[USER_CORRECTION_SAMPLES_TABLE_NAME, USER_GLOSSARY_TABLE_NAME,
+                         "saved_records", "training_text_samples", "training_audio_assets",
+                         "transcription_usage_metrics",
+                         BILLING_REFUND_TABLE_NAME, BILLING_TABLE_NAME],
+    )
 
 
 async def _delete_supabase_auth_user(user_id: str) -> None:
@@ -10965,7 +10984,7 @@ async def _delete_supabase_auth_user(user_id: str) -> None:
     if response.status_code not in {200, 204, 404}:
         raise HTTPException(
             status_code=502,
-            detail=f"Supabase 계정 삭제 실패: {response.text[:300]}",
+            detail="계정 삭제를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.",
         )
 
 
@@ -10981,13 +11000,36 @@ async def delete_account(
     if not user_id:
         raise HTTPException(status_code=400, detail="삭제할 사용자 정보를 찾을 수 없습니다.")
 
-    _delete_user_app_data(user_id)
+    # Persist the tombstone first so retries cannot create fresh AI jobs.
+    fresh_user = await asyncio.to_thread(_privacy_controls().mark_deleting, user_id)
+    try:
+        await asyncio.to_thread(_delete_user_app_data, user_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"Account cleanup failed ({type(exc).__name__}); identity retained for retry.")
+        raise HTTPException(503, detail="일부 데이터를 삭제하지 못했습니다. 계정은 유지되어 있으며 다시 삭제할 수 있습니다. 잠시 후 재시도해 주세요.") from exc
+    try:
+        body = await request.json() if await request.body() else {}
+    except ValueError:
+        body = {}
+    code = body.get("apple_authorization_code") if isinstance(body, dict) else None
+    if not isinstance(code, str) or len(code) > 4096:
+        code = None
+    apple_status = await asyncio.to_thread(revoke_for_deletion, fresh_user, code)
     await _delete_supabase_auth_user(user_id)
 
-    _auth_user_cache.pop(token, None)
+    for task_id, owner_id in list(task_owner.items()):
+        if owner_id == user_id:
+            _clear_task_runtime_state(task_id)
+            _release_active_source_job(task_id)
+    for cached_token, entry in list(_auth_user_cache.items()):
+        if str((entry.get("user") or {}).get("id") or "") == user_id:
+            _auth_user_cache.pop(cached_token, None)
+    _auth_active_sessions.pop(user_id, None)
     _remove_active_auth_session(token, user_id=user_id)
 
-    response = JSONResponse({"success": True, "message": "계정이 삭제되었습니다."})
+    response = JSONResponse({"success": True, "message": "계정이 삭제되었습니다.", "apple_revocation": apple_status})
     _clear_auth_cookie(response, request)
     return response
 
@@ -11041,7 +11083,7 @@ async def generate_record_draft(
     authorization: str | None = Header(default=None),
 ):
     """기록본 초안 생성 (회의 키워드/진료 도움 기록/설교 핵심 요약)"""
-    await _get_current_user(authorization)
+    user = await _get_current_user(authorization)
     normalized_category = category.strip()
     normalized_language = (language or "ko").strip().lower()
     normalized_text = text.strip()
@@ -11070,6 +11112,7 @@ async def generate_record_draft(
     max_retries = 5
     for attempt in range(max_retries):
         try:
+            await asyncio.to_thread(_privacy_controls().require, user["id"])
             response = model.generate_content(
                 full_prompt,
                 request_options={"timeout": 120}
@@ -11521,7 +11564,7 @@ async def summarize_text(
 ):
     """텍스트 요약 (유형별 프롬프트: 설교/통화/회의)"""
     try:
-        await _get_current_user(authorization)
+        user = await _get_current_user(authorization)
         normalized_text = text.strip()
         if not normalized_text:
             raise HTTPException(status_code=400, detail="요약할 텍스트가 비어 있습니다.")
@@ -11564,6 +11607,7 @@ async def summarize_text(
 
         for attempt in range(max_retries):
             try:
+                await asyncio.to_thread(_privacy_controls().require, user["id"])
                 response = model.generate_content(
                     full_prompt,
                     request_options={"timeout": 120}
@@ -11612,6 +11656,8 @@ async def health_check():
         "engine": "whisper+gemini" if openai_client else "gemini-only",
         "transcription": {
             "fidelity_pipeline": "source-owned-v1",
+            "models": _get_openai_transcription_model_candidates(),
+            "legacy_timestamp_audit": WHISPER_TIMESTAMP_AUDIT_ENABLED and legacy_available(),
             "worker_queue_configured": _can_use_worker_queue(),
             "max_concurrent_jobs": MAX_CONCURRENT_TRANSCRIPTIONS,
             "chunk_concurrency_per_job": WHISPER_CHUNK_CONCURRENCY,
@@ -11620,5 +11666,6 @@ async def health_check():
             "gemini": bool(GEMINI_API_KEY),
             "openai_whisper": bool(OPENAI_API_KEY),
             "monetization_enabled": MONETIZATION_ENABLED,
-        }
+        },
+        "privacy": {"consent_version": AI_CONSENT_VERSION, "consent_required": True},
     }

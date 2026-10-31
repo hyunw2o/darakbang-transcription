@@ -131,6 +131,7 @@ export default function MallogHomeKoView(props) {
       </header>
 
       <main className={accessEnabled ? 'mallog-main' : 'mallog-main mallog-main-auth'}>
+        {accessEnabled ? props.privacyPanel : null}
         {!accessEnabled ? (
           <MallogAuthPanel {...props} />
         ) : (

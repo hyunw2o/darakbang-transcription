@@ -111,6 +111,11 @@ class LoginRequiredChecks(unittest.IsolatedAsyncioTestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.object(socket.socket, "connect", side_effect=AssertionError("Network is forbidden")))
+        self.stack.enter_context(patch.object(api.PrivacyControls, "user", side_effect=lambda uid: {
+            "id": uid, "app_metadata": {"mallog24_ai_consent": {
+                "accepted": True, "version": api.AI_CONSENT_VERSION, "accepted_at": "2026-10-31",
+            }},
+        }))
         for name in (
             "task_status", "task_owner", "task_updated_at", "task_progress",
             "active_source_jobs", "task_source_keys", "_auth_user_cache",

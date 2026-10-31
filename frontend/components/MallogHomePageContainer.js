@@ -4,6 +4,7 @@ import useMallogAuth from '../hooks/useMallogAuth'
 import useMallogGlossary from '../hooks/useMallogGlossary'
 import useMallogTranscription from '../hooks/useMallogTranscription'
 import useUiFeedback from '../hooks/useUiFeedback'
+import AiPrivacyPanel from './AiPrivacyPanel'
 
 const MallogHomeKoView = dynamic(() => import('./MallogHomeKoView'))
 const MallogHomeEnView = dynamic(() => import('./MallogHomeEnView'))
@@ -23,6 +24,7 @@ export default function MallogHomePageContainer({
   const isEnglish = locale === 'en'
   const isAuthPage = authPageMode === 'recover'
   const [copied, setCopied] = useState(null)
+  const [aiConsent, setAiConsent] = useState({ owner: '', accepted: false })
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.mallog24.com'
   const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://mallog24.com'
   const OURS_URL = process.env.NEXT_PUBLIC_OURS_URL || 'https://ours.mallog24.com'
@@ -245,12 +247,19 @@ export default function MallogHomePageContainer({
       .catch(() => setError(copyFailedMessage))
   }
 
-  const handleFileChange = (event) => handleFileChangeInternal(event, effectiveUsage)
-  const handleDrop = (event) => handleDropInternal(event, effectiveUsage)
-  const handleSubmit = (event) => handleSubmitInternal(event, effectiveUsage)
-  const triggerFilePicker = () => openFilePicker(uploadBlockedByQuota)
-  const handleUploadZoneKeyDown = (event) => handleUploadKeyDownInternal(event, uploadBlockedByQuota)
-  const startRecording = () => startRecordingInternal(uploadBlockedByQuota)
+  const consentOwner = `${authUser?.id || ''}:${auth.authSessionRevision}:${authToken}`
+  const requireAiConsent = () => {
+    if (aiConsent.owner === consentOwner && aiConsent.accepted) return true
+    setError(isEnglish ? 'Please review AI transfer consent in Privacy settings.' : '개인정보 설정에서 AI 전송 동의를 먼저 확인해 주세요.')
+    document.getElementById('privacy-settings')?.scrollIntoView({ behavior: 'smooth' })
+    return false
+  }
+  const handleFileChange = (event) => requireAiConsent() && handleFileChangeInternal(event, effectiveUsage)
+  const handleDrop = (event) => { event.preventDefault(); if (requireAiConsent()) handleDropInternal(event, effectiveUsage) }
+  const handleSubmit = (event) => { event.preventDefault(); if (requireAiConsent()) handleSubmitInternal(event, effectiveUsage) }
+  const triggerFilePicker = () => requireAiConsent() && openFilePicker(uploadBlockedByQuota)
+  const handleUploadZoneKeyDown = (event) => requireAiConsent() && handleUploadKeyDownInternal(event, uploadBlockedByQuota)
+  const startRecording = () => requireAiConsent() && startRecordingInternal(uploadBlockedByQuota)
   const stopRecording = () => stopRecordingInternal(effectiveUsage)
 
   const typeLabels = isEnglish
@@ -379,6 +388,9 @@ export default function MallogHomePageContainer({
 
   return (
     <ViewComponent
+      privacyPanel={authUser && !isAuthPage && authMode !== 'reset_password' ? <AiPrivacyPanel key={consentOwner} apiUrl={API_URL} locale={locale}
+        getAuthHeaders={auth.getAuthHeaders} onDeleted={handleLogout}
+        onChange={accepted => setAiConsent({ owner: consentOwner, accepted })} /> : null}
       locale={locale}
       darkMode={darkMode}
       setDarkMode={setDarkMode}
@@ -525,8 +537,8 @@ export default function MallogHomePageContainer({
       exportAsTxt={exportAsTxt}
       exportAsDocx={exportAsDocx}
       exportTextByLabel={exportTextByLabel}
-      handleSummarize={handleSummarize}
-      handleGenerateRecordDraft={handleGenerateRecordDraft}
+      handleSummarize={() => requireAiConsent() && handleSummarize()}
+      handleGenerateRecordDraft={(category) => requireAiConsent() && handleGenerateRecordDraft(category)}
       handleRecordDraftChange={handleRecordDraftChange}
       handleSaveRecord={handleSaveRecord}
       handleStartSavedRecordEdit={handleStartSavedRecordEdit}

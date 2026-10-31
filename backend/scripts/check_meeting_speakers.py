@@ -50,6 +50,7 @@ class OfflineChecks(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.object(socket.socket, "connect", side_effect=AssertionError("Network is forbidden")))
+        self.stack.enter_context(patch.object(api.PrivacyControls, "require", return_value={"id": "test-user"}))
 
 
 class RenderingChecks(OfflineChecks):

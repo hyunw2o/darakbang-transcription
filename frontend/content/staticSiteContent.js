@@ -1,7 +1,8 @@
+import { PRIVACY_SECTIONS } from './privacyPolicy'
 export const SITE_BASE_URL = 'https://www.mallog24.com'
-export const LEGAL_DOC_VERSION = 'v2026.09.11'
-export const LEGAL_DOC_DATE_KO = '2026년 9월 11일'
-export const LEGAL_DOC_DATE_EN = 'September 11, 2026'
+export const LEGAL_DOC_VERSION = 'v2026.10.31'
+export const LEGAL_DOC_DATE_KO = '2026년 10월 31일'
+export const LEGAL_DOC_DATE_EN = 'October 31, 2026'
 
 export const BUSINESS_INFO = {
   ko: {
@@ -51,83 +52,12 @@ export const LEGAL_PAGES = {
       metaDescription: 'mallog24 개인정보처리방침: 수집 항목, 이용 목적, 보관 기간, 음성 파일 처리, 제3자 처리 위탁, 이용자 권리를 안내합니다.',
       alternateHref: '/privacy-en',
       relatedLinks: [
+        { label: '계정 삭제 안내', href: '/delete-account' },
         { label: '이용약관', href: '/terms' },
         { label: '회사 정책', href: '/company-policy' },
         { label: '사용 가이드', href: '/guides' },
       ],
-      sections: [
-        {
-          title: '1. 처리하는 개인정보 항목',
-          body: [
-            '회원 인증: 이메일, 비밀번호(이메일 로그인 시), 사용자 식별자, 소셜 로그인 공급자 식별자',
-            '소셜 로그인: Google, Kakao, Apple ID에서 전달하는 이메일, 이름 또는 닉네임, Apple 비공개 릴레이 이메일',
-            '서비스 데이터: 업로드 음성 파일, 전사 원문, 교정 텍스트, 요약, 저장 기록본, 사용자 용어집',
-            '과거 결제 기록: 결제 기능 운영 기간에 생성된 거래 식별자와 처리 상태를 법령 준수 및 분쟁 대응에 필요한 기간만 별도 보관하며 신규 결제 정보는 수집하지 않습니다.',
-            '자동 수집 정보: 접속 IP, 브라우저/기기 정보, 오류 로그, 사용량 산정에 필요한 처리 시간',
-          ],
-        },
-        {
-          title: '2. 개인정보 이용 목적',
-          body: [
-            '계정 생성, 로그인, 본인 식별, 계정 보호 및 고객지원',
-            '음성 인식, 텍스트 교정, 요약, 기록본 저장, 사용자 용어집 반영',
-            '서비스 사용량 집계, 시스템 용량 계획 및 부정 사용 방지',
-            '서비스 안정화, 장애 분석, 부정 사용 방지, 보안 사고 대응',
-            '공지, 약관 변경 및 고객 문의 처리',
-          ],
-        },
-        {
-          title: '3. 음성 파일과 변환 결과 처리',
-          body: [
-            '원본 음성 파일은 변환 처리를 위해 일시적으로 사용되며, 변환 완료 후 지체 없이 삭제하는 것을 기본 정책으로 합니다.',
-            '전사 결과, 교정 결과, 저장 기록본은 이용자가 다시 조회하고 내보낼 수 있도록 계정 기능 범위 내에서 보관됩니다.',
-            '사용자가 수정한 결과와 사용자 용어집은 품질 개선을 위한 후보 데이터로 분리 관리될 수 있으며, 학습 데이터 활용은 명시적 동의와 운영 기준에 따라 제한됩니다.',
-            '주민등록번호, 계좌 비밀번호, 의료 민감정보 등 서비스 목적에 불필요한 민감정보가 포함된 음성 업로드는 권장하지 않습니다.',
-          ],
-        },
-        {
-          title: '4. 보유 기간 및 파기',
-          body: [
-            '회원 정보는 회원 탈퇴 또는 서비스 종료 시까지 보관하며, 법령상 보존 의무가 있는 정보는 해당 기간 동안 별도 보관합니다.',
-            '원본 음성 파일은 임시 처리 후 삭제하는 것을 원칙으로 합니다.',
-            '변환 결과와 저장 기록본은 이용자 삭제 요청, 계정 삭제, 또는 서비스 운영상 보관 필요가 종료된 시점에 파기됩니다.',
-            '로그 데이터는 보안, 장애 대응, 분쟁 예방 목적상 필요한 기간 동안 보관 후 파기합니다.',
-          ],
-        },
-        {
-          title: '5. 제3자 제공, 처리 위탁 및 국외 이전',
-          body: [
-            '회사는 이용자 동의 없이 개인정보를 판매하지 않습니다.',
-            '서비스 제공을 위해 Supabase(인증/DB), OpenAI(음성 인식), Google Gemini(교정/요약), Apple(Apple 로그인), Google/Kakao(소셜 로그인) 등 외부 서비스를 사용할 수 있습니다.',
-            '외부 API 처리 과정에서 데이터가 국외 서버로 전송될 수 있으며, 서비스 제공에 필요한 최소 범위로만 처리합니다.',
-            '법령상 의무 이행, 수사기관의 적법한 요청, 이용자 권리 보호에 필요한 경우 예외적으로 제공될 수 있습니다.',
-          ],
-        },
-        {
-          title: '6. 이용자 권리',
-          body: [
-            '이용자는 개인정보 열람, 정정, 삭제, 처리정지, 동의 철회를 요청할 수 있습니다.',
-            '계정 삭제와 저장 기록본 삭제는 고객지원 이메일로 요청할 수 있습니다.',
-            '요청 접수 후 본인 확인이 필요한 경우 추가 정보를 요청할 수 있으며, 합리적인 기간 내 처리 결과를 안내합니다.',
-          ],
-        },
-        {
-          title: '7. 쿠키, 로그 및 광고 관련 기술',
-          body: [
-            'mallog24는 로그인 유지, 보안, 사용량 계산, 장애 분석을 위해 쿠키와 로그를 사용할 수 있습니다.',
-            '웹사이트에는 Google AdSense 등 광고 관련 스크립트가 포함될 수 있으며, 광고 개인화 여부는 Google 계정 및 브라우저 설정에 따라 달라질 수 있습니다.',
-            '이용자는 브라우저 설정을 통해 쿠키 저장을 제한할 수 있으나, 일부 로그인 기능이 제한될 수 있습니다.',
-          ],
-        },
-        {
-          title: '8. 안전성 확보조치 및 문의',
-          body: [
-            'HTTPS 전송 암호화, 인증 토큰 검증, 권한 최소화, 보안 헤더, 요청량 제한, 로그 모니터링을 적용합니다.',
-            '보안 사고가 확인되면 사실 확인, 영향 범위 분석, 통지 및 복구 절차를 진행합니다.',
-            '문의 및 권리행사 창구: ours113814@gmail.com',
-          ],
-        },
-      ],
+      sections: PRIVACY_SECTIONS.ko,
     },
     terms: {
       ...koLegalCommon,
@@ -218,7 +148,7 @@ export const LEGAL_PAGES = {
       ...koLegalCommon,
       title: '회사 정책',
       description: 'OURS는 mallog24를 신뢰성, 보안성, 책임 있는 AI 사용 원칙에 따라 운영합니다.',
-      metaDescription: 'mallog24 회사 정책: 데이터 처리 원칙, 품질 운영, 보안, 광고, 무료 서비스와 고객지원 기준을 안내합니다.',
+      metaDescription: 'mallog24 회사 정책: 데이터 처리 원칙, 품질 운영, 보안, 무료 서비스와 고객지원 기준을 안내합니다.',
       alternateHref: '/company-policy-en',
       relatedLinks: [
         { label: '개인정보처리방침', href: '/privacy' },
@@ -259,11 +189,11 @@ export const LEGAL_PAGES = {
           ],
         },
         {
-          title: '5. 광고와 수익화 정책',
+          title: '5. 광고 없는 무료 서비스',
           body: [
-            '광고는 서비스 이용을 방해하지 않는 위치와 방식으로만 배치합니다.',
-            '로그인, 변환 진행, 민감한 오류 표시 영역에는 사용자가 오인할 수 있는 광고 배치를 지양합니다.',
-            '광고 네트워크 정책, ads.txt, app-ads.txt, 개인정보 고지 기준을 유지합니다.',
+            '현재 웹과 이번 앱 업데이트에서는 광고를 제공하지 않으며 광고 SDK를 사용하지 않습니다.',
+            '이전 앱 버전에는 광고 구성 요소가 남아 있을 수 있으므로 최신 버전으로 업데이트해 주세요.',
+            '광고 추적 목적의 데이터 전송과 인앱 결제를 하지 않습니다.',
           ],
         },
         {
@@ -282,69 +212,15 @@ export const LEGAL_PAGES = {
       ...enLegalCommon,
       title: 'Privacy Policy',
       description: 'mallog24 processes only the account, audio, transcription, and technical data needed to provide structured transcription workflows.',
-      metaDescription: 'mallog24 Privacy Policy covering account data, audio processing, retention, subprocessors, ads, and user rights.',
+      metaDescription: 'mallog24 Privacy Policy covering account data, audio processing, retention, AI consent, deletion, and user rights.',
       alternateHref: '/privacy',
       relatedLinks: [
+        { label: 'Account Deletion', href: '/delete-account' },
         { label: 'Terms of Service', href: '/terms-en' },
         { label: 'Company Policy', href: '/company-policy-en' },
         { label: 'User Guides', href: '/en/guides' },
       ],
-      sections: [
-        {
-          title: '1. Data We Process',
-          body: [
-            'Account data: email address, password for email login, user identifier, and social login provider identifier.',
-            'Social login data: email, name or nickname, Google/Kakao/Apple account identifiers, and Apple private relay email where selected.',
-            'Service data: uploaded audio, raw transcript, corrected text, summaries, saved records, and user glossary terms.',
-            'Legacy billing records: transaction identifiers and status created while billing was previously available are retained only as required for legal compliance and dispute handling. No new payment data is collected.',
-            'Technical data: IP address, browser/device information, error logs, and processing duration for usage calculation.',
-          ],
-        },
-        {
-          title: '2. Purposes of Processing',
-          body: [
-            'Account creation, login, user identification, account protection, and customer support.',
-            'Speech recognition, text correction, summaries, saved records, and glossary-assisted transcription.',
-            'Usage measurement, capacity planning, and abuse prevention.',
-            'Security monitoring, abuse prevention, reliability improvements, and incident response.',
-          ],
-        },
-        {
-          title: '3. Audio and Transcript Handling',
-          body: [
-            'Original audio files are used temporarily for processing and are deleted after transcription completes as the default operating policy.',
-            'Transcripts, corrections, summaries, and saved records may remain in the user account so the user can review and export them.',
-            'User-edited results and glossary entries may be separated as quality-improvement candidates under explicit consent and filtering rules.',
-            'Users should avoid uploading unnecessary sensitive data such as national ID numbers, payment credentials, or private medical identifiers.',
-          ],
-        },
-        {
-          title: '4. Retention and Deletion',
-          body: [
-            'Account data is retained until account deletion or service termination unless legal retention duties apply.',
-            'Original audio is temporarily processed and then deleted by default.',
-            'Saved text records are removed when the user deletes them, closes the account, or when operational retention is no longer needed.',
-            'Security and error logs are retained only for the period necessary for reliability, abuse prevention, and dispute handling.',
-          ],
-        },
-        {
-          title: '5. Subprocessors and International Transfer',
-          body: [
-            'mallog24 does not sell personal data.',
-            'The service may use Supabase for authentication/database, OpenAI for speech recognition, Google Gemini for correction/summarization, Apple for Apple login, and Google/Kakao for social login.',
-            'Data may be transferred to servers outside Korea as part of these API workflows and is limited to what is necessary to provide the service.',
-          ],
-        },
-        {
-          title: '6. User Rights, Cookies, Ads, and Contact',
-          body: [
-            'Users may request access, correction, deletion, suspension, or withdrawal of consent by contacting support.',
-            'Cookies and logs may be used for login, security, usage calculation, and reliability.',
-            'Google AdSense scripts may be used on public pages. Ad personalization depends on user browser and Google account settings.',
-            'Contact: ours113814@gmail.com',
-          ],
-        },
-      ],
+      sections: PRIVACY_SECTIONS.en,
     },
     terms: {
       ...enLegalCommon,
@@ -426,8 +302,8 @@ export const LEGAL_PAGES = {
     company: {
       ...enLegalCommon,
       title: 'Company Policy',
-      description: 'OURS operates mallog24 under reliability, security, responsible AI, advertising, and customer support principles.',
-      metaDescription: 'mallog24 Company Policy covering data governance, quality, security, ads, free access, and support standards.',
+      description: 'OURS operates mallog24 under reliability, security, responsible AI, and customer support principles.',
+      metaDescription: 'mallog24 Company Policy covering data governance, quality, security, free access, and support standards.',
       alternateHref: '/company-policy',
       relatedLinks: [
         { label: 'Privacy Policy', href: '/privacy-en' },
@@ -460,10 +336,10 @@ export const LEGAL_PAGES = {
           ],
         },
         {
-          title: '4. Security, Ads, and Support',
+          title: '4. Security, Ad-Free Access, and Support',
           body: [
             'HTTPS, token validation, permission separation, request limiting, and error-log review are baseline controls.',
-            'Ads are placed only where they do not interfere with login, transcription progress, or important error messages.',
+            'The current website and this app update do not serve ads or include an advertising SDK. Older app versions may still contain ad components; update to the latest release.',
             'mallog24 does not offer paid plans or in-app purchases. Service and security questions are handled through ours113814@gmail.com.',
           ],
         },

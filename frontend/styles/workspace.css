@@ -172,3 +172,26 @@ html.dark .mallog-feedback-error { color: #ffb2b2; background: #402523; }
 @media (prefers-reduced-motion: reduce) {
   .mallog-app *, .mallog-app *::before, .mallog-app *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+.mallog-privacy-panel {
+  padding: 20px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #a3aaa6;
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.mallog-privacy-panel p { margin: 12px 0; }
+.mallog-privacy-panel summary { cursor: pointer; font-weight: 600; }
+.mallog-privacy-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 16px;
+  margin-top: 12px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+.mallog-privacy-action:disabled { opacity: 0.45; cursor: not-allowed; }

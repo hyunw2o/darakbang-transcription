@@ -30,7 +30,6 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import NmPressable from "./components/NmPressable";
 import FadeInView from "./components/FadeInView";
 import Banner from "./components/Banner";
-import AdMobBanner from "./components/AdMobBanner";
 import SegmentButton from "./components/SegmentButton";
 import SocialAuthButton from "./components/SocialAuthButton";
 import {
@@ -45,7 +44,6 @@ import {
   MOBILE_THEME_OPTIONS,
   MOBILE_THEMES,
   NM,
-  PRIVACY_CONSENT_KEY,
   PRIVACY_POLICY_VERSION,
   RECORD_CATEGORIES,
   REPRESENTATIVE_NAME,
@@ -593,7 +591,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   const resolvedThemeKey =
     themeMode === "auto" ? (colorScheme === "dark" ? "noir" : "aurora") : themeKey;
   const activeTheme = MOBILE_THEMES[resolvedThemeKey] || MOBILE_THEMES.aurora;
-  const isPrivacyGateVisible = auth.isLoggedIn && !privacyAccepted && !activeLegalDoc;
+  const isPrivacyGateVisible = auth.isLoggedIn && activeTab === "transcribe" && !privacyAccepted && !activeLegalDoc;
   const transcriptionTypeOptions = useMemo(
     () => TRANSCRIPTION_TYPE_CARD_ORDER.map((key) => ({ key, label: copy.transcriptionTypes[key] || key })),
     [copy]
@@ -696,13 +694,23 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   } = auth;
 
   const bootLoading = uiBootLoading;
+  useEffect(() => {
+    let active = true;
+    setPrivacyAccepted(false);
+    setPrivacyConsentChecked(false);
+    if (isLoggedIn) {
+      requestApi("/api/auth/privacy").then(data => {
+        if (active) setPrivacyAccepted(data.accepted === true && data.version === PRIVACY_POLICY_VERSION);
+      }).catch(error => { if (active) setError(error.message || copy.errors.privacySaveFailed); });
+    }
+    return () => { active = false; };
+  }, [isLoggedIn, requestApi]);
   const tabOptions = APP_TABS.map((key) => ({ key, label: copy.tabs[key] || key }));
   const effectiveUsage = usage;
   const usedAudioSeconds = Math.max(0, Number(usage?.used_audio_seconds) || 0);
   const planLabel = usage?.plan_tier === "admin" ? copy.planLabels.admin : copy.planLabels.free;
   const usageSettingsTitle = copy.settingsUsageTitle;
   const usageSettingsHint = copy.settingsUsageHint;
-  const shouldShowMobileAds = isLoggedIn && activeTab === "transcribe" && Boolean(usage);
 
   const handleCreateGlossaryTerm = useCallback(async () => {
     if (!isLoggedIn || !authToken) {
@@ -922,16 +930,12 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
       try {
         const savedTheme = await AsyncStorage.getItem(UI_THEME_KEY);
         const savedThemeMode = await AsyncStorage.getItem(UI_THEME_MODE_KEY);
-        const savedPrivacyConsent = await AsyncStorage.getItem(PRIVACY_CONSENT_KEY);
         if (savedThemeMode === "manual" || savedThemeMode === "auto") {
           setThemeMode(savedThemeMode);
         }
         if (savedTheme && MOBILE_THEMES[savedTheme]) {
           setThemeKey(savedTheme);
         }
-        const hasPrivacyConsent = savedPrivacyConsent === PRIVACY_POLICY_VERSION;
-        setPrivacyAccepted(hasPrivacyConsent);
-        setPrivacyConsentChecked(hasPrivacyConsent);
       } catch {
         // Preference storage must not block public auth and legal screens.
       } finally {
@@ -1479,6 +1483,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   }, [copy.historyStatusLabels]);
 
   const handleSummarize = async () => {
+    if (!privacyAccepted) { setActiveTab("transcribe"); return; }
     clearMessages();
     unlockWorkspaceScroll();
 
@@ -1533,6 +1538,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   };
 
   const handleGenerateRecordDraft = async (category) => {
+    if (!privacyAccepted) { setActiveTab("transcribe"); return; }
     clearMessages();
 
     if (!isLoggedIn) {
@@ -1931,8 +1937,10 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
 
     setPrivacyConsentSaving(true);
     try {
-      await AsyncStorage.setItem(PRIVACY_CONSENT_KEY, PRIVACY_POLICY_VERSION);
-      setPrivacyAccepted(true);
+      const saved = await requestApi("/api/auth/privacy", {
+        method: "PUT", body: JSON.stringify({ version: PRIVACY_POLICY_VERSION, accepted: true }),
+      });
+      setPrivacyAccepted(saved.accepted === true);
       setNotice(copy.notices.privacyAccepted);
       setError("");
     } catch {
@@ -1940,6 +1948,20 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
     } finally {
       setPrivacyConsentSaving(false);
     }
+  };
+
+  const handleRevokeAiConsent = async () => {
+    if (privacyConsentSaving) return;
+    setPrivacyConsentSaving(true);
+    try {
+      await requestApi("/api/auth/privacy", {
+        method: "PUT", body: JSON.stringify({ version: PRIVACY_POLICY_VERSION, accepted: false }),
+      });
+      setPrivacyAccepted(false);
+      setPrivacyConsentChecked(false);
+      setNotice(uiLanguage === "ko" ? "AI 전송 동의를 철회했습니다. 이미 전송된 요청은 회수할 수 없습니다." : "AI consent withdrawn. Requests already sent cannot be recalled.");
+    } catch (e) { setError(e.message || copy.errors.privacySaveFailed); }
+    finally { setPrivacyConsentSaving(false); }
   };
 
   const renderQuickControls = () => (
@@ -2905,11 +2927,6 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
             </ScrollView>
           ) : null}
 
-          <AdMobBanner
-            visible={shouldShowMobileAds}
-            style={[styles.adMobBannerSlot, { backgroundColor: activeTheme.bg }]}
-          />
-
           {activeTab === "history" ? (
             <ScrollView contentContainerStyle={styles.scrollContent} nestedScrollEnabled>
               <FadeInView key="history">
@@ -3349,6 +3366,13 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
                   <View style={[styles.card, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }]}>
                     <Text style={[styles.cardTitle, { color: activeTheme.textPrimary }]}>{copy.settingsAccountTitle}</Text>
                     <Text style={[styles.helpText, { color: activeTheme.textSecondary }]}>{copy.settingsAccountHint}</Text>
+                    <NmPressable style={[styles.secondaryButton, { borderColor: activeTheme.inputBorder }]}
+                      onPress={privacyAccepted ? handleRevokeAiConsent : () => setActiveTab("transcribe")}
+                      disabled={privacyConsentSaving}>
+                      <Text style={[styles.secondaryButtonText, { color: activeTheme.textPrimary }]}>
+                        {uiLanguage === "ko" ? (privacyAccepted ? "AI 전송 동의 철회" : "AI 전송 동의 설정") : (privacyAccepted ? "Withdraw AI consent" : "AI consent settings")}
+                      </Text>
+                    </NmPressable>
                     <NmPressable
                       style={[styles.secondaryButton, { backgroundColor: activeTheme.surface, borderColor: activeTheme.inputBorder }, authLoading ? styles.buttonDisabled : null]}
                       onPress={handleRequestDeleteAccount}
@@ -3632,6 +3656,11 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
                     {privacyConsentSaving ? copy.privacy.saving : copy.privacy.accept}
                   </Text>
                 </NmPressable>
+                <NmPressable onPress={() => setActiveTab("settings")} style={styles.privacyLinkButton}>
+                  <Text style={[styles.privacyLinkText, { color: activeTheme.textPrimary }]}>
+                    {uiLanguage === "ko" ? "나중에 결정 · 계정 설정" : "Decide later · Account settings"}
+                  </Text>
+                </NmPressable>
               </ScrollView>
             </View>
           </FadeInView>
@@ -3729,14 +3758,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 22,
     gap: 16,
-  },
-  adMobBannerSlot: {
-    minHeight: 58,
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 4,
-    alignItems: "center",
-    justifyContent: "center",
   },
   authScrollContent: {
     flexGrow: 1,
