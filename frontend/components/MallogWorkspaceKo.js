@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import TranscriptionQueue from './TranscriptionQueue'
 import MallogWorkspaceNav from './MallogWorkspaceNav'
 import { AudioLines, Check, Upload, Mic, Square, X } from 'lucide-react'
 import MicrophoneInputControl from './MicrophoneInputControl'
@@ -198,6 +199,7 @@ export default function MallogWorkspaceKo(props) {
                   <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     accept="audio/*"
                     onChange={handleFileChange}
                     className="hidden"
@@ -213,7 +215,7 @@ export default function MallogWorkspaceKo(props) {
                       {fileDurationSeconds > 0 && (
                         <p className="text-xs text-nm-text-secondary">길이: {formatSecondsToHourMinute(fileDurationSeconds)}</p>
                       )}
-                      <span className="mallog-change-file">다른 파일 선택</span>
+                      <span className="mallog-change-file">파일 추가</span>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -222,7 +224,7 @@ export default function MallogWorkspaceKo(props) {
                       </div>
                       <p className="text-base font-semibold text-nm-text-primary">오디오 파일</p>
                       <p className="text-xs text-nm-text-secondary">MP3, WAV, M4A, OGG, FLAC (최대 100MB)</p>
-                      <span className="mallog-change-file">파일 선택</span>
+                      <span className="mallog-change-file">파일 선택 (여러 개 가능)</span>
                     </div>
                   )}
                 </div>
@@ -318,13 +320,14 @@ export default function MallogWorkspaceKo(props) {
                     </select>
                   </div>
                 </div>
+                <TranscriptionQueue queue={props.queue} state={props.queueState} locale="ko" busy={loading || recordingState !== 'idle'} onRetry={props.retryQueuedFile} onResult={props.showQueuedResult} />
                 <button
                   type="submit"
-                  disabled={loading || !file || uploadBlockedByQuota || fileExceedsRemainingQuota}
+                  disabled={loading || recordingState !== 'idle' || !props.queueState?.items.some(item => item.status === 'waiting') || props.queueState?.items.some(item => ['failed', 'uncertain'].includes(item.status)) || uploadBlockedByQuota || fileExceedsRemainingQuota}
                   className="mallog-primary-action mallog-transcribe-action mt-5"
                 >
                   <AudioLines size={18} aria-hidden="true" />
-                  {loading ? '변환 중...' : '변환 시작'}
+                  {loading ? '변환 중...' : '대기 파일 순차 변환'}
                 </button>
               </form>
 

@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createTranscriptionQueue } from "../shared/transcriptionQueue.cjs";
+import TranscriptionQueue from "./components/TranscriptionQueue";
 import {
   ActivityIndicator,
   Alert,
@@ -350,6 +352,8 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("ko");
   const [transcriptionType, setTranscriptionType] = useState("conversation");
   const [pickedFile, setPickedFile] = useState(null);
+  const [queue] = useState(() => createTranscriptionQueue(createUploadRequestId));
+  const queueState = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const [recordingStatus, setRecordingStatus] = useState("idle");
   const [recordingEnvelope, setRecordingEnvelope] = useState(createEmptyRecordingEnvelope);
   const [submitting, setSubmitting] = useState(false);
@@ -953,6 +957,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   useEffect(() => {
     mountedRef.current = true;
     const stopProtectedWork = () => {
+      queue.reset();
       discardRecordingRef.current = true;
       invalidatePollingSession();
       try { audioRecorder.stop().catch(() => {}); } catch { /* Native recorder may be released. */ }
@@ -963,7 +968,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
       stopProtectedWork();
       sessionScope?.signal.removeEventListener("abort", stopProtectedWork);
     };
-  }, [audioRecorder, invalidatePollingSession, sessionScope]);
+  }, [audioRecorder, invalidatePollingSession, sessionScope, queue]);
 
   useEffect(() => {
     AsyncStorage.setItem(UI_THEME_KEY, themeKey).catch(() => {});
@@ -971,33 +976,25 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   }, [themeKey, themeMode]);
 
   const pickAudioFile = async () => {
-    if (!canUseWorkspace() || submitting || recordingBusy || !privacyAccepted) return;
+    if (!canUseWorkspace() || recordingBusy || !privacyAccepted) return;
     clearMessages();
-    resetResultWorkspace(true);
 
     try {
       const resultDoc = await DocumentPicker.getDocumentAsync({
         type: ["audio/*", "video/*"],
-        multiple: false,
+        multiple: true,
+        copyToCacheDirectory: true,
       });
 
       if (!canUseWorkspace() || resultDoc.canceled || !resultDoc.assets?.length) return;
 
-      const asset = resultDoc.assets[0];
-      if ((asset.size || 0) > MAX_UPLOAD_BYTES) {
-        setError(copy.errors.fileTooLarge);
-        return;
-      }
-
-      const mimeType = inferMimeFromAsset(asset);
-      const ext = getExtension(asset.name || "") || "mp3";
-
-      setPickedFile({
-        uri: asset.uri,
-        name: asset.name || `upload.${ext}`,
-        size: asset.size || 0,
-        mimeType,
-      });
+      const files = resultDoc.assets.filter(asset => (asset.size || 0) <= MAX_UPLOAD_BYTES && asset.size !== 0).map(asset => ({
+        uri: asset.uri, name: asset.name || `upload.${getExtension(asset.name || "") || "mp3"}`,
+        size: asset.size || 0, mimeType: inferMimeFromAsset(asset),
+      }));
+      const added = queue.enqueue(files);
+      if (!queue.getSnapshot().activeId && !submitting && added.length) setPickedFile(added[0].file);
+      if (files.length !== resultDoc.assets.length) setError(copy.errors.fileTooLarge);
       setNotice(copy.notices.fileSelected);
     } catch (e) {
       setError(e.message || copy.errors.filePickFailed);
@@ -1005,7 +1002,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
   };
 
   const startAudioRecording = async () => {
-    if (!canUseWorkspace() || !privacyAccepted || submitting || recordingBusy) return;
+    if (!canUseWorkspace() || !privacyAccepted || submitting || queue.getSnapshot().running || recordingBusy) return;
     clearMessages();
 
     try {
@@ -1085,12 +1082,14 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
         return;
       }
 
-      setPickedFile({
+      const recordedFile = {
         uri,
         name: buildRecordedAudioName(),
         size,
         mimeType: "audio/mp4",
-      });
+      };
+      setPickedFile(recordedFile);
+      queue.enqueue([recordedFile]);
       resetResultWorkspace(true);
       setNotice(copy.notices.recordingReady);
     } catch (e) {
@@ -1101,8 +1100,9 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
     }
   };
 
-  const startPollingTask = (taskId, expectedResultEpoch, initialProgress = null) => {
+  const startPollingTask = (taskId, expectedResultEpoch, initialProgress = null, queueItemId = null) => {
     if (!canUseWorkspace() || expectedResultEpoch !== resultEpochRef.current) return;
+    queue.processing(queueItemId, taskId);
     invalidatePollingSession();
     const pollToken = pollTokenRef.current;
     activeTaskIdRef.current = taskId;
@@ -1121,6 +1121,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
 
         const elapsed = Date.now() - (pollStartedAtRef.current || Date.now());
         if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
+          queue.fail(queueItemId, copy.errors.transcribeLongRunning);
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
@@ -1165,10 +1166,12 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
           setNotice(copy.notices.transcribeDone);
           fetchHistory(authToken);
           fetchUsage(authToken, { quiet: true }).catch(() => {});
+          queue.complete(queueItemId, data);
           return;
         }
 
         if (data.status === "error") {
+          queue.fail(queueItemId, data.error || copy.errors.transcribeError, false);
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
@@ -1180,6 +1183,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
         }
 
         if (data.status === "not_found") {
+          queue.fail(queueItemId, copy.errors.taskNotFound);
           stopPolling();
           activeTaskIdRef.current = "";
           setSubmitting(false);
@@ -1200,14 +1204,12 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
     }, STATUS_POLL_INTERVAL_MS);
   };
 
-  const handleTranscribe = async () => {
-    if (!canUseWorkspace() || !privacyAccepted || submitting || recordingBusy) return;
+  const submitQueueItem = async (item) => {
+    if (!canUseWorkspace() || !privacyAccepted) { queue.pause(); return; }
+    const pickedFile = item.file;
+    const { language: transcriptionLanguage, transcriptionType } = item.options;
     clearMessages();
-
-    if (!pickedFile) {
-      setError(copy.errors.fileNotSelected);
-      return;
-    }
+    setPickedFile(pickedFile);
 
     invalidatePollingSession();
     const submitEpoch = resetResultWorkspace(true);
@@ -1217,9 +1219,14 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
     setProcessingProgress(uploadProgress);
     setTaskStateText(resolveProcessingDetail(copy, uploadProgress));
 
+    if (item.taskId) {
+      startPollingTask(item.taskId, submitEpoch, null, item.id);
+      return;
+    }
+
     try {
       const requestOptions = { token: authToken };
-      const uploadRequestId = createUploadRequestId();
+      const uploadRequestId = item.uploadId;
       const data = await requestApiWithNetworkRetry(
         "/api/transcribe",
         {
@@ -1257,7 +1264,7 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
       if (!canUseWorkspace() || submitEpoch !== resultEpochRef.current) return;
 
       if ((data.status === "queued" || data.status === "processing") && data.task_id) {
-        startPollingTask(data.task_id, submitEpoch, data.progress);
+        startPollingTask(data.task_id, submitEpoch, data.progress, item.id);
       } else if (data.status === "completed") {
         if (submitEpoch !== resultEpochRef.current) return;
         setSubmitting(false);
@@ -1271,16 +1278,16 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
         setResult(data);
         fetchHistory(authToken);
         fetchUsage(authToken, { quiet: true }).catch(() => {});
+        queue.complete(item.id, data);
       } else if (data.status === "error") {
+        queue.fail(item.id, data.error || copy.errors.transcribeError, false);
         throw new Error(data.error || copy.errors.transcribeError);
       } else {
-        setSubmitting(false);
-        setTaskPhase("idle");
-        setTaskStateText("");
-        setProcessingProgress(EMPTY_PROCESSING_PROGRESS);
-        setNotice(data.message || copy.notices.requestAccepted);
+        throw new Error(data.message || copy.errors.transcribeFailed);
       }
     } catch (e) {
+      if (!canUseWorkspace() || submitEpoch !== resultEpochRef.current) return;
+      queue.fail(item.id, e.message || copy.errors.transcribeFailed, ![400, 403, 413, 415, 422].includes(e.status));
       setSubmitting(false);
       setTaskPhase("idle");
       setTaskStateText("");
@@ -1289,8 +1296,36 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
     }
   };
 
+  const handleTranscribe = () => {
+    if (!canUseWorkspace() || !privacyAccepted || submitting || recordingBusy || queue.getSnapshot().activeId) return;
+    queue.start({ language: transcriptionLanguage, transcriptionType });
+  };
+
+  useEffect(() => {
+    if (submitting || recordingBusy) return;
+    setPickedFile(queueState.items.find(item => item.status === "waiting")?.file || null);
+  }, [queueState, submitting, recordingBusy]);
+
+  useEffect(() => {
+    if (!privacyAccepted) { queue.pause(); return; }
+    if (!canUseWorkspace() || submitting || recordingBusy) return;
+    const item = queue.claim();
+    if (item) void submitQueueItem(item);
+  }, [queueState, privacyAccepted, submitting, recordingBusy, canUseWorkspace]);
+
+  const retryQueuedFile = (id) => {
+    if (canUseWorkspace() && privacyAccepted && !submitting && !recordingBusy) queue.retry(id);
+  };
+
+  const showQueuedResult = (id) => {
+    if (!canUseWorkspace() || submitting || queue.getSnapshot().running) return;
+    const item = queue.getSnapshot().items.find(entry => entry.id === id);
+    if (item?.result) { resetResultWorkspace(true); setResult(item.result); }
+  };
+
   const handleLoadHistoryItem = async (taskId) => {
     if (!canUseWorkspace() || submitting || recordingBusy) return;
+    if (queue.getSnapshot().activeId || queue.getSnapshot().running) return;
     clearMessages();
     unlockWorkspaceScroll();
     invalidatePollingSession();
@@ -2552,14 +2587,14 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
                         backgroundColor: activeTheme.inputBg,
                         borderColor: pickedFile ? activeTheme.accent : activeTheme.inputBorder,
                       },
-                      recordingBusy || submitting ? styles.buttonDisabled : null,
+                      recordingBusy ? styles.buttonDisabled : null,
                     ]}
                     onPress={pickAudioFile}
-                    disabled={recordingBusy || submitting}
+                    disabled={recordingBusy}
                   >
                     <Feather name="upload" size={24} color={activeTheme.accent} />
                     <Text style={[styles.uploadZoneTitle, { color: activeTheme.textPrimary }]}>
-                      {pickedFile ? `${copy.selectedFileLabel}: ${pickedFile.name}` : copy.uploadZoneTitle}
+                      {pickedFile ? (uiLanguage === "ko" ? "파일 추가" : "Add files") : copy.uploadZoneTitle}
                     </Text>
                     <Text style={[styles.uploadZoneHint, { color: activeTheme.textSecondary }]}>
                       {pickedFile
@@ -2641,17 +2676,18 @@ function MobileScreen({ auth, authNotice, authError, uiLanguage, setUiLanguage }
                     ) : null}
                   </View>
 
+                  <TranscriptionQueue queue={queue} state={queueState} locale={uiLanguage} theme={activeTheme} busy={submitting || recordingBusy} onRetry={retryQueuedFile} onResult={showQueuedResult} />
                   <NmPressable
                     style={[
                       styles.startTranscribeButton,
                       { backgroundColor: activeTheme.textPrimary, borderColor: activeTheme.textPrimary },
-                      !pickedFile || submitting || recordingBusy ? styles.buttonDisabled : null,
+                      !queueState.items.some(item => item.status === "waiting") || queueState.items.some(item => ["failed", "uncertain"].includes(item.status)) || submitting || recordingBusy ? styles.buttonDisabled : null,
                     ]}
                     onPress={handleTranscribe}
-                    disabled={!pickedFile || submitting || recordingBusy}
+                    disabled={!queueState.items.some(item => item.status === "waiting") || queueState.items.some(item => ["failed", "uncertain"].includes(item.status)) || submitting || recordingBusy}
                   >
                     <Text style={[styles.startTranscribeButtonText, { color: activeTheme.bg }]}>
-                      {submitting ? copy.transcribing : copy.transcribeStart}
+                      {submitting ? copy.transcribing : (uiLanguage === "ko" ? "대기 파일 순차 변환" : "Convert queued files")}
                     </Text>
                   </NmPressable>
 

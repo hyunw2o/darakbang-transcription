@@ -105,6 +105,7 @@ export default function MallogHomePageContainer({
     locale,
     authToken: auth.authToken,
     authSessionRevision: auth.authSessionRevision,
+    queueEnabled: aiConsent.accepted && aiConsent.owner === `${auth.authUser?.id || ''}:${auth.authSessionRevision}:${auth.authToken}`,
     accessEnabled: Boolean(auth.authToken && auth.authUser && !auth.authInitializing && auth.authMode !== 'reset_password' && !isAuthPage),
     getAuthHeaders: auth.getAuthHeaders,
     fetchUsage: auth.fetchUsage,
@@ -555,6 +556,10 @@ export default function MallogHomePageContainer({
       stopRecording={stopRecording}
       cancelRecording={cancelRecording}
       handleSubmit={handleSubmit}
+      queue={transcription.queue}
+      queueState={transcription.queueState}
+      retryQueuedFile={(id) => requireAiConsent() && transcription.retryQueuedFile(id)}
+      showQueuedResult={transcription.showQueuedResult}
     />
   )
 }

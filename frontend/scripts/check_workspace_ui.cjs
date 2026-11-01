@@ -127,7 +127,7 @@ async function main() {
     await anonymous.page.getByText('저장된 테스트 기록', { exact: true }).click()
     await anonymous.page.getByRole('heading', { name: '새 변환', exact: true }).waitFor()
     await anonymous.page.locator('input[type=file]').setInputFiles({ name: '긴_파일명_줄바꿈_검증_음성.wav', mimeType: 'audio/wav', buffer: wav() })
-    await anonymous.page.getByRole('button', { name: '변환 시작', exact: true }).click()
+    await anonymous.page.getByRole('button', { name: '대기 파일 순차 변환', exact: true }).click()
     await anonymous.page.getByText(completed.corrected_text, { exact: true }).first().waitFor()
     await layout(anonymous.page, 'completed-desktop')
     assert.equal(anonymous.state.requests.filter(r => r.path === '/api/transcribe').length, 1)
@@ -209,7 +209,7 @@ async function main() {
         progress: { stage: 'identifying_speakers', percent: 95 } }
       await meeting.page.goto(`${base}${en ? '/en' : '/'}`)
       await meeting.page.locator('input[type=file]').setInputFiles({ name: 'meeting.wav', mimeType: 'audio/wav', buffer: wav() })
-      await meeting.page.getByRole('button', { name: en ? 'Start transcription' : '변환 시작', exact: true }).click()
+      await meeting.page.getByRole('button', { name: en ? 'Convert queued files' : '대기 파일 순차 변환', exact: true }).click()
       await meeting.page.getByText(en ? 'Matching meeting voices to utterances and checking spoken names.' : '회의 녹음의 목소리를 발언과 연결하고, 직접 소개된 이름을 확인하고 있습니다.', { exact: true }).waitFor()
       await layout(meeting.page, `meeting-progress-${locale}-${width}`)
       const labels = en ? ['Participant 1(Alex)', 'Participant 2(Morgan)', `Participant 3(${'Longname'.repeat(7)})`, 'Participant ?(needs review)']

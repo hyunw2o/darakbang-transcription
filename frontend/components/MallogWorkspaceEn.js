@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import TranscriptionQueue from './TranscriptionQueue'
 import MallogWorkspaceNav from './MallogWorkspaceNav'
 import { AudioLines, Check, Upload, Mic, Square, X } from 'lucide-react'
 import MicrophoneInputControl from './MicrophoneInputControl'
@@ -197,6 +198,7 @@ export default function MallogWorkspaceEn(props) {
                   <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     accept="audio/*"
                     onChange={handleFileChange}
                     className="hidden"
@@ -214,7 +216,7 @@ export default function MallogWorkspaceEn(props) {
                       {fileDurationSeconds > 0 && (
                         <p className="text-xs text-nm-text-secondary">Duration: {formatSecondsToHourMinute(fileDurationSeconds, 'en')}</p>
                       )}
-                      <span className="mallog-change-file">Choose a different file</span>
+                      <span className="mallog-change-file">Add files</span>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -223,7 +225,7 @@ export default function MallogWorkspaceEn(props) {
                       </div>
                       <p className="text-base font-semibold text-nm-text-primary">Audio file</p>
                       <p className="text-xs text-nm-text-secondary">MP3, WAV, M4A, OGG, FLAC (up to 100MB)</p>
-                      <span className="mallog-change-file">Choose file</span>
+                      <span className="mallog-change-file">Choose files</span>
                     </div>
                   )}
                 </div>
@@ -319,13 +321,14 @@ export default function MallogWorkspaceEn(props) {
                     </select>
                   </div>
                 </div>
+                <TranscriptionQueue queue={props.queue} state={props.queueState} locale="en" busy={loading || recordingState !== 'idle'} onRetry={props.retryQueuedFile} onResult={props.showQueuedResult} />
                 <button
                   type="submit"
-                  disabled={loading || !file || uploadBlockedByQuota || fileExceedsRemainingQuota}
+                  disabled={loading || recordingState !== 'idle' || !props.queueState?.items.some(item => item.status === 'waiting') || props.queueState?.items.some(item => ['failed', 'uncertain'].includes(item.status)) || uploadBlockedByQuota || fileExceedsRemainingQuota}
                   className="mallog-primary-action mallog-transcribe-action mt-5"
                 >
                   <AudioLines size={18} aria-hidden="true" />
-                  {loading ? 'Transcribing...' : 'Start transcription'}
+                  {loading ? 'Transcribing...' : 'Convert queued files'}
                 </button>
               </form>
 

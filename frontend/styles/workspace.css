@@ -195,3 +195,37 @@ html.dark .mallog-feedback-error { color: #ffb2b2; background: #402523; }
   border-radius: 6px;
 }
 .mallog-privacy-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.mallog-queue {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--nm-border);
+  min-width: 0;
+}
+.mallog-queue-header, .mallog-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mallog-queue-header { justify-content: space-between; }
+.mallog-queue-header h2 { font-size: 15px; font-weight: 600; }
+.mallog-queue-header h2 span { font-size: 12px; margin-left: 8px; opacity: 0.7; }
+.mallog-queue-summary { font-size: 12px; line-height: 1.65; opacity: 0.75; margin-top: 8px; word-break: keep-all; overflow-wrap: anywhere; }
+.mallog-queue-list { margin: 12px 0; max-height: 360px; overflow-y: auto; }
+.mallog-queue-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--nm-border); }
+.mallog-upload-zone p { overflow-wrap: anywhere; word-break: keep-all; }
+.mallog-queue-file { min-width: 0; }
+.mallog-queue-file p { font-size: 13px; line-height: 1.6; word-break: keep-all; overflow-wrap: anywhere; }
+.mallog-queue-file small { font-size: 12px; opacity: 0.7; }
+.mallog-queue-file .mallog-queue-error { color: #c24141; font-size: 12px; }
+.mallog-queue-icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; }
+.mallog-queue-icon:hover:not(:disabled) { background: rgba(127, 127, 127, 0.12); }
+.mallog-queue-icon:focus-visible { outline: 2px solid currentColor; }
+.mallog-queue-icon:disabled { opacity: 0.3; cursor: not-allowed; }
+.mallog-queue-completed > svg { color: #36a36a; }
+.mallog-queue-uncertain > svg, .mallog-queue-failed > svg { color: #c24141; }
+@media (max-width: 540px) {
+  .mallog-queue-row { grid-template-columns: 18px minmax(0, 1fr); gap: 8px; }
+  .mallog-queue-row > .mallog-queue-actions { grid-column: 2; justify-content: flex-end; }
+  .mallog-queue-icon { width: 44px; height: 44px; }
+}

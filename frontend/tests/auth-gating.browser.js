@@ -335,7 +335,7 @@ test('disabled handlers never fetch, create guest storage, probe files or reques
   equal(localStorage.length, 0)
 })
 
-test('a late file duration probe cannot restore a file after logout', async () => {
+test('file selection does not block on metadata and logout clears the whole queue', async () => {
   mockMedia()
   mockFetch(() => json({}))
   let audio
@@ -346,9 +346,10 @@ test('a late file duration probe cannot restore a file after logout', async () =
   }
   const hook = await mount(useMallogTranscription, enabledProps)
   await act(async () => hook.current.handleFileChange({ target: { files: [new File(['x'], 'voice.webm')] } }))
-  assert(audio)
+  assert(!audio)
+  equal(hook.current.queueState.items.length, 1)
   await hook.update({ ...enabledProps, accessEnabled: false })
-  await act(async () => audio.onloadedmetadata())
+  equal(hook.current.queueState.items.length, 0)
   equal(hook.current.file, null)
   equal(hook.current.fileDurationSeconds, 0)
 })
@@ -389,7 +390,7 @@ test('late uploads cannot begin polling or restore results after access is disab
   const upload = deferred()
   const calls = mockFetch(() => upload.promise)
   const hook = await mount(useMallogTranscription, enabledProps)
-  await act(async () => hook.current.setFile(new File(['audio'], 'voice.webm')))
+  await act(async () => hook.current.handleFileChange({ target: { files: [new File(['audio'], 'voice.webm')] } }))
   let pending
   await act(async () => { pending = hook.current.handleSubmit(submitEvent) })
   await hook.update({ ...enabledProps, accessEnabled: false })
@@ -457,9 +458,9 @@ test('polling 401 clears authentication and does not retry as a network failure'
   const calls = mockFetch((url) => url.endsWith('/bootstrap') ? json(sessionData()) : url.endsWith('/usage') ? json({ plan_tier: 'free' }) : url.endsWith('/glossary') ? json({ terms: [] }) : url.endsWith('/transcribe') ? json({ status: 'queued', task_id: 'task' }) : json({ detail: 'Expired' }, 401))
   const hook = await mount(useWorkspace)
   await until(() => hook.current.accessEnabled)
-  await act(async () => hook.current.transcription.setFile(new File(['audio'], 'voice.webm')))
+  await act(async () => hook.current.transcription.handleFileChange({ target: { files: [new File(['audio'], 'voice.webm')] } }))
   await act(async () => hook.current.transcription.handleSubmit(submitEvent))
-  assert(poll)
+  await until(() => Boolean(poll))
   await act(async () => poll())
   assert(!hook.current.accessEnabled)
   const count = calls.length
@@ -490,6 +491,131 @@ test('unprotected login 401 is not a protected-session invalidation', async () =
   await until(() => Boolean(hook.current.authUser))
   await apiFetch(`${apiUrl}/api/auth/login`, { method: 'POST' })
   assert(hook.current.authUser)
+})
+
+function mockQueuePolling() {
+  const polls = new Map()
+  let id = 0
+  window.setInterval = (callback, delay) => {
+    if (delay !== 3000) return native.setInterval.call(window, callback, delay)
+    const key = `queue-poll-${++id}`; polls.set(key, callback); return key
+  }
+  window.clearInterval = (key) => { if (polls.has(key)) polls.delete(key); else native.clearInterval.call(window, key) }
+  return async () => { const callbacks = [...polls.values()]; await act(async () => { for (const poll of callbacks) await poll() }) }
+}
+const queueFiles = () => ['first.wav', 'second.wav', 'third.wav'].map(name => new File(['audio'], name, { type: 'audio/wav', lastModified: 1 }))
+
+test('queue uploads three files serially, isolates options and prevents double submission', async () => {
+  mockMedia(); const poll = mockQueuePolling(); let sequence = 0
+  const calls = mockFetch((url) => url.endsWith('/transcribe') ? json({ status: 'queued', task_id: `task-${++sequence}` })
+    : url.includes('/status/') ? json({ status: 'completed', task_id: url.split('/').pop(), raw_text: 'transcript' }) : json([]))
+  const hook = await mount(useMallogTranscription, enabledProps, true)
+  await tick()
+  await act(async () => hook.current.handleFileChange({ target: { files: queueFiles() } }))
+  equal(hook.current.queueState.items.length, 3)
+  await act(async () => { hook.current.handleSubmit(submitEvent); hook.current.handleSubmit(submitEvent) })
+  equal(sequence, 1)
+  await act(async () => { hook.current.setLanguage('ja'); hook.current.setTranscriptionType('prayer') })
+  await act(async () => hook.current.handleLoadHistory('irrelevant'))
+  assert(!calls.some(call => call.url.endsWith('/irrelevant')))
+  for (let index = 0; index < 3; index += 1) {
+    await until(() => hook.current.queueState.items[index].status === 'processing')
+    await poll()
+    await until(() => hook.current.queueState.items[index].status === 'completed')
+    equal(sequence, Math.min(index + 2, 3))
+  }
+  await until(() => !hook.current.queueState.running)
+  const uploads = calls.filter(call => call.url.endsWith('/transcribe'))
+  equal(uploads.map(call => call.options.body.get('file').name), ['first.wav', 'second.wav', 'third.wav'])
+  equal(uploads.map(call => call.options.body.get('language')), ['en', 'en', 'en'])
+  assert(!hook.current.loading)
+  await act(async () => hook.current.showQueuedResult(hook.current.queueState.items[0].id))
+  equal(hook.current.result.task_id, 'task-1')
+})
+
+test('queue pauses for server failures and retries only the failed file before advancing', async () => {
+  mockMedia(); const poll = mockQueuePolling(); let fail = true
+  const calls = mockFetch(url => url.endsWith('/transcribe') ? json({ status: 'queued', task_id: 'queue-task' })
+    : url.includes('/status/') ? json(fail ? { status: 'error', error: 'model unavailable' } : { status: 'completed', task_id: 'queue-task' }) : json([]))
+  const hook = await mount(useMallogTranscription, enabledProps)
+  await act(async () => hook.current.handleFileChange({ target: { files: queueFiles() } }))
+  await act(async () => hook.current.handleSubmit(submitEvent))
+  await until(() => hook.current.queueState.items[0].status === 'processing')
+  await poll()
+  equal(hook.current.queueState.items[0].status, 'failed')
+  equal(hook.current.queueState.running, false)
+  const firstKey = calls.find(call => call.url.endsWith('/transcribe')).options.headers['X-Mallog24-Upload-Id']
+  await act(async () => hook.current.handleSubmit(submitEvent))
+  equal(calls.filter(call => call.url.endsWith('/transcribe')).length, 1)
+  fail = false
+  await act(async () => hook.current.retryQueuedFile(hook.current.queueState.items[0].id))
+  await until(() => hook.current.queueState.items[0].status === 'processing')
+  const uploads = calls.filter(call => call.url.endsWith('/transcribe'))
+  equal(uploads.length, 2); assert(uploads[1].options.headers['X-Mallog24-Upload-Id'] !== firstKey)
+  await act(async () => hook.current.queue.pause()); await poll()
+  await until(() => !hook.current.loading)
+  equal(hook.current.queueState.items[1].status, 'waiting')
+})
+
+test('queue cannot advance after AI consent is withdrawn; retries preserve uncertain upload IDs', async () => {
+  mockMedia(); const poll = mockQueuePolling()
+  let badResponse = true
+  const calls = mockFetch(url => url.endsWith('/transcribe') ? json(badResponse ? {} : { status: 'queued', task_id: 'same-task' })
+    : url.includes('/status/') ? json({ status: 'completed', task_id: 'same-task' }) : json([]))
+  const hook = await mount(useMallogTranscription, enabledProps)
+  await act(async () => hook.current.handleFileChange({ target: { files: queueFiles().slice(0, 2) } }))
+  await act(async () => hook.current.handleSubmit(submitEvent))
+  await until(() => hook.current.queueState.items[0].status === 'uncertain')
+  equal(hook.current.queueState.items[0].status, 'uncertain')
+  badResponse = false
+  await act(async () => hook.current.retryQueuedFile(hook.current.queueState.items[0].id))
+  await until(() => hook.current.queueState.items[0].status === 'processing')
+  const uploads = calls.filter(call => call.url.endsWith('/transcribe'))
+  equal(uploads.length, 2)
+  equal(uploads[0].options.headers['X-Mallog24-Upload-Id'], uploads[1].options.headers['X-Mallog24-Upload-Id'])
+  await act(async () => hook.current.handleFileChange({ target: { files: [queueFiles()[2]] } }))
+  equal(hook.current.queueState.items.length, 3)
+  await hook.update({ ...enabledProps, queueEnabled: false })
+  await poll(); await until(() => !hook.current.loading)
+  equal(calls.filter(call => call.url.endsWith('/transcribe')).length, 2)
+  equal(hook.current.queueState.items[1].status, 'waiting')
+  await hook.update({ ...enabledProps, accessEnabled: false })
+  equal(hook.current.queueState.items.length, 0)
+})
+
+test('invalid selections are excluded and removing pending files cannot re-add them on submit', async () => {
+  mockMedia()
+  const calls = mockFetch(() => json({ status: 'completed', task_id: 'instant' }))
+  const hook = await mount(useMallogTranscription, enabledProps)
+  const valid = queueFiles()[0]
+  const invalid = [new File([], 'empty.wav'), new File(['text'], 'notes.txt'), { name: 'large.wav', size: 101 * 1024 * 1024, type: 'audio/wav' }]
+  await act(async () => hook.current.handleDrop({ preventDefault: noop, dataTransfer: { files: [...invalid, valid] } }))
+  equal(hook.current.queueState.items.length, 1)
+  await act(async () => hook.current.queue.remove(hook.current.queueState.items[0].id))
+  equal(hook.current.file, null)
+  await act(async () => hook.current.handleSubmit(submitEvent))
+  equal(calls.length, 0)
+  await act(async () => hook.current.handleFileChange({ target: { files: [valid] } }))
+  await act(async () => hook.current.handleSubmit(submitEvent))
+  await until(() => hook.current.queueState.items[0].status === 'completed')
+  equal(hook.current.result.task_id, 'instant')
+})
+
+test('poll timeout reconnects to the existing task without another upload', async () => {
+  mockMedia(); const poll = mockQueuePolling()
+  const calls = mockFetch(url => url.endsWith('/transcribe') ? json({ status: 'queued', task_id: 'existing-task' }) : json({ status: 'processing' }))
+  const hook = await mount(useMallogTranscription, enabledProps)
+  await act(async () => hook.current.handleFileChange({ target: { files: queueFiles() } }))
+  await act(async () => hook.current.handleSubmit(submitEvent))
+  await until(() => hook.current.queueState.items[0].status === 'processing')
+  Date.now = () => native.now() + 24 * 60 * 60 * 1000
+  await poll()
+  equal(hook.current.queueState.items[0].status, 'uncertain')
+  Date.now = native.now
+  await act(async () => hook.current.retryQueuedFile(hook.current.queueState.items[0].id))
+  equal(calls.filter(call => call.url.endsWith('/transcribe')).length, 1)
+  await poll()
+  assert(calls.some(call => call.url.endsWith('/status/existing-task')))
 })
 
 async function run() {

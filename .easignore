@@ -1,7 +1,9 @@
-# EAS builds only need the standalone mobile project, not private training data.
+# EAS builds need the mobile project and shared queue, not private training data.
 /*
 !/mobile
 !/mobile/**
+!/shared
+!/shared/transcriptionQueue.cjs
 !/.easignore
 
 node_modules

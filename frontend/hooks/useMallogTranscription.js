@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createTranscriptionQueue } from '../../shared/transcriptionQueue.cjs'
 import { getAudioDurationSecondsInBrowser } from '../utils/audio'
 import { buildDocxBlob } from '../utils/docx'
 import { sanitizeFileName, triggerBlobDownload } from '../utils/format'
@@ -172,6 +173,7 @@ export default function useMallogTranscription({
   locale = 'ko',
   authToken,
   accessEnabled = false,
+  queueEnabled = true,
   authSessionRevision = 0,
   getAuthHeaders,
   fetchUsage,
@@ -182,6 +184,8 @@ export default function useMallogTranscription({
 }) {
   const messages = TRANSCRIPTION_MESSAGES[locale] || TRANSCRIPTION_MESSAGES.ko
   const access = useProtectedAccess({ apiUrl, authToken, accessEnabled, authSessionRevision })
+  const [queue] = useState(() => createTranscriptionQueue(createUploadRequestId))
+  const queueState = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot)
   const [file, setFile] = useState(null)
   const [language, setLanguage] = useState(messages.defaultLanguage)
   const [transcriptionType, setTranscriptionType] = useState('conversation')
@@ -332,7 +336,9 @@ export default function useMallogTranscription({
   const readResponseData = useCallback(async (response, fallbackMessage) => {
     const data = await access.readJson(response)
     if (!response.ok) {
-      throw new Error(data?.detail || fallbackMessage)
+      const error = new Error(data?.detail || fallbackMessage)
+      error.status = response.status
+      throw error
     }
     return data || {}
   }, [access])
@@ -420,6 +426,7 @@ export default function useMallogTranscription({
   }, [clearPollResultCommitTimer])
 
   const failPolling = useCallback((taskId, message) => {
+    queue.fail(queue.getSnapshot().activeId, message)
     stopPolling()
     activeTaskIdRef.current = ''
     setLoading(false)
@@ -427,7 +434,7 @@ export default function useMallogTranscription({
     setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
     setError(message)
     setNotice(`${messages.taskIdLabel}: ${taskId}`)
-  }, [messages.taskIdLabel, setError, setNotice, stopPolling])
+  }, [queue, messages.taskIdLabel, setError, setNotice, stopPolling])
 
   const invalidatePollingSession = useCallback(() => {
     pollTokenRef.current += 1
@@ -448,6 +455,7 @@ export default function useMallogTranscription({
   }, [])
 
   const resetState = useCallback(() => {
+    queue.reset()
     invalidatePollingSession()
     fileDurationProbeRef.current += 1
     resultEpochRef.current += 1
@@ -480,7 +488,7 @@ export default function useMallogTranscription({
     setTranscriptEditSaving(false)
     setShowHistory(false)
     setShowRecords(false)
-  }, [clearPendingDeleteAll, clearPendingDeleteTask, invalidatePollingSession])
+  }, [queue, clearPendingDeleteAll, clearPendingDeleteTask, invalidatePollingSession])
 
   useEffect(() => {
     return () => {
@@ -572,6 +580,7 @@ export default function useMallogTranscription({
       if (fileDurationProbeRef.current !== probeId) return false
 
       setFile(selectedFile)
+      queue.enqueue([selectedFile])
       setFileDurationSeconds(durationSeconds)
       setError(null)
       setNotice(null)
@@ -581,13 +590,14 @@ export default function useMallogTranscription({
       if (!access.isCurrent()) return
       if (fileDurationProbeRef.current !== probeId) return false
       setFile(selectedFile)
+      queue.enqueue([selectedFile])
       setFileDurationSeconds(0)
       setError(null)
       setNotice(messages.browserDurationFallback)
       resetResultWorkspace(true)
       return true
     }
-  }, [access, authToken, messages.browserDurationFallback, messages.fileSizeExceeded, resetResultWorkspace, setError, setNotice, showToast])
+  }, [queue, access, authToken, messages.browserDurationFallback, messages.fileSizeExceeded, resetResultWorkspace, setError, setNotice, showToast])
 
   const clearRecordingTimer = useCallback(() => {
     if (recordingTimerRef.current) {
@@ -765,6 +775,7 @@ export default function useMallogTranscription({
 
   const startRecording = useCallback(async (uploadBlockedByQuota) => {
     if (!access.isCurrent()) return
+    if (queue.getSnapshot().running || queue.getSnapshot().activeId) return
     if (loading || recordingState === 'recording' || recordingState === 'requesting' || recordingState === 'stopping') return
 
     if (
@@ -1010,13 +1021,23 @@ export default function useMallogTranscription({
     }
   }, [access, clearRecordingTimer, resetState, stopRecordingStream])
 
-  const handleFileChange = useCallback((event, usage) => {
-    if (!access.isCurrent()) return
-    const selectedFile = event.target.files?.[0]
-    if (selectedFile) {
-      validateAndSetFile(selectedFile, usage)
+  const addFiles = useCallback((files) => {
+    if (!access.isCurrent() || !queueEnabled || recordingState !== 'idle') return
+    const valid = Array.from(files || []).filter(item => item.size > 0 && item.size <= 100 * 1024 * 1024 &&
+      (item.type?.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|flac|webm|mp4|aac|opus)$/i.test(item.name)))
+    const added = queue.enqueue(valid)
+    if (!loading && added.length) {
+      setFile(added[0].file)
+      setFileDurationSeconds(0)
     }
-  }, [access, validateAndSetFile])
+    setError(valid.length < (files?.length || 0)
+      ? (locale === 'en' ? 'Empty, unsupported or over-100 MB files were excluded.' : '비어 있거나 지원하지 않는 형식, 100MB 초과 파일은 제외했습니다.') : null)
+  }, [access, queue, queueEnabled, loading, recordingState, locale, setError])
+
+  const handleFileChange = useCallback((event) => {
+    addFiles(event.target.files)
+    event.target.value = ''
+  }, [addFiles])
 
   const triggerFilePicker = useCallback((uploadBlockedByQuota) => {
     if (!access.isCurrent()) return
@@ -1035,11 +1056,8 @@ export default function useMallogTranscription({
     event.preventDefault()
     if (!access.isCurrent()) return
     setDragOver(false)
-    const droppedFile = event.dataTransfer.files?.[0]
-    if (droppedFile) {
-      validateAndSetFile(droppedFile, usage)
-    }
-  }, [access, validateAndSetFile])
+    addFiles(event.dataTransfer.files)
+  }, [access, addFiles])
 
   const handleDragOver = useCallback((event) => {
     event.preventDefault()
@@ -1052,8 +1070,9 @@ export default function useMallogTranscription({
     setDragOver(false)
   }, [access])
 
-  const startPolling = useCallback((taskId, resultEpoch) => {
+  const startPolling = useCallback((taskId, resultEpoch, queueItemId) => {
     if (!access.isCurrent()) return
+    queue.processing(queueItemId, taskId)
     stopPolling()
     const pollToken = pollTokenRef.current
     activeTaskIdRef.current = taskId
@@ -1073,6 +1092,7 @@ export default function useMallogTranscription({
           setCurrentStep((prev) => Math.max(prev, 2))
         }
         if (elapsed > TRANSCRIBE_POLL_TIMEOUT_MS) {
+          queue.fail(queueItemId, messages.processingSlow)
           stopPolling()
           activeTaskIdRef.current = ''
           setLoading(false)
@@ -1143,8 +1163,10 @@ export default function useMallogTranscription({
             fetchUsage()
             activeTaskIdRef.current = ''
             pollResultCommitTimerRef.current = null
+            queue.complete(queueItemId, data)
           }, 800)
         } else if (data.status === 'error') {
+          queue.fail(queueItemId, data.error || messages.transcribeFailed, false)
           stopPolling()
           activeTaskIdRef.current = ''
           setError(data.error || messages.transcribeFailed)
@@ -1168,26 +1190,29 @@ export default function useMallogTranscription({
         if (access.isCurrent() && pollToken === pollTokenRef.current) pollInFlightRef.current = false
       }
     }, STATUS_POLL_INTERVAL_MS)
-  }, [access, apiUrl, authToken, failPolling, fetchHistory, fetchUsage, getAuthHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
+  }, [queue, access, apiUrl, authToken, failPolling, fetchHistory, fetchUsage, getAuthHeaders, locale, messages.pollingNetwork, messages.pollingSlow, messages.processingSlow, messages.taskIdLabel, messages.taskNotFound, messages.transcribeFailed, readResponseData, setError, setNotice, showToast, stopPolling])
 
-  const handleSubmit = useCallback(async (event, usage) => {
-    event.preventDefault()
-    if (!access.isCurrent()) return
-    if (!file) {
-      setError(messages.selectFile)
-      return
-    }
-
+  const submitQueueItem = useCallback(async (item) => {
+    if (!access.isCurrent() || !queueEnabled) { queue.pause(); return }
+    const file = item.file
+    const { language, transcriptionType } = item.options
     invalidatePollingSession()
     const submitEpoch = resetResultWorkspace(true)
+    setFile(file)
+    setFileDurationSeconds(0)
     setLoading(true)
     setError(null)
     setNotice(null)
     setCurrentStep(1)
     setProcessingProgress(normalizeTranscriptionProgress(null, 'uploading'))
 
+    if (item.taskId) {
+      startPolling(item.taskId, submitEpoch, item.id)
+      return
+    }
+
     try {
-      const uploadRequestId = createUploadRequestId()
+      const uploadRequestId = item.uploadId
       const response = await access.request(
         `${apiUrl}/api/transcribe`,
         () => {
@@ -1220,34 +1245,81 @@ export default function useMallogTranscription({
       if (!access.isCurrent() || submitEpoch !== resultEpochRef.current) return
       setNotice(data?.duplicate_active_job ? messages.duplicateActiveJob : null)
 
-      if (data.status === 'queued' || data.status === 'processing') {
+      if ((data.status === 'queued' || data.status === 'processing') && data.task_id) {
         setCurrentStep(2)
         setProcessingProgress(normalizeTranscriptionProgress(
           data.progress,
           data.status === 'processing' ? 'transcribing' : 'queued'
         ))
-        startPolling(data.task_id, submitEpoch)
+        startPolling(data.task_id, submitEpoch, item.id)
       } else if (data.status === 'error') {
+        queue.fail(item.id, data.error || messages.transcribeFailed, false)
         throw new Error(data.error || messages.transcribeFailed)
-      } else {
+      } else if (data.status === 'completed') {
         if (submitEpoch !== resultEpochRef.current) return
         setResult(data)
         setLoading(false)
         setCurrentStep(0)
         setProcessingProgress(normalizeTranscriptionProgress(data.progress, 'completed'))
         fetchUsage()
+        fetchHistory()
+        queue.complete(item.id, data)
+      } else {
+        throw new Error(messages.transcribeFailed)
       }
     } catch (error) {
       if (!access.isCurrent()) return
+      if (submitEpoch !== resultEpochRef.current) return
+      queue.fail(item.id, error?.message || messages.transcribeFailed, ![400, 403, 413, 415, 422].includes(error.status))
       setError(error?.message || messages.transcribeFailed)
       setLoading(false)
       setCurrentStep(0)
       setProcessingProgress(normalizeTranscriptionProgress(null, 'error'))
     }
-  }, [access, apiUrl, authToken, fetchUsage, file, fileDurationSeconds, getAuthHeaders, invalidatePollingSession, language, messages.selectFile, messages.transcribeFailed, messages.uploadRetrying, readResponseData, resetResultWorkspace, setError, setNotice, showToast, startPolling, transcriptionType])
+  }, [queue, queueEnabled, access, apiUrl, authToken, fetchHistory, fetchUsage, getAuthHeaders, invalidatePollingSession, messages.transcribeFailed, messages.uploadRetrying, readResponseData, resetResultWorkspace, setError, setNotice, startPolling])
+
+  const handleSubmit = useCallback((event) => {
+    event.preventDefault()
+    if (!access.isCurrent() || !queueEnabled || loading || recordingState !== 'idle' || queue.getSnapshot().activeId) return
+    queue.start({ language, transcriptionType })
+  }, [access, queueEnabled, loading, recordingState, queue, language, transcriptionType])
+
+  useEffect(() => {
+    if (loading || recordingState !== 'idle') return
+    const nextFile = queueState.items.find(item => item.status === 'waiting')?.file || null
+    if (nextFile !== file) { setFile(nextFile); setFileDurationSeconds(0) }
+  }, [queueState, loading, recordingState, file])
+
+  useEffect(() => {
+    if (!queueEnabled) { queue.pause(); return }
+    if (!access.isCurrent() || loading || recordingState !== 'idle') return
+    const item = queue.claim()
+    if (item) void submitQueueItem(item)
+  }, [access, queueEnabled, queueState, loading, recordingState, queue, submitQueueItem])
+
+  useEffect(() => {
+    const warn = (event) => {
+      if (!queue.getSnapshot().items.some(item => item.status !== 'completed')) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [queue])
+
+  const retryQueuedFile = useCallback((id) => {
+    if (access.isCurrent() && queueEnabled && !loading && recordingState === 'idle') queue.retry(id)
+  }, [access, queueEnabled, queue, loading, recordingState])
+
+  const showQueuedResult = useCallback((id) => {
+    if (!access.isCurrent() || loading || queue.getSnapshot().running) return
+    const item = queue.getSnapshot().items.find(entry => entry.id === id)
+    if (item?.result) { resetResultWorkspace(true); setResult(item.result) }
+  }, [access, loading, queue, resetResultWorkspace])
 
   const handleLoadHistory = useCallback(async (taskId) => {
     if (!access.isCurrent()) return
+    if (queue.getSnapshot().activeId || queue.getSnapshot().running) return
     invalidatePollingSession()
     const loadEpoch = resetResultWorkspace(true)
     setLoading(true)
@@ -1792,6 +1864,10 @@ export default function useMallogTranscription({
   }), [access])
 
   return {
+    queue,
+    queueState,
+    retryQueuedFile,
+    showQueuedResult,
     file,
     setFile,
     setFileDurationSeconds,
