@@ -38,6 +38,16 @@ http://localhost:3000
    - NEXT_PUBLIC_ECOMMERCE_REG_NUMBER = (통신판매신고번호 또는 면제 문구)
 5. 배포 완료!
 
+### 공통 대기열 모듈
+
+Vercel의 Root Directory는 `frontend`로 지정하고, Build and Deployment에서
+`Include files outside the root directory in the Build Step`을 활성화합니다.
+웹과 앱이 `shared/transcriptionQueue.cjs`를 함께 사용하므로 저장소 루트의
+`shared` 디렉터리도 빌드에 포함되어야 합니다.
+
+설정을 변경한 뒤에는 Git의 최신 소스로 새 배포를 생성하고, 빌드 로그에서
+공통 모듈을 찾지 못하는 오류가 없는지 확인합니다.
+
 ## 기능
 
 - 음성 파일 업로드 (최대 25MB)
