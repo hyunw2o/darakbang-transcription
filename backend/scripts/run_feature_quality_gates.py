@@ -18,7 +18,10 @@ PYTHON_FILES = [
     "backend/church_terms.py",
     "backend/transcription_chunking.py",
     "backend/transcript_fidelity.py",
+    "backend/transcription_language.py",
+    "backend/transcription_models.py",
     "backend/scripts/check_transcript_fidelity.py",
+    "backend/scripts/check_transcription_language.py",
     "backend/meeting_speakers.py",
     "backend/worker.py",
     "backend/scripts/export_correction_finetune_dataset.py",
@@ -228,6 +231,7 @@ def run_special_term_sample() -> None:
 
 def run_script_self_tests() -> None:
     run_command([sys.executable, "backend/scripts/check_transcript_fidelity.py"])
+    run_command([sys.executable, "backend/scripts/check_transcription_language.py"])
     run_command([sys.executable, "backend/scripts/check_meeting_speakers.py"])
     run_command([sys.executable, "backend/scripts/check_feature_readiness.py", "--self-test"])
     run_command([sys.executable, "backend/scripts/export_correction_finetune_dataset.py", "--self-test", "--dry-run", "--min-kept", "1"])

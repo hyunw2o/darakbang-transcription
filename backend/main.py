@@ -32,6 +32,10 @@ import resource
 from collections import defaultdict, deque
 from privacy_controls import AI_CONSENT_VERSION, AI_PATHS, DELETION_KEY, PrivacyControls, cleanup_account, consent_status
 from transcription_models import DEFAULT_TRANSCRIPTION_MODEL, legacy_available, model_candidates, transcription_arguments
+from transcription_language import (
+    TranscriptionLanguageError, language_instruction, language_mismatch, language_prompt,
+    language_retry_preserves_content, normalize_language,
+)
 from apple_revocation import configured as apple_revocation_configured, revoke_for_deletion
 
 from transcription_chunking import (
@@ -5660,7 +5664,7 @@ def _transcribe_with_whisper_timestamp_audit(
                 model="whisper-1",
                 file=audio_file,
                 language=language,
-                prompt=(prompt_text or "")[-1000:],
+                prompt=language_prompt(language, prompt_text, max_chars=1000),
                 response_format="verbose_json",
                 timestamp_granularities=["segment"],
                 temperature=0,
@@ -5679,6 +5683,9 @@ def _transcribe_with_whisper_timestamp_audit(
 
     data = _response_to_mapping(response)
     text = _extract_transcription_response_text(response)
+    if language_mismatch(text, language):
+        print("  Timestamp audit rejected: selected-language mismatch.")
+        return None
     segments: list[dict] = []
     segment_logprobs: list[float] = []
     for segment in data.get("segments") or []:
@@ -6768,6 +6775,7 @@ def whisper_transcribe(
     if openai_client is None:
         raise RuntimeError("Whisper client is not configured.")
 
+    language = normalize_language(language)
     # Whisper의 prompt는 장문 지시보다 짧은 핵심 용어 bias가 더 안정적이다.
     whisper_prompt = _build_compact_whisper_prompt(language, transcription_type, custom_terms)
     transcription_models = _get_openai_transcription_model_candidates()
@@ -6819,22 +6827,38 @@ def whisper_transcribe(
                     WHISPER_CHUNK_TIMEOUT_SECONDS, OPENAI_TRANSCRIPTION_TEMPERATURE,
                     WHISPER_INCLUDE_LOGPROBS,
                 )
-                with open(audio_path, "rb") as audio_file:
-                    _require_task_ai_consent(task_id)
-                    response = openai_client.audio.transcriptions.create(
-                        file=audio_file,
-                        **request_kwargs,
+                language_source = ""
+                for language_attempt in range(2):
+                    if language_attempt:
+                        request_kwargs["prompt"] = language_prompt(language, prompt_text, retry=True)
+                    with open(audio_path, "rb") as audio_file:
+                        _require_task_ai_consent(task_id)
+                        response = openai_client.audio.transcriptions.create(
+                            file=audio_file,
+                            **request_kwargs,
+                        )
+                    _record_openai_api_usage(
+                        task_id,
+                        response,
+                        model=model_name,
+                        operation="language_retry" if language_attempt else usage_operation,
+                        processed_seconds=processed_seconds,
                     )
-                _record_openai_api_usage(
-                    task_id,
-                    response,
-                    model=model_name,
-                    operation=usage_operation,
-                    processed_seconds=processed_seconds,
-                )
-                text = _extract_transcription_response_text(response)
-                if not text:
-                    raise RuntimeError(f"{model_name} returned empty text.")
+                    text = _extract_transcription_response_text(response)
+                    if not text:
+                        raise RuntimeError(f"{model_name} returned empty text.")
+                    if not language_mismatch(text, language):
+                        if language_source and not language_retry_preserves_content(language_source, text, language):
+                            raise TranscriptionLanguageError(language, float(chunks[chunk_index].get("start") or 0))
+                        break
+                    if language_attempt:
+                        raise TranscriptionLanguageError(language, float(chunks[chunk_index].get("start") or 0))
+                    print(f"  Chunk {chunk_index+1}: selected-language mismatch; retrying the same audio once.")
+                    language_source = text
+                    _notify_pipeline_progress(
+                        progress_callback, "retranscribing", current_chunk=chunk_index + 1,
+                        total_chunks=len(chunks), chunk_manifest=_chunk_manifest(chunks),
+                    )
                 if model_index > 0:
                     print(f"  Chunk {chunk_index+1}: transcription fallback succeeded with {model_name}.")
                 return {
@@ -6844,6 +6868,9 @@ def whisper_transcribe(
                     "timestamp_segments": [],
                     "needs_review": False,
                 }
+            except TranscriptionLanguageError:
+                # Do not multiply retries across every model or retry the entire recording.
+                raise
             except Exception as exc:
                 last_error = exc
                 if model_index < len(transcription_models) - 1:
@@ -6903,6 +6930,8 @@ def whisper_transcribe(
 
                 last_error = None
                 break
+            except TranscriptionLanguageError:
+                raise
             except Exception as exc:
                 last_error = exc
                 if attempt < WHISPER_CHUNK_MAX_RETRIES - 1:
@@ -7190,7 +7219,8 @@ async def gemini_correct_and_structure(
 
     correction_prompt = correction_instruction(language, transcription_type)
     correction_prompt += get_special_term_prompt_hint(language)
-    correction_prompt += "\n" + KOREAN_ENDING_PRESERVATION_HINT
+    if language == "ko":
+        correction_prompt += "\n" + KOREAN_ENDING_PRESERVATION_HINT
     correction_prompt += "\nGlossary data: " + json.dumps(_merge_custom_terms(custom_terms), ensure_ascii=False)
 
     model = genai.GenerativeModel(
@@ -7362,6 +7392,8 @@ def _is_gemini_service_error(error: Exception | BaseException | None) -> bool:
 
 
 def _sanitize_transcription_error(error: Exception | BaseException | str | None) -> str:
+    if isinstance(error, TranscriptionLanguageError):
+        return str(error)
     if isinstance(error, BaseException):
         if _is_openai_insufficient_quota_error(error):
             return (
@@ -7418,6 +7450,7 @@ def _transcribe_with_gemini_only(
     correction_mode: str,
     custom_terms: list[str] = None,
 ) -> tuple[str, str]:
+    language = normalize_language(language)
     mime_type = source_mime_type or _resolve_audio_mime_type(temp_file_path)
     _require_task_ai_consent(task_id)
     audio_file = genai.upload_file(temp_file_path, mime_type=mime_type)
@@ -7425,7 +7458,7 @@ def _transcribe_with_gemini_only(
         target_model = get_optimal_model()
         model = genai.GenerativeModel(
             target_model,
-            system_instruction=_build_gemini_only_system_instruction(
+            system_instruction=language_instruction(language) + "\n\n" + _build_gemini_only_system_instruction(
                 language,
                 transcription_type,
                 custom_terms,
@@ -7441,6 +7474,8 @@ def _transcribe_with_gemini_only(
         )
 
         raw_text = ""
+        language_retried = False
+        language_source = ""
         max_retries = GEMINI_TRANSCRIPTION_MAX_RETRIES
         for attempt in range(max_retries):
             try:
@@ -7462,6 +7497,10 @@ def _transcribe_with_gemini_only(
                     task_id=task_id,
                     context="Gemini-only transcription",
                 )
+                if raw_text and language_mismatch(raw_text, language):
+                    raise TranscriptionLanguageError(language)
+                if raw_text and language_source and not language_retry_preserves_content(language_source, raw_text, language):
+                    raise TranscriptionLanguageError(language)
                 if raw_text:
                     break
                 if attempt < max_retries - 1:
@@ -7475,6 +7514,14 @@ def _transcribe_with_gemini_only(
                 raise RuntimeError(
                     "Gemini가 음성 내용을 반환하지 않았습니다. 녹음 파일에 실제 음성이 들어 있는지 확인한 뒤 다시 시도해 주세요."
                 )
+            except TranscriptionLanguageError:
+                if language_retried or attempt >= max_retries - 1:
+                    raise
+                language_retried = True
+                language_source = raw_text
+                content_prompt = language_prompt(language, content_prompt, retry=True)
+                print(f"[{task_id}] Gemini-only selected-language mismatch; retrying once.")
+                continue
             except Exception as e:
                 if _is_retryable_gemini_error(e) and attempt < max_retries - 1:
                     wait_time = _gemini_service_retry_delay(e, attempt)
@@ -7522,6 +7569,8 @@ def _postprocess_transcript(
         corrected = _enforce_speaker_separation(corrected, transcription_type, language)
     if source_text is not None:
         corrected, _ = _guard_correction_fidelity(source_text, corrected)
+        if language_mismatch(corrected, language) and not language_mismatch(source_text, language):
+            corrected = source_text
     return _normalize_transcript_line_breaks(corrected)
 
 
@@ -7597,7 +7646,7 @@ def _build_fine_tuned_correction_messages(
                 "You are mallog24's fine-tuned transcript correction model. "
                 "Correct speech-to-text output without summarizing or adding new claims. "
                 "Preserve meaning, speaker labels, paragraph structure, and useful formatting. "
-                "Return only the corrected transcript."
+                "Return only the corrected transcript.\n" + language_instruction(language)
             ),
         },
         {
@@ -7844,6 +7893,8 @@ def _process_transcription_sync(
                 )
                 _log_stage_memory(task_id, "after_postprocess")
             except Exception as whisper_error:
+                if isinstance(whisper_error, TranscriptionLanguageError):
+                    raise
                 allow_gemini_fallback = WHISPER_FALLBACK_TO_GEMINI_ON_ERROR and (
                     GEMINI_ONLY_FALLBACK_MAX_AUDIO_SECONDS <= 0
                     or audio_seconds <= 0
@@ -7934,6 +7985,8 @@ def _process_transcription_sync(
                 f"(source={len(fidelity_source_text)}, corrected={len(corrected_text)} chars)."
             )
         corrected_text = _normalize_transcript_line_breaks(corrected_text)
+        if language_mismatch(corrected_text, language) and not language_mismatch(raw_text, language):
+            corrected_text = raw_text
 
         if transcription_type == "conversation" and correct and correction_mode != "raw":
             corrected_text, speakers_applied = _apply_meeting_speakers(

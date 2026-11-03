@@ -1,5 +1,6 @@
 """Model-specific Audio API arguments and a hard stop for retired models."""
 from datetime import date, datetime, timezone
+from transcription_language import language_prompt, normalize_language
 
 DEFAULT_TRANSCRIPTION_MODEL = "gpt-transcribe"
 LEGACY_SHUTDOWN = date(2027, 2, 26)
@@ -20,6 +21,8 @@ def model_candidates(primary, fallbacks=(), today=None):
 
 
 def transcription_arguments(model, language, prompt, terms, recording_type, timeout, temperature=0, logprobs=False):
+    language = normalize_language(language)
+    prompt = language_prompt(language, prompt)
     args = {"model": model, "response_format": "json", "timeout": timeout}
     if model.startswith("gpt-transcribe"):
         keywords = list(dict.fromkeys(
@@ -27,10 +30,7 @@ def transcription_arguments(model, language, prompt, terms, recording_type, time
             if isinstance(term, str) and term.strip() and len(term) <= 100
             and not any(c in term for c in "<>\r\n")
         ))[:100]
-        context = {"sermon": "A recorded sermon.", "prayer": "A recorded prayer.",
-                   "phonecall": "A recorded phone call.",
-                   "conversation": "A recorded conversation or meeting."}.get(recording_type, "A recorded speech.")
-        args.update(prompt=context, extra_body={"languages": [language], "keywords": keywords})
+        args.update(prompt=prompt, extra_body={"languages": [language], "keywords": keywords})
         return args
     args.update(language=language, prompt=prompt, temperature=temperature)
     if model == "whisper-1":
