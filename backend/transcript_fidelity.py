@@ -171,12 +171,18 @@ def decode_edits(
         def key(text):
             return tuple(_tokens(normalizer(text) if normalizer else text))
         source_occurrences = {key(unit.text) for unit in units}
+        # Two different utterances converging to one edited sentence is not layout.
+        owners = {}
+        for unit, edit in zip(units, edits):
+            if isinstance(edit.get("text"), str):
+                owners.setdefault(key(edit["text"]), set()).add(key(unit.text))
         for unit, edit in zip(units, edits):
             text = edit.get("text")
             if (
                 not isinstance(text, str) or not text.strip() or "\n" in text
                 or not faithful_edit(unit.text, text, normalizer=normalizer)
                 or (key(text) in source_occurrences and key(text) != key(unit.text))
+                or len(owners.get(key(text), set())) > 1
             ):
                 rendered.append(unit)
                 rejected += 1
@@ -233,7 +239,7 @@ def merge_opening(opening: str, main: str) -> str:
     return main
 
 
-def join_owned_chunks(chunks: list[dict], results: list[dict]) -> str:
+def join_owned_chunks(chunks: list[dict], results: list[dict], *, expected_duration: float | None = None) -> str:
     """Join distinct audio intervals, never remove speech by string similarity."""
     if len(chunks) != len(results) or not chunks:
         raise ValueError("Incomplete transcription chunk results")
@@ -245,9 +251,15 @@ def join_owned_chunks(chunks: list[dict], results: list[dict]) -> str:
             raise ValueError("Gapped, overlapping or out-of-order audio ownership")
         if chunk.get("index", index) != index:
             raise ValueError("Out-of-order chunk ID")
+        if result.get("chunk_index", index) != index:
+            raise ValueError("Transcription result belongs to another chunk")
         text = str(result.get("text") or "").strip()
         if not text:
             raise ValueError("Empty transcription chunk must be retried")
         parts.append(text)
         end = stop
+    if expected_duration is not None:
+        duration = float(expected_duration)
+        if not math.isfinite(duration) or abs(end - duration) > 0.001:
+            raise ValueError("Transcription does not cover the complete source duration")
     return "\n\n".join(parts)

@@ -18,6 +18,9 @@ PYTHON_FILES = [
     "backend/church_terms.py",
     "backend/transcription_chunking.py",
     "backend/transcript_fidelity.py",
+    "backend/training_review.py",
+    "backend/scripts/check_training_review.py",
+    "backend/scripts/prepare_training_review.py",
     "backend/transcription_language.py",
     "backend/transcription_models.py",
     "backend/scripts/check_transcript_fidelity.py",
@@ -68,6 +71,8 @@ def run_main_import() -> None:
 
 
 def run_special_term_sample() -> None:
+    run_command([sys.executable, "backend/scripts/check_training_review.py"])
+    run_command(["node", "--test", "frontend/scripts/check_training_review.cjs"])
     run_command([sys.executable, "backend/scripts/check_transcript_wording.py"])
     run_command([
         sys.executable,

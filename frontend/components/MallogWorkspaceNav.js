@@ -1,5 +1,6 @@
 import { AudioLines, BookOpen, FileText, History, LogOut, Check } from 'lucide-react'
 import { formatSecondsToHourMinute } from '../utils/format'
+import Link from 'next/link'
 
 export default function MallogWorkspaceNav({ locale, activeTab, onChange, authUser, usage, handleLogout, busy }) {
   const en = locale === 'en'
@@ -22,6 +23,7 @@ export default function MallogWorkspaceNav({ locale, activeTab, onChange, authUs
           </button>
         ))}
       </nav>
+      {authUser?.training_review_admin && <Link href="/admin/training">{en ? 'Training review' : '학습 데이터 검수'}</Link>}
       <div className="mallog-account">
         <span className="mallog-free-label"><Check size={13} aria-hidden="true" />{en ? 'Free access' : '무료 이용 중'}</span>
         <p className="mallog-account-name">{authUser?.user_metadata?.full_name || (en ? 'My account' : '내 계정')}</p>

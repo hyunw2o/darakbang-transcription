@@ -12,6 +12,8 @@ backend/.env
 backend/transcripts/
 backend/uploads/
 backend/finetune_datasets/
+backend/rag_evaluations/
+backend/training_review_local/
 
 # Node / Frontend
 frontend/node_modules/

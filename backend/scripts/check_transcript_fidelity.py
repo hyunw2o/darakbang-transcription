@@ -50,6 +50,30 @@ class OfflineTests(unittest.TestCase):
 
 
 class FidelityTests(OfflineTests):
+    def test_merge_rejects_truncated_tail(self):
+        with self.assertRaises(ValueError):
+            join_owned_chunks([{"start": 0, "end": 30}], [{"text": "첫 구간입니다."}], expected_duration=60)
+
+    def test_merge_rejects_swapped_result_ownership(self):
+        with self.assertRaises(ValueError):
+            join_owned_chunks([{"start": 0, "end": 30}, {"start": 30, "end": 60}],
+                              [{"text": "뒤 구간", "chunk_index": 1}, {"text": "앞 구간", "chunk_index": 0}], expected_duration=60)
+
+    def test_merge_preserves_real_repeat_across_boundary(self):
+        text = "같은 말을 실제로 두 번 했습니다."
+        result = join_owned_chunks([{"start": 0, "end": 30}, {"start": 30, "end": 60}],
+                                   [{"text": text, "chunk_index": 0}, {"text": text, "chunk_index": 1}], expected_duration=60)
+        self.assertEqual(result.count(text), 2)
+
+    def test_distinct_sentences_cannot_converge_to_new_duplicate(self):
+        units = source_units("김준서가 참석했습니다. 김성빈이 참석했습니다.")
+        edits = response_for(units)
+        for edit in edits["units"]:
+            edit["text"] = "김준수가 참석했습니다."
+        result, rejected = decode_edits(units, json.dumps(edits))
+        self.assertEqual(result, units)
+        self.assertEqual(rejected, 2)
+
     def test_small_duplicate_below_old_twelve_percent_threshold(self):
         source = " ".join(SENTENCES)
         candidate = source + " " + SENTENCES[3]

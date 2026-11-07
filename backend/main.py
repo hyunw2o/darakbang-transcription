@@ -37,6 +37,7 @@ from transcription_language import (
     language_retry_preserves_content, normalize_language,
 )
 from apple_revocation import configured as apple_revocation_configured, revoke_for_deletion
+from training_review import build_router as build_training_review_router, require_admin as require_training_admin, is_review_admin
 
 from transcription_chunking import (
     AudioChunkPlan,
@@ -351,6 +352,7 @@ FORCE_GC_AFTER_TRANSCRIPTION = (os.getenv("FORCE_GC_AFTER_TRANSCRIPTION", "true"
 app = FastAPI(title="말로그24 API")
 
 LOGIN_REQUIRED_API_PATHS = (
+    "/api/admin/training",
     "/api/transcribe",
     "/api/status",
     "/api/history",
@@ -416,6 +418,8 @@ async def attach_auth_cookie_to_authorization(request: Request, call_next):
         # Authenticate before multipart parsing, schema checks, storage or ASR work.
         if requires_login:
             user = await _get_current_user(authorization)
+            if request.url.path.startswith("/api/admin/training"):
+                require_training_admin(user)
             if request.method not in {"GET", "HEAD"}:
                 privacy_user = await asyncio.to_thread(_privacy_controls().user, user["id"])
                 if (privacy_user.get("app_metadata") or {}).get(DELETION_KEY) and request.url.path.rstrip("/") != "/api/auth/account":
@@ -1315,7 +1319,7 @@ def _build_auth_payload(token: str, user: dict, *, include_usage: bool = True) -
     session_expires_at = _decode_jwt_exp_unverified(token)
     return {
         "success": True,
-        "user": user,
+        "user": {**user, "training_review_admin": is_review_admin(user)},
         "usage": snapshot,
         "session_established": True,
         "session_expires_at": session_expires_at,
@@ -5725,7 +5729,7 @@ def _join_whisper_chunk_texts(chunks: list[str]) -> str:
 
 
 def _join_whisper_chunk_results(chunks: list[dict], results: list[dict]) -> str:
-    return join_owned_chunks(chunks, results)
+    return join_owned_chunks(chunks, results, expected_duration=chunks[0].get("source_duration") if chunks else None)
 
 
 def _get_openai_transcription_model_candidates() -> list[str]:
@@ -6212,6 +6216,7 @@ def split_audio_file(
                 "core_start": 0.0,
                 "core_end": source_duration,
                 "duration": source_duration,
+                "source_duration": source_duration,
                 "status": "pending",
             }]
         raise RuntimeError("ffmpeg/ffprobe is required to safely split long audio without gaps.")
@@ -6271,6 +6276,7 @@ def split_audio_file(
                 "core_start": 0.0,
                 "core_end": source_duration,
                 "duration": source_duration,
+                "source_duration": source_duration,
                 "status": "pending",
             }]
         raise RuntimeError(f"Long-audio preprocessing failed: {exc}") from exc
@@ -6287,6 +6293,7 @@ def split_audio_file(
             "core_end": source_duration,
             "duration": source_duration,
             "actual_duration": prepared_duration,
+            "source_duration": source_duration,
             "status": "pending",
         }
         _notify_pipeline_progress(
@@ -6418,6 +6425,7 @@ def split_audio_file(
                 "core_end": plan.core_end,
                 "duration": plan.duration,
                 "actual_duration": actual_duration,
+                "source_duration": source_duration,
                 "boundary_review": not (is_silent_boundary(plan.core_start) and is_silent_boundary(plan.core_end)),
                 "status": "pending",
             })
@@ -6867,6 +6875,7 @@ def whisper_transcribe(
                     **_extract_transcription_logprob_stats(response),
                     "timestamp_segments": [],
                     "needs_review": False,
+                    "chunk_index": chunk_index,
                 }
             except TranscriptionLanguageError:
                 # Do not multiply retries across every model or retry the entire recording.
@@ -7151,6 +7160,7 @@ def whisper_transcribe(
                         audit_text = str(audit.get("text") or "")
                         audit_result = {
                             "text": audit_text,
+                            "chunk_index": index,
                             "model": "whisper-1-timestamp-audit",
                             "average_logprob": audit.get("average_logprob"),
                             "low_confidence_ratio": None,
@@ -11732,3 +11742,6 @@ async def health_check():
         },
         "privacy": {"consent_version": AI_CONSENT_VERSION, "consent_required": True},
     }
+
+
+app.include_router(build_training_review_router(_get_supabase_client, _get_current_user))
